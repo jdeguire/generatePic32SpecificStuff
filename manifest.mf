@@ -3,5 +3,6 @@ AutoUpdate-Show-In-Client: true
 OpenIDE-Module: com.github.jdeguire.generatePic32SpecificStuff
 OpenIDE-Module-Layer: com/github/jdeguire/generatePic32SpecificStuff/layer.xml
 OpenIDE-Module-Localizing-Bundle: com/github/jdeguire/generatePic32SpecificStuff/Bundle.properties
-OpenIDE-Module-Specification-Version: 1.0
+OpenIDE-Module-Requires: org.openide.windows.WindowManager
+OpenIDE-Module-Specification-Version: 0.10
 
