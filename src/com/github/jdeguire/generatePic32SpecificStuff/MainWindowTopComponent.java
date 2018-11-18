@@ -29,11 +29,15 @@
 
 package com.github.jdeguire.generatePic32SpecificStuff;
 
+import java.util.List;
+import javax.swing.SwingWorker;
 import org.netbeans.api.settings.ConvertAsProperties;
 import org.openide.awt.ActionID;
 import org.openide.awt.ActionReference;
 import org.openide.windows.TopComponent;
 import org.openide.util.NbBundle.Messages;
+import org.openide.windows.IOProvider;
+import org.openide.windows.InputOutput;
 
 /**
  * Top component which displays something.
@@ -62,11 +66,16 @@ import org.openide.util.NbBundle.Messages;
 
 public final class MainWindowTopComponent extends TopComponent {
 
+    InputOutput io;
+    StuffGenerator worker;
+    
     public MainWindowTopComponent() {
         initComponents();
         setName(Bundle.CTL_MainWindowTopComponent());
         setToolTipText(Bundle.HINT_MainWindowTopComponent());
 
+        io = IOProvider.getDefault().getIO ("Hello", true);
+        worker = new StuffGenerator();
     }
 
     /**
@@ -79,6 +88,11 @@ public final class MainWindowTopComponent extends TopComponent {
         jButton1 = new javax.swing.JButton();
 
         org.openide.awt.Mnemonics.setLocalizedText(jButton1, org.openide.util.NbBundle.getMessage(MainWindowTopComponent.class, "MainWindowTopComponent.jButton1.text")); // NOI18N
+        jButton1.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton1ActionPerformed(evt);
+            }
+        });
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
         this.setLayout(layout);
@@ -98,9 +112,14 @@ public final class MainWindowTopComponent extends TopComponent {
         );
     }// </editor-fold>//GEN-END:initComponents
 
+    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
+        worker.execute();
+    }//GEN-LAST:event_jButton1ActionPerformed
+
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton jButton1;
     // End of variables declaration//GEN-END:variables
+
     @Override
     public void componentOpened() {
         // TODO add custom code on component opening
@@ -109,6 +128,8 @@ public final class MainWindowTopComponent extends TopComponent {
     @Override
     public void componentClosed() {
         // TODO add custom code on component closing
+        io.getOut().close();
+        io.getErr().close();
     }
 
     void writeProperties(java.util.Properties p) {
@@ -122,4 +143,49 @@ public final class MainWindowTopComponent extends TopComponent {
         String version = p.getProperty("version");
         // TODO read your settings according to their version
     }
+    
+    
+    /* This inner class actually does the work of generating the device-specific stuff.
+     * I mainly followed the "Concurrency in Swing" tutorial at: 
+     * https://docs.oracle.com/javase/tutorial/uiswing/concurrency/index.html
+     *
+     * The first type parameter is the return type of doInBackground() and get().  The second is
+     * the type for interim results that doInBackground() can output using the publish()
+     * method to the process() method.
+     */
+    private class StuffGenerator extends SwingWorker<Void, Void> {
+
+        /* This runs in a background worker thread, so outer class members and the UI should not be
+         * updated here.  The return value will be made available to other threads via the get()
+         * method when this returns or interim results can be output usin the publish method().
+         */
+        @Override
+        public Void doInBackground() {
+            // Check if the outer class wants to cancel (ie. it called cancel()
+            if(!isCancelled()) {
+                // These are synchronized internally, so we should be okay calling them here.
+                io.getOut().println ("Hello from standard out");
+                io.getErr().println ("Hello from standard err");  //this text should appear in red
+            }
+
+            return null;          // A Void object cannot be returned directly.
+        }
+        
+        /* This runs in the Event Dispatch Thread (EDT), which is used for updating the UI.  This is
+         * executed when doInBackground() is done.  If doInBackground() returned anything, you'd use
+         * get() to retrieve it and update the UI and the outer class's members in here.
+         */
+        @Override
+        public void done() {
+
+        }
+
+        /* This runs in the EDT and takes values provided by doInBackground() using the publish()
+         * method.  This lets us update the UI as the worker is running.
+         */
+        @Override
+        public void process(List<Void> chunks) {
+            
+        }
+    }    
 }
