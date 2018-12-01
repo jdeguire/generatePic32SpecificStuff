@@ -29,15 +29,20 @@
 
 package com.github.jdeguire.generatePic32SpecificStuff;
 
+import java.io.File;
+import java.util.Iterator;
 import java.util.List;
 import javax.swing.SwingWorker;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.netbeans.api.settings.ConvertAsProperties;
 import org.openide.awt.ActionID;
 import org.openide.awt.ActionReference;
 import org.openide.windows.TopComponent;
 import org.openide.util.NbBundle.Messages;
-import org.openide.windows.IOProvider;
-import org.openide.windows.InputOutput;
+
+import com.microchip.mplab.crownkingx.xPICFactory;
+import com.microchip.mplab.crownkingx.xPIC;
 
 /**
  * Top component which displays something.
@@ -66,16 +71,13 @@ import org.openide.windows.InputOutput;
 
 public final class MainWindowTopComponent extends TopComponent {
 
-    InputOutput io;
-    StuffGenerator worker;
+    StuffGenerator worker = null;
+    boolean working = false;
     
     public MainWindowTopComponent() {
         initComponents();
         setName(Bundle.CTL_MainWindowTopComponent());
         setToolTipText(Bundle.HINT_MainWindowTopComponent());
-
-        io = IOProvider.getDefault().getIO ("Hello", true);
-        worker = new StuffGenerator();
     }
 
     /**
@@ -85,12 +87,19 @@ public final class MainWindowTopComponent extends TopComponent {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        jButton1 = new javax.swing.JButton();
+        jScrollPane1 = new javax.swing.JScrollPane();
+        OutputLog = new javax.swing.JTextArea();
+        StartButton = new javax.swing.JButton();
 
-        org.openide.awt.Mnemonics.setLocalizedText(jButton1, org.openide.util.NbBundle.getMessage(MainWindowTopComponent.class, "MainWindowTopComponent.jButton1.text")); // NOI18N
-        jButton1.addActionListener(new java.awt.event.ActionListener() {
+        OutputLog.setEditable(false);
+        OutputLog.setColumns(20);
+        OutputLog.setRows(5);
+        jScrollPane1.setViewportView(OutputLog);
+
+        org.openide.awt.Mnemonics.setLocalizedText(StartButton, org.openide.util.NbBundle.getMessage(MainWindowTopComponent.class, "MainWindowTopComponent.StartButton.text")); // NOI18N
+        StartButton.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jButton1ActionPerformed(evt);
+                StartButtonActionPerformed(evt);
             }
         });
 
@@ -99,25 +108,41 @@ public final class MainWindowTopComponent extends TopComponent {
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addGap(150, 150, 150)
-                .addComponent(jButton1)
-                .addContainerGap(177, Short.MAX_VALUE))
+                .addContainerGap()
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.CENTER)
+                    .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 292, Short.MAX_VALUE)
+                    .addComponent(StartButton))
+                .addContainerGap())
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
-                .addGap(125, 125, 125)
-                .addComponent(jButton1)
-                .addContainerGap(152, Short.MAX_VALUE))
+                .addContainerGap()
+                .addComponent(StartButton)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 319, Short.MAX_VALUE)
+                .addContainerGap())
         );
     }// </editor-fold>//GEN-END:initComponents
 
-    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
-        worker.execute();
-    }//GEN-LAST:event_jButton1ActionPerformed
+    private void StartButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_StartButtonActionPerformed
+        // Workers run only once, no matter how many times the button is clicked.  We'll set a
+        // flag and create a new worker so that we can run multiple times, but also prevent the 
+        // button from doing anything if a worker is already working.
+        if(!working) {
+            working = true;
+
+            OutputLog.setText("");
+
+            worker = new StuffGenerator();            
+            worker.execute();
+        }
+    }//GEN-LAST:event_StartButtonActionPerformed
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JButton jButton1;
+    private javax.swing.JTextArea OutputLog;
+    private javax.swing.JButton StartButton;
+    private javax.swing.JScrollPane jScrollPane1;
     // End of variables declaration//GEN-END:variables
 
     @Override
@@ -128,8 +153,6 @@ public final class MainWindowTopComponent extends TopComponent {
     @Override
     public void componentClosed() {
         // TODO add custom code on component closing
-        io.getOut().close();
-        io.getErr().close();
     }
 
     void writeProperties(java.util.Properties p) {
@@ -153,19 +176,35 @@ public final class MainWindowTopComponent extends TopComponent {
      * the type for interim results that doInBackground() can output using the publish()
      * method to the process() method.
      */
-    private class StuffGenerator extends SwingWorker<Void, Void> {
+    private class StuffGenerator extends SwingWorker<Void, String> {
 
         /* This runs in a background worker thread, so outer class members and the UI should not be
          * updated here.  The return value will be made available to other threads via the get()
-         * method when this returns or interim results can be output usin the publish method().
+         * method when this returns or interim results can be output using the publish() method.
          */
         @Override
         public Void doInBackground() {
-            // Check if the outer class wants to cancel (ie. it called cancel()
-            if(!isCancelled()) {
-                // These are synchronized internally, so we should be okay calling them here.
-                io.getOut().println ("Hello from standard out");
-                io.getErr().println ("Hello from standard err");  //this text should appear in red
+//            xPICFactory pf = xPICFactory.getInstance();
+            String packsPathname;
+
+            try {
+                packsPathname = xPICFactory.derivePacksFolderPath(xPICFactory.getCodeSourcePath());
+                publish("Packs Folder Path: " + packsPathname);
+            }
+            catch(Exception e) {
+                publish("Exception: " + e.toString());
+                return null;
+            }
+
+            File packsFile = new File(packsPathname);
+
+            @SuppressWarnings("unchecked")
+            Iterator<File> packsIterator = (Iterator<File>)FileUtils.iterateFiles(packsFile, new String[]{"pic", "PIC"}, true);
+            
+            while(packsIterator.hasNext()  &&  !isCancelled())
+            {
+                String name = packsIterator.next().getName();
+                publish(FilenameUtils.getBaseName(name));
             }
 
             return null;          // A Void object cannot be returned directly.
@@ -177,15 +216,17 @@ public final class MainWindowTopComponent extends TopComponent {
          */
         @Override
         public void done() {
-
+            working = false;
         }
 
         /* This runs in the EDT and takes values provided by doInBackground() using the publish()
          * method.  This lets us update the UI as the worker is running.
          */
         @Override
-        public void process(List<Void> chunks) {
-            
+        public void process(List<String> chunks) {
+            for(String chunk : chunks) {
+                OutputLog.append(chunk + System.lineSeparator());
+            }
         }
     }    
 }
