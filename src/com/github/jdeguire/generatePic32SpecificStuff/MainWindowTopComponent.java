@@ -29,20 +29,16 @@
 
 package com.github.jdeguire.generatePic32SpecificStuff;
 
-import java.io.File;
-import java.util.Iterator;
 import java.util.List;
 import javax.swing.SwingWorker;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.FilenameUtils;
 import org.netbeans.api.settings.ConvertAsProperties;
 import org.openide.awt.ActionID;
 import org.openide.awt.ActionReference;
 import org.openide.windows.TopComponent;
 import org.openide.util.NbBundle.Messages;
 
-import com.microchip.mplab.crownkingx.xPICFactory;
-import com.microchip.mplab.crownkingx.xPIC;
+import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
+import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
 
 /**
  * Top component which displays something.
@@ -64,14 +60,14 @@ import com.microchip.mplab.crownkingx.xPIC;
         preferredID = "MainWindowTopComponent"
 )
 @Messages({
-    "CTL_MainWindowAction=MainWindow",
-    "CTL_MainWindowTopComponent=MainWindow Window",
+    "CTL_MainWindowAction=Generate PIC32 Stuff",
+    "CTL_MainWindowTopComponent=Stuff Generator",
     "HINT_MainWindowTopComponent=This is a MainWindow window"
 })
 
 public final class MainWindowTopComponent extends TopComponent {
 
-    StuffGenerator worker = null;
+    StuffGeneratorWorker worker = null;
     boolean working = false;
     
     public MainWindowTopComponent() {
@@ -134,7 +130,7 @@ public final class MainWindowTopComponent extends TopComponent {
 
             OutputLog.setText("");
 
-            worker = new StuffGenerator();            
+            worker = new StuffGeneratorWorker();            
             worker.execute();
         }
     }//GEN-LAST:event_StartButtonActionPerformed
@@ -176,7 +172,7 @@ public final class MainWindowTopComponent extends TopComponent {
      * the type for interim results that doInBackground() can output using the publish()
      * method to the process() method.
      */
-    private class StuffGenerator extends SwingWorker<Void, String> {
+    private class StuffGeneratorWorker extends SwingWorker<Void, String> {
 
         /* This runs in a background worker thread, so outer class members and the UI should not be
          * updated here.  The return value will be made available to other threads via the get()
@@ -184,30 +180,27 @@ public final class MainWindowTopComponent extends TopComponent {
          */
         @Override
         public Void doInBackground() {
-//            xPICFactory pf = xPICFactory.getInstance();
-            String packsPathname;
+            StuffGenerator gen = new StuffGenerator("");
 
             try {
-                packsPathname = xPICFactory.derivePacksFolderPath(xPICFactory.getCodeSourcePath());
-                publish("Packs Folder Path: " + packsPathname);
-            }
-            catch(Exception e) {
-                publish("Exception: " + e.toString());
-                return null;
-            }
+                List<Device> deviceList = gen.getDeviceList();
+                for(Device device : deviceList) {                    
+                    Family family = device.getFamily();
 
-            File packsFile = new File(packsPathname);
-
-            @SuppressWarnings("unchecked")
-            Iterator<File> packsIterator = (Iterator<File>)FileUtils.iterateFiles(packsFile, new String[]{"pic", "PIC"}, true);
+                    if(Family.ARM32BIT == family) {
+                        publish(device.getName() + " (ARM32)");
+                        gen.generate(device);
+                    }
+                    else if(Family.PIC32 == family) {
+                        publish(device.getName() + " (MIPS32)");
+                        gen.generate(device);
+                    }
+                }
+            } catch(Exception ex) {
+                publish(ex.getMessage());
+            }
             
-            while(packsIterator.hasNext()  &&  !isCancelled())
-            {
-                String name = packsIterator.next().getName();
-                publish(FilenameUtils.getBaseName(name));
-            }
-
-            return null;          // A Void object cannot be returned directly.
+            return null;
         }
         
         /* This runs in the Event Dispatch Thread (EDT), which is used for updating the UI.  This is
