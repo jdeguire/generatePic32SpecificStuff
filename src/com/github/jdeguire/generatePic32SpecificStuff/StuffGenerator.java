@@ -43,6 +43,9 @@ import com.microchip.mplab.crownkingx.xPICFactory;
 import com.microchip.mplab.crownkingx.xPIC;
 import java.io.IOException;
 import javax.xml.parsers.ParserConfigurationException;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 
@@ -72,13 +75,12 @@ public class StuffGenerator {
     /**
      * Constructor for the Stuff Generator.
      * 
-     * @param output_dir    The base path for generated files.  The subclasses will add on to this
-     *                      as needed to separate by header vs linker script and will add the device
-     *                      name, so you should not do that.  Just pass the same path to every
-     *                      instance to have everything properly organized.
+     * @param outputDir    The base path for generated files.  The subclasses will add on to this
+     *                     as needed to separate by header vs linker script and will add the device
+     *                     name.
      */
-    public StuffGenerator(String output_dir) {
-        outputDirBase_ = output_dir;
+    public StuffGenerator(String outputDir) {
+        outputDirBase_ = outputDir;
     }
 
 
@@ -128,6 +130,94 @@ public class StuffGenerator {
     }
 
     /**
+     * Get the map of XML nodes used to provide information about the given device from the MPLAB X
+     * device database.
+     */
+     public ArrayList<String> makeNodeMap(Device device) 
+         throws Anomaly, SAXException, IOException, ParserConfigurationException {
+        xPIC target = (xPIC)xPICFactory.getInstance().get(device.getName());
+
+        List<Node> childNodes = target.children();
+        ArrayList<String> nodeNames = new ArrayList<>(childNodes.size());
+
+        for(Node node : childNodes) {
+            String name = node.getNodeName();
+
+            if('#' != name.charAt(0)) {
+                if(node.getNodeValue() != null)
+                    name += "=" + node.getNodeValue();
+
+                if(node.hasAttributes()) {
+                    NamedNodeMap attributes = node.getAttributes();
+
+                    name += "  [" + attributes.item(0).getNodeName() + "=" + attributes.item(0).getNodeValue();
+
+                    for(int i = 1; i < attributes.getLength(); ++i) {
+                        name += ", " + attributes.item(i).getNodeName() + "=" + attributes.item(i).getNodeValue();
+                    }
+
+                    name += "]";
+                }
+
+                nodeNames.add(name);
+
+                if(node.hasChildNodes())
+                    nodeNames.addAll(getChildNodes(node, 1));
+            }
+        }
+
+        xPICFactory.getInstance().release(target);
+
+        return nodeNames;
+     }
+
+     /**
+      * This is a helper method that will recursively get children of the given node.
+      * 
+      * @param node
+      * @param level
+      * @return 
+      */
+     private ArrayList<String> getChildNodes(Node parentNode, int level) {
+        NodeList childNodes = parentNode.getChildNodes();
+        ArrayList<String> nodeNames = new ArrayList<>(childNodes.getLength());
+
+        for(int i = 0; i < childNodes.getLength(); ++i) {
+            Node node = childNodes.item(i);
+
+            if('#' != node.getNodeName().charAt(0)) {
+                String name = "";
+
+                for(int j = 0; j < level; ++j)
+                    name += "--";
+
+                name += node.getNodeName();
+
+                if(node.getNodeValue() != null)
+                    name += "=" + node.getNodeValue();
+
+                if(node.hasAttributes()) {
+                    NamedNodeMap attributes = node.getAttributes();
+
+                    name += "  [" + attributes.item(0).getNodeName() + "=" + attributes.item(0).getNodeValue();
+
+                    for(int k = 1; k < attributes.getLength(); ++k) {
+                        name += ", " + attributes.item(k).getNodeName() + "=" + attributes.item(k).getNodeValue();
+                    }
+
+                    name += "]";
+                }
+
+                nodeNames.add(name);
+
+                if(node.hasChildNodes())
+                    nodeNames.addAll(getChildNodes(node, level+1));
+            }
+        }        
+        return nodeNames;
+     }
+
+     /**
      * Get the name of the device provided to the constructor of this class, but in all uppercase.
      */
     private String getTargetName(xPIC target) {

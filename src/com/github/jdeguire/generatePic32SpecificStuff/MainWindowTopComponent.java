@@ -39,6 +39,7 @@ import org.openide.util.NbBundle.Messages;
 
 import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
+import java.util.ArrayList;
 
 /**
  * Top component which displays something.
@@ -184,8 +185,8 @@ public final class MainWindowTopComponent extends TopComponent {
 
             try {
                 List<Device> deviceList = gen.getDeviceList();
-                for(Device device : deviceList) {                    
-                    Family family = device.getFamily();
+                for(Device device : deviceList) {
+/*                    Family family = device.getFamily();
 
                     if(Family.ARM32BIT == family) {
                         publish(device.getName() + " (ARM32)");
@@ -195,11 +196,28 @@ public final class MainWindowTopComponent extends TopComponent {
                         publish(device.getName() + " (MIPS32)");
                         gen.generate(device);
                     }
+*/
+                    // DEBUG STUFF FOR NOW
+                    if("PIC32MX795F512L".equalsIgnoreCase(device.getName())  ||  
+                       "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
+                       "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
+                        ArrayList<String> nodeNames = gen.makeNodeMap(device);
+
+                        publish(device.getName());
+                        
+                        if(nodeNames.isEmpty()) {
+                            publish("Nothing here");
+                        }
+                        else {
+                            for(String name : nodeNames)
+                                publish(name);
+                        }
+                    }
                 }
             } catch(Exception ex) {
                 publish(ex.getMessage());
             }
-            
+
             return null;
         }
         
