@@ -1,4 +1,4 @@
-/* Copyright (c) 2018, Jesse DeGuire
+/* Copyright (c) 2019, Jesse DeGuire
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,7 +38,6 @@ import org.openide.windows.TopComponent;
 import org.openide.util.NbBundle.Messages;
 
 import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
-import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
 import java.util.ArrayList;
 
 /**
@@ -201,7 +200,8 @@ public final class MainWindowTopComponent extends TopComponent {
                     if("PIC32MX795F512L".equalsIgnoreCase(device.getName())  ||  
                        "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
                        "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
-                        ArrayList<String> nodeNames = gen.makeNodeMap(device);
+//                        List<String> nodeNames = gen.makeNodeMap(device);
+                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
 
                         publish(device.getName());
                         
