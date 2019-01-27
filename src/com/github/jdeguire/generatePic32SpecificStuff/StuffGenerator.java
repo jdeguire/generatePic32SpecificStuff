@@ -30,6 +30,7 @@
 package com.github.jdeguire.generatePic32SpecificStuff;
 
 import com.microchip.crownking.Anomaly;
+import com.microchip.crownking.Pair;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -39,6 +40,7 @@ import com.microchip.crownking.mplabinfo.DeviceSupportException;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
+import com.microchip.mplab.crownkingx.xMemoryPartition;
 import com.microchip.mplab.crownkingx.xPICFactory;
 import com.microchip.mplab.crownkingx.xPIC;
 import java.io.IOException;
@@ -193,27 +195,285 @@ public class StuffGenerator {
 
                 nodeNames.add(name);
 
-                if(node.hasChildNodes())
+                if(node.hasChildNodes() &&  level >= 0)
                     nodeNames.addAll(getChildNodes(node, level+1));
             }
         }        
         return nodeNames;
     }
 
+    private ArrayList<String> getChildNodes(List<Node> childNodes, int level) {
+        ArrayList<String> nodeNames = new ArrayList<>(childNodes.size());
+
+        for(Node node : childNodes) {
+            if('#' != node.getNodeName().charAt(0)) {
+                String name = "";
+
+                for(int j = 0; j < level; ++j)
+                    name += "--";
+
+                name += node.getNodeName();
+
+                if(node.getNodeValue() != null)
+                    name += "=" + node.getNodeValue();
+
+                if(node.hasAttributes()) {
+                    NamedNodeMap attributes = node.getAttributes();
+
+                    name += "  [" + attributes.item(0).getNodeName() + "=" + attributes.item(0).getNodeValue();
+
+                    for(int k = 1; k < attributes.getLength(); ++k) {
+                        name += ", " + attributes.item(k).getNodeName() + "=" + attributes.item(k).getNodeValue();
+                    }
+
+                    name += "]";
+                }
+
+                nodeNames.add(name);
+
+                if(node.hasChildNodes() &&  level >= 0)
+                    nodeNames.addAll(getChildNodes(node, level+1));
+            }
+        }
+        return nodeNames;
+    }
+
+    public List<String> getMemorySpaces(Device device)
+             throws Anomaly, SAXException, IOException, ParserConfigurationException {
+        TargetDevice target = new TargetDevice(device.getName());
+        xPIC xpic = target.getPic();
+        xMemoryPartition mainPartition = xpic.getMainPartition();
+
+        ArrayList<String> spaces = new ArrayList<>();
+        Pair<Long, Long> temp;
+        
+        temp = mainPartition.getBootConfigRange();
+        if(temp != null) {
+            spaces.add("Boot Cfg Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getBootConfigRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getBootRAMRange();
+        if(temp != null) {
+            spaces.add("Boot RAM Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getCodeRange();
+        if(temp != null) {
+            spaces.add("Code Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getCodeRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getDCIRange();
+        if(temp != null) {
+            spaces.add("DCI Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getDCIRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getDCRRange();
+        if(temp != null) {
+            spaces.add("DCR Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getDCRRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+        
+        temp = mainPartition.getDDRRange();
+        if(temp != null) {
+            spaces.add("DDR Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getDDRRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getDIARange();
+        if(temp != null) {
+            spaces.add("DIA Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getDIARegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getDPRRange();
+        if(temp != null) {
+            spaces.add("DPR Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getDPRRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getDataFlashSpaceRange();
+        if(temp != null) {
+            spaces.add("Data Flash Space Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getDeviceIDRange();
+        if(temp != null) {
+            spaces.add("Device ID Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getEBIRange();
+        if(temp != null) {
+            spaces.add("EBI Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getEBIRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getExternalCodeRange();
+        if(temp != null) {
+            spaces.add("External Code Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getExternalCodeRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getFileRange();
+        if(temp != null) {
+            spaces.add("File Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getFileRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getFlashDataRange();
+        if(temp != null) {
+            spaces.add("Flash Data Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getGPRRange();
+        if(temp != null) { 
+            spaces.add("GPR Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getGPRRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getInstRange();
+        if(temp != null) {
+            spaces.add("Inst Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getInstRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getLinearDataRange();
+        if(temp != null) {
+            spaces.add("Linear Data Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getLinearRange();
+        if(temp != null) {
+            spaces.add("Linear Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getLinearizedRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        spaces.add("NMMR Region: ");
+        spaces.addAll(getChildNodes(mainPartition.getNMMRPlaces(), -1));
+        spaces.add(System.lineSeparator());
+
+        temp = mainPartition.getSFRRange();
+        if(temp != null) {
+            spaces.add("SFR Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getSFRRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getSPIFlashRange();
+        if(temp != null) { 
+            spaces.add("SPI Flash Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getSPIFlashRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getSQIRange();
+        if(temp != null ) {
+            spaces.add("SQI Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getSQIRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
+        return spaces;
+    }    
+    
     public List<String> getMemoryRegionsForLinker(Device device) 
              throws Anomaly, SAXException, IOException, ParserConfigurationException {
         TargetDevice target = new TargetDevice(device.getName());
         xPIC xpic = target.getPic();
-        
+        xMemoryPartition mainPartition = xpic.getMainPartition();
+
         ArrayList<String> regions = new ArrayList<>();
 
-        // TODO: Can we get this same info from xpic.getMainPartition().blahblah()?, such as
-        //       getInstRegions()?  There's ones for DCRs, but what about NMMRs and RAM?
-        
         if(target.isArm()) {
-            // The ARM devices have their memory regions in different "edc::___Sector" nodes, so just
-            // look for the ones we care about (ie. that Microchip's XC32 uses in its linker scripts).
+            for(Node codeRegion : mainPartition.getCodeRegions()) {
+                NamedNodeMap attrs = codeRegion.getAttributes();
 
+                String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
+                String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
+                String endAddr = attrs.getNamedItem("edc:endaddr").getNodeValue();
+
+                String length = Long.toHexString(Long.decode(endAddr) - Long.decode(beginAddr));
+
+                switch(regionId) {
+                    case "IFLASH":
+                        regions.add("rom (rx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
+                        break;
+                    case "ITCM":
+                        regions.add("itcm (rwx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            for(Node gprRegion : mainPartition.getGPRRegions()) {
+                NamedNodeMap attrs = gprRegion.getAttributes();
+                String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
+                String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
+                String endAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
+
+                String length = Long.toHexString(Long.decode(endAddr) - Long.decode(beginAddr));
+
+                switch(regionId) {
+                    case "IRAM":
+                        regions.add("ram (rwx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
+                        break;
+                    case "DTCM":
+                        regions.add("dtcm (rwx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        } else {   // MIPS32
+/* 
+--edc:CodeSector  [edc:beginaddr=0x1d000000, edc:endaddr=0x1d080000, edc:kseg0=0x80000000, edc:kseg1=0xa0000000, edc:kuseg=0x60000000, edc:regionid=code]
+--edc:BootConfigSector  [edc:beginaddr=0x1fc00000, edc:endaddr=0x1fc02ff0, edc:kseg0=0x80000000, edc:kseg1=0xa0000000, edc:regionid=bootconfig]
+--edc:ConfigFuseSector  [edc:beginaddr=0x1fc02ff0, edc:endaddr=0x1fc03000, edc:kseg0=0x80000000, edc:kseg1=0xa0000000, edc:regionid=config]
+--edc:GPRDataSector  [edc:beginaddr=0x0, edc:endaddr=0x20000, edc:kseg0=0x80000000, edc:kseg1=0xa0000000, edc:ksegdef=2, edc:kuseg=0x7f000000, edc:regionid=kseg1_data_mem]
+--edc:SFRDataSector  [edc:beginaddr=0x1f800000, edc:endaddr=0x1f80a400, edc:kseg1=0xa0000000, edc:ksegdef=2, edc:regionid=periph0]
+*/
             Node physicalSpaceNode = xpic.first("PhysicalSpace");
             NodeList physicalSpaces = physicalSpaceNode.getChildNodes();
 
@@ -225,21 +485,31 @@ public class StuffGenerator {
                     {
                         NamedNodeMap attrs = space.getAttributes();
                         String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
-                        String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
-                        String endAddr = attrs.getNamedItem("edc:endaddr").getNodeValue();
+                        long beginAddr = Long.decode(attrs.getNamedItem("edc:beginaddr").getNodeValue());
+                        long endAddr = Long.decode(attrs.getNamedItem("edc:endaddr").getNodeValue());
 
-                        String length = Long.toHexString(Long.parseLong(endAddr) - Long.parseLong(beginAddr));
-
-                        switch(regionId) {
-                            case "IFLASH":
-                                regions.add("rom (rx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
-                                break;
-                            case "ITCM":
-                                regions.add("itcm (rwx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
-                                break;
-                            default:
-                                break;
+                        if(regionId.equals("code")) {
+                            regions.add("kseg0_program_mem (rx) : ORIGIN = " + 
+                                        Long.toHexString(beginAddr | 0x80000000) + 
+                                        ", LENGTH = " + 
+                                        Long.toHexString(endAddr - beginAddr));
                         }
+                        break;
+                    }
+                    case "edc:BootConfigSector":
+                    {
+                        NamedNodeMap attrs = space.getAttributes();
+                        String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
+                        long beginAddr = Long.decode(attrs.getNamedItem("edc:beginaddr").getNodeValue());
+                        long endAddr = Long.decode(attrs.getNamedItem("edc:endaddr").getNodeValue());
+
+                        if(regionId.equals("bootconfig")) {
+                            regions.add("kseg1_boot_mem (rx) : ORIGIN = " + 
+                                        Long.toHexString(beginAddr | 0xA0000000) + 
+                                        ", LENGTH = " + 
+                                        Long.toHexString(endAddr - beginAddr));
+                        }
+                        
                         break;
                     }
                     case "edc:GPRDataSector":
@@ -249,7 +519,7 @@ public class StuffGenerator {
                         String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
                         String endAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
 
-                        String length = Long.toHexString(Long.parseLong(endAddr) - Long.parseLong(beginAddr));
+                        String length = Long.toHexString(Long.decode(endAddr) - Long.decode(beginAddr));
 
                         switch(regionId) {
                             case "IRAM":
@@ -266,10 +536,7 @@ public class StuffGenerator {
                     default:
                         break;
                 }
-                    
             }
-        } else {
-            regions.add("Comong soon!");
         }
 
         return regions;

@@ -201,9 +201,10 @@ public final class MainWindowTopComponent extends TopComponent {
                        "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
                        "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
 //                        List<String> nodeNames = gen.makeNodeMap(device);
-                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
+//                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
+                        List<String> nodeNames = gen.getMemorySpaces(device);
 
-                        publish(device.getName());
+                        publish("----------" + System.lineSeparator() + device.getName());
                         
                         if(nodeNames.isEmpty()) {
                             publish("Nothing here");
