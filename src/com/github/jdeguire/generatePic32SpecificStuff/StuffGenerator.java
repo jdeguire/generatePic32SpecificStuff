@@ -433,13 +433,15 @@ public class StuffGenerator {
                 String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
                 String endAddr = attrs.getNamedItem("edc:endaddr").getNodeValue();
 
-                String length = Long.toHexString(Long.decode(endAddr) - Long.decode(beginAddr));
+                String length = "0x" + Integer.toHexString(Integer.decode(endAddr) - Integer.decode(beginAddr));
 
                 switch(regionId) {
                     case "IFLASH":
                         regions.add("rom (rx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
                         break;
                     case "ITCM":
+                        // TODO:  This is incorrect in the database as it is the same size as the flash.
+                        //        Is there a reason for this and a workaround?
                         regions.add("itcm (rwx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
                         break;
                     default:
@@ -451,9 +453,9 @@ public class StuffGenerator {
                 NamedNodeMap attrs = gprRegion.getAttributes();
                 String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
                 String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
-                String endAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
+                String endAddr = attrs.getNamedItem("edc:endaddr").getNodeValue();
 
-                String length = Long.toHexString(Long.decode(endAddr) - Long.decode(beginAddr));
+                String length = "0x" + Integer.toHexString(Integer.decode(endAddr) - Integer.decode(beginAddr));
 
                 switch(regionId) {
                     case "IRAM":
@@ -467,72 +469,54 @@ public class StuffGenerator {
                 }
             }
         } else {   // MIPS32
-/* 
---edc:CodeSector  [edc:beginaddr=0x1d000000, edc:endaddr=0x1d080000, edc:kseg0=0x80000000, edc:kseg1=0xa0000000, edc:kuseg=0x60000000, edc:regionid=code]
---edc:BootConfigSector  [edc:beginaddr=0x1fc00000, edc:endaddr=0x1fc02ff0, edc:kseg0=0x80000000, edc:kseg1=0xa0000000, edc:regionid=bootconfig]
---edc:ConfigFuseSector  [edc:beginaddr=0x1fc02ff0, edc:endaddr=0x1fc03000, edc:kseg0=0x80000000, edc:kseg1=0xa0000000, edc:regionid=config]
---edc:GPRDataSector  [edc:beginaddr=0x0, edc:endaddr=0x20000, edc:kseg0=0x80000000, edc:kseg1=0xa0000000, edc:ksegdef=2, edc:kuseg=0x7f000000, edc:regionid=kseg1_data_mem]
---edc:SFRDataSector  [edc:beginaddr=0x1f800000, edc:endaddr=0x1f80a400, edc:kseg1=0xa0000000, edc:ksegdef=2, edc:regionid=periph0]
-*/
-            Node physicalSpaceNode = xpic.first("PhysicalSpace");
-            NodeList physicalSpaces = physicalSpaceNode.getChildNodes();
+            for(Node bootRegion : mainPartition.getBootConfigRegions()) {
+                NamedNodeMap attrs = bootRegion.getAttributes();
 
-            for(int i = 0; i < physicalSpaces.getLength(); ++i) {
-                Node space = physicalSpaces.item(i);
+                String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
+                String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
+                String endAddr = attrs.getNamedItem("edc:endaddr").getNodeValue();
+
+                String length = "0x" + Integer.toHexString(Integer.decode(endAddr) - Integer.decode(beginAddr));
+
+                // Make this a kseg1 address.
+                beginAddr = "0x" + Integer.toHexString(Integer.decode(beginAddr) | 0xa0000000);
                 
-                switch(space.getNodeName()) {
-                    case "edc:CodeSector":
-                    {
-                        NamedNodeMap attrs = space.getAttributes();
-                        String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
-                        long beginAddr = Long.decode(attrs.getNamedItem("edc:beginaddr").getNodeValue());
-                        long endAddr = Long.decode(attrs.getNamedItem("edc:endaddr").getNodeValue());
+                regions.add(regionId + " (rx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
+            }
 
-                        if(regionId.equals("code")) {
-                            regions.add("kseg0_program_mem (rx) : ORIGIN = " + 
-                                        Long.toHexString(beginAddr | 0x80000000) + 
-                                        ", LENGTH = " + 
-                                        Long.toHexString(endAddr - beginAddr));
-                        }
+            for(Node codeRegion : mainPartition.getCodeRegions()) {
+                NamedNodeMap attrs = codeRegion.getAttributes();
+
+                String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
+                String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
+                String endAddr = attrs.getNamedItem("edc:endaddr").getNodeValue();
+
+                String length = "0x" + Integer.toHexString(Integer.decode(endAddr) - Integer.decode(beginAddr));
+
+                if(regionId.equals("code")) {
+                    // Make this a kseg0 address.
+                    beginAddr = "0x" + Integer.toHexString(Integer.decode(beginAddr) | 0x80000000);
+                    regions.add("kseg0_program_mem (rx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);                    
+                }
+            }
+
+            for(Node gprRegion : mainPartition.getGPRRegions()) {
+                NamedNodeMap attrs = gprRegion.getAttributes();
+                String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
+                String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
+                String endAddr = attrs.getNamedItem("edc:endaddr").getNodeValue();
+
+                String length = "0x" + Integer.toHexString(Integer.decode(endAddr) - Integer.decode(beginAddr));
+
+                switch(regionId) {
+                    case "kseg0_data_mem":
+                        beginAddr = "0x" + Integer.toHexString(Integer.decode(beginAddr) | 0x80000000);
+                        regions.add(regionId + " (rwx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
                         break;
-                    }
-                    case "edc:BootConfigSector":
-                    {
-                        NamedNodeMap attrs = space.getAttributes();
-                        String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
-                        long beginAddr = Long.decode(attrs.getNamedItem("edc:beginaddr").getNodeValue());
-                        long endAddr = Long.decode(attrs.getNamedItem("edc:endaddr").getNodeValue());
-
-                        if(regionId.equals("bootconfig")) {
-                            regions.add("kseg1_boot_mem (rx) : ORIGIN = " + 
-                                        Long.toHexString(beginAddr | 0xA0000000) + 
-                                        ", LENGTH = " + 
-                                        Long.toHexString(endAddr - beginAddr));
-                        }
-                        
+                    case "kseg1_data_mem":
+                        beginAddr = "0x" + Integer.toHexString(Integer.decode(beginAddr) | 0xa0000000);
+                        regions.add(regionId + " (rwx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
                         break;
-                    }
-                    case "edc:GPRDataSector":
-                    {
-                        NamedNodeMap attrs = space.getAttributes();
-                        String regionId = attrs.getNamedItem("edc:regionid").getNodeValue();
-                        String beginAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
-                        String endAddr = attrs.getNamedItem("edc:beginaddr").getNodeValue();
-
-                        String length = Long.toHexString(Long.decode(endAddr) - Long.decode(beginAddr));
-
-                        switch(regionId) {
-                            case "IRAM":
-                                regions.add("ram (rwx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
-                                break;
-                            case "DTCM":
-                                regions.add("dtcm (rwx) : ORIGIN = " + beginAddr + ", LENGTH = " + length);
-                                break;
-                            default:
-                                break;
-                        }
-                        break;
-                    }
                     default:
                         break;
                 }
