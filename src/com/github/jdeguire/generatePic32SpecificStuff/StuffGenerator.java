@@ -247,6 +247,28 @@ public class StuffGenerator {
         ArrayList<String> spaces = new ArrayList<>();
         Pair<Long, Long> temp;
         
+        temp = mainPartition.getTestRange();
+        if(temp != null) {
+            spaces.add("Test Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getEmulationRegsRange();
+        if(temp != null) {
+            spaces.add("Emulation Regs Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.add(System.lineSeparator());
+        }
+
+        temp = mainPartition.getICSPWriteInhibitRange();
+        if(temp != null) {
+            spaces.add("ICSP Write Inhibit Region: " + Long.toHexString(temp.first)
+                        + " -> " + Long.toHexString(temp.second));
+            spaces.addAll(getChildNodes(mainPartition.getICSPWriteInhibitRegions(), -1));
+            spaces.add(System.lineSeparator());
+        }
+
         temp = mainPartition.getBootConfigRange();
         if(temp != null) {
             spaces.add("Boot Cfg Region: " + Long.toHexString(temp.first)

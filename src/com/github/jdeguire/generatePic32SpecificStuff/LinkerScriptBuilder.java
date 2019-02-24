@@ -29,9 +29,9 @@
 
 package com.github.jdeguire.generatePic32SpecificStuff;
 
-import java.util.List;
+import java.io.File;
+import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Collections;
 
 /**
@@ -39,91 +39,48 @@ import java.util.Collections;
  */
 public abstract class LinkerScriptBuilder {
 
-    /* This will represent a single memory region that the linker script will contain in its MEMORY
-     * section.  This is here mostly for convience and so we can sort and search regions.
-     */
-    protected class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
-
-        public static final int READ_ACCESS = 1;
-        public static final int WRITE_ACCESS = 2;
-        public static final int EXEC_ACCESS = 4;
-        public static final int NOT_EXEC_ACCESS = 8;
-        
-        private String name_;
-        private int access_;
-        private long startAddr_;
-        private long endAddr_;
-
-        LinkerMemoryRegion(String name, int access, long start, long end) {
-            name_ = name;
-            access_ = access & 0x07;
-            startAddr_ = start & 0xFFFFFFFF;
-            endAddr_ = end & 0xFFFFFFFF;
-        }
-
-        /* Use this one when getting the addresses as strings from the MPLAB X database, which return
-         * strings as read from XML files.
-         */
-        LinkerMemoryRegion(String name, int access, String start, String end) {
-            this(name, access, (long)Long.decode(start), (long)Long.decode(end));
-        }
-
-        /* Like above, but also ORs a mask onto the addresses.  Use this for MIPS devices when you
-         * need to put a region into a particular kernel segment.
-         */
-        LinkerMemoryRegion(String name, int access, String start, String end, long or_mask) {
-            this(name, access, (long)Long.decode(start) | or_mask, (long)Long.decode(end) | or_mask);
-        }
-
-        
-        @Override
-        public String toString() {
-            String accessStr = "";
-
-            if(0 != access_)
-            {
-                accessStr += "(";
-
-                if(0 != (access_ & READ_ACCESS))
-                    accessStr += "r";
-                if(0 != (access_ & WRITE_ACCESS))
-                    accessStr += "w";
-                if(0 != (access_ & EXEC_ACCESS))
-                    accessStr += "x";
-                if(0 != (access_ & NOT_EXEC_ACCESS))
-                    accessStr += "!x";
-
-                accessStr += ")";
-            }
-
-            return String.format("%" + (32 - accessStr.length()) + "s%s : ORIGIN = 0x%08X, LENGTH = 0x%X",
-                                 name_, access_, startAddr_, (endAddr_ - startAddr_));
-        }
-
-        @Override
-        public int compareTo(LinkerMemoryRegion other) {
-            if(startAddr_ > other.startAddr_)
-                return 1;
-            else if(startAddr_ < other.startAddr_)
-                return -1;
-            else
-                return 0;
-        }
-    }
-
-    LinkerScriptBuilder() {
-        // Nothing to do
-    }
-
-    abstract public void generate(String filepath, TargetDevice target);
+    protected ArrayList<LinkerMemoryRegion> regions_;
+    protected String basepath_;
     
+    /* Create a new builder that can be used to generate scripts for multiple devices, all rooted at
+     * the given base path (which should be a directory).  For example, if the base path is "example/",
+     * then the linker sripts will be output at "example/devicename/devicename.ld" or something
+     * similar.
+     */
+    LinkerScriptBuilder(String basepath) {
+        regions_ = new ArrayList<>();
+        basepath_ = basepath;
+    }
+
+    /* Generate a linker script for the given device, using its name for the subdirectory and the
+     * name of the script itself.
+     */
+    abstract public void generate(TargetDevice target);
+
+
+    /* Create a new linker script file using the given subdirectory and file names, returning a 
+     * PrintWriter that is used to write text to it.  This creates a version of the PrintWrite that 
+     * always uses Unix line separators ('\n').  This will add the ".ld" extension to the filename.
+     */
+    protected PrintWriter createNewLinkerFile(String subdirName, String filename)
+              throws java.io.FileNotFoundException {
+        File temp = new File(basepath_ + subdirName + File.separator + filename + ".ld");
+        temp.getParentFile().mkdirs();
+        
+        return new PrintWriter(temp) {
+                        @Override
+                        public void println() {
+                            write('\n');
+                        }
+                    };
+    }
 
     /* Find the region with the given name and return it or return null if no such region could be 
      * found.
      */
-    protected LinkerMemoryRegion findRegionByName(List<LinkerMemoryRegion> list, String name) {
-        for(LinkerMemoryRegion region : list) {
-            if(name.equals(region.name_))
+    protected LinkerMemoryRegion findRegionByName(String name) {
+        for(LinkerMemoryRegion region : regions_) {
+            if(name.equals(region.getName()))
                 return region;
         }
 
@@ -133,7 +90,7 @@ public abstract class LinkerScriptBuilder {
     /* Sort the list of memory regions based on their starting address, with lower address coming 
      * before higher addresses.
      */
-    protected void sortRegionList(List<LinkerMemoryRegion> list) {
-        Collections.sort(list);
+    protected void sortRegionList() {
+        Collections.sort(regions_);
     }
 }

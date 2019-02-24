@@ -39,6 +39,7 @@ import org.openide.util.NbBundle.Messages;
 
 import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
 import java.util.ArrayList;
+import javax.swing.JFileChooser;
 
 /**
  * Top component which displays something.
@@ -68,12 +69,19 @@ import java.util.ArrayList;
 public final class MainWindowTopComponent extends TopComponent {
 
     StuffGeneratorWorker worker = null;
+    JFileChooser filechooser;
+    String outputpath;
     boolean working = false;
     
     public MainWindowTopComponent() {
         initComponents();
         setName(Bundle.CTL_MainWindowTopComponent());
         setToolTipText(Bundle.HINT_MainWindowTopComponent());
+
+        filechooser = new JFileChooser();
+        filechooser.setDialogTitle("Select output directory");
+        filechooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        filechooser.setAcceptAllFileFilterUsed(false);
     }
 
     /**
@@ -126,12 +134,15 @@ public final class MainWindowTopComponent extends TopComponent {
         // flag and create a new worker so that we can run multiple times, but also prevent the 
         // button from doing anything if a worker is already working.
         if(!working) {
-            working = true;
+            if(filechooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                working = true;
 
-            OutputLog.setText("");
+                outputpath = filechooser.getSelectedFile().toString();
+                OutputLog.setText("Outputting to " + outputpath);
 
-            worker = new StuffGeneratorWorker();            
-            worker.execute();
+                worker = new StuffGeneratorWorker();            
+                worker.execute();
+            }
         }
     }//GEN-LAST:event_StartButtonActionPerformed
 
@@ -201,8 +212,8 @@ public final class MainWindowTopComponent extends TopComponent {
                        "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
                        "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
 //                        List<String> nodeNames = gen.makeNodeMap(device);
-                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
-//                        List<String> nodeNames = gen.getMemorySpaces(device);
+//                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
+                        List<String> nodeNames = gen.getMemorySpaces(device);
 
                         publish("----------" + System.lineSeparator() + device.getName());
                         

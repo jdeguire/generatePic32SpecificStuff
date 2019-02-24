@@ -228,6 +228,24 @@ public class TargetDevice {
         return pic_.hasFPU();
     }
 
+    /* Return True if the device has an L1 cache.  This is actually just a guess for now based on
+     * the device's family or architecture.
+     */
+    public boolean hasL1Cache() {
+        boolean result = false;
+        
+        if(getSubFamily() == SubFamily.PIC32MZ) {
+            result = true;
+        } else if(isArm()) {
+            TargetArch arch = getArch();
+
+            if(arch == TargetArch.ARMV7A  ||  arch == TargetArch.ARMV7EM  ||  arch == TargetArch.ARMV8A)
+                result = true;
+        }
+
+        return result;
+    }
+
     /* Return True if the target supports the MIPS32 instruction set.
      */
     public boolean supportsMips32Isa() {
