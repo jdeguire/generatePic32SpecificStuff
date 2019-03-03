@@ -55,7 +55,7 @@ public abstract class LinkerScriptBuilder {
     /* Generate a linker script for the given device, using its name for the subdirectory and the
      * name of the script itself.
      */
-    abstract public void generate(TargetDevice target);
+    abstract public void generate(TargetDevice target) throws java.io.FileNotFoundException;
 
 
     /* Create a new linker script file using the given subdirectory and file names, returning a 
@@ -63,7 +63,7 @@ public abstract class LinkerScriptBuilder {
      * always uses Unix line separators ('\n').  This will add the ".ld" extension to the filename.
      */
     protected PrintWriter createNewLinkerFile(String subdirName, String filename)
-              throws java.io.FileNotFoundException {
+                            throws java.io.FileNotFoundException {
         File temp = new File(basepath_ + subdirName + File.separator + filename + ".ld");
         temp.getParentFile().mkdirs();
         
@@ -75,6 +75,11 @@ public abstract class LinkerScriptBuilder {
                     };
     }
 
+
+    protected void addMemoryRegion(LinkerMemoryRegion region) {
+        regions_.add(region);
+    }
+    
     /* Find the region with the given name and return it or return null if no such region could be 
      * found.
      */
@@ -92,5 +97,30 @@ public abstract class LinkerScriptBuilder {
      */
     protected void sortRegionList() {
         Collections.sort(regions_);
+    }
+
+
+    /* Sort the memory regions by starting address and add them to the linker script in a MEMORY
+     * command.
+     */
+    protected void addMemoryRegionCommand(PrintWriter writer) {
+        writer.println("MEMORY");
+        writer.println("{");
+
+        sortRegionList();
+
+        for(LinkerMemoryRegion r : regions_) {
+            writer.println(r.toString());
+        }
+
+        writer.println("}");
+        writer.println("");
+    }
+    
+    /* Add the license header to the linker file opened by the given writer.
+     */
+    protected void addLicenseHeader(PrintWriter writer) {
+        writer.println("/* License header to be added later. */");
+        writer.println("");
     }
 }

@@ -114,6 +114,13 @@ public class StuffGenerator {
     public void generate(Device device)
             throws Anomaly, SAXException, IOException, ParserConfigurationException {
         TargetDevice target = new TargetDevice(device.getName());
+
+        if(target.isArm()) {
+            // TODO...
+        } else {
+            LinkerScriptBuilder lsb = new MipsLinkerScriptBuilder(outputDirBase_ + "/lib/proc");
+            lsb.generate(target);
+        }            
     }
 
     /**

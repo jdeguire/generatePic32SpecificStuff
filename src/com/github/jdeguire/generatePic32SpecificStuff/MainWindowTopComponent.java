@@ -209,21 +209,22 @@ public final class MainWindowTopComponent extends TopComponent {
 */
                     // DEBUG STUFF FOR NOW
                     if("PIC32MX795F512L".equalsIgnoreCase(device.getName())  ||  
-                       "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
+//                       "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
                        "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
 //                        List<String> nodeNames = gen.makeNodeMap(device);
 //                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
-                        List<String> nodeNames = gen.getMemorySpaces(device);
+//                        List<String> nodeNames = gen.getMemorySpaces(device);
 
+                        gen.generate(device);
                         publish("----------" + System.lineSeparator() + device.getName());
                         
-                        if(nodeNames.isEmpty()) {
-                            publish("Nothing here");
-                        }
-                        else {
-                            for(String name : nodeNames)
-                                publish(name);
-                        }
+//                        if(nodeNames.isEmpty()) {
+//                            publish("Nothing here");
+//                        }
+//                        else {
+//                            for(String name : nodeNames)
+//                                publish(name);
+//                        }
                     }
                 }
             } catch(Exception ex) {

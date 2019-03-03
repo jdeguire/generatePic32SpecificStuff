@@ -44,6 +44,7 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
     private long startAddr_;
     private long endAddr_;
 
+
     LinkerMemoryRegion(String name, int access, long start, long end) {
         name_ = name;
         access_ = access & 0x07;
