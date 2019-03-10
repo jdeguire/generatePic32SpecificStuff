@@ -42,30 +42,32 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
     private String name_;
     private int access_;
     private long startAddr_;
-    private long endAddr_;
+    private long length_;
 
 
     LinkerMemoryRegion(String name, int access, long start, long end) {
         name_ = name;
         access_ = access & 0x07;
         startAddr_ = start & 0xFFFFFFFF;
-        endAddr_ = end & 0xFFFFFFFF;
+        length_ = (end & 0xFFFFFFFF) - startAddr_;
     }
 
     /* Use this one when getting the addresses as strings from the MPLAB X database, which return
      * strings as read from XML files.
      */
-    LinkerMemoryRegion(String name, int access, String start, String end) {
-        this(name, access, (long)Long.decode(start), (long)Long.decode(end));
+    LinkerMemoryRegion(String name, String start, String end) {
+        this(name, 0, (long)Long.decode(start), (long)Long.decode(end));
     }
 
-    /* Like above, but also ORs a mask onto the addresses.  Use this for MIPS devices when you
-     * need to put a region into a particular kernel segment.
+    /* Copy constructor.
      */
-    LinkerMemoryRegion(String name, int access, String start, String end, long or_mask) {
-        this(name, access, (long)Long.decode(start) | or_mask, (long)Long.decode(end) | or_mask);
+    LinkerMemoryRegion(LinkerMemoryRegion other) {
+        name_ = other.name_;
+        access_ = other.access_;
+        startAddr_ = other.startAddr_;
+        length_ = other.length_;
     }
-
+    
     public String getName() {
         return name_;
     }
@@ -74,10 +76,44 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
         return startAddr_;
     }
 
-    public long getEndAddress() {
-        return endAddr_;
+    public long getLength() {
+        return length_;
+    }
+
+    /* Assign a new name to the region, which can be done when the region name in the device database
+     * is different from the name one would use in linker scripts.
+     */
+    public void setName(String name) {
+        name_ = name;
+    }
+
+    /* Set the access allowed to this region by applying the constants at the top of this class as
+     * bit flags.  This is used for code and RAM regions to tell the linker what it is allowed to
+     * put into a region.  Most regions do not need this because the linker script will explicitly
+     * put the sections it needs into the right regions.
+     */
+    public void setAccess(int access) {
+        access_ = access;
     }
     
+    /* Use the following on MIPS devices to put a region into a particular part of the address space.
+     */
+    public void setAsKseg0Region() {
+        startAddr_ = ((startAddr_ & 0x1FFFFFFF) | 0x80000000);
+    }
+
+    public void setAsKseg1Region() {
+        startAddr_ = ((startAddr_ & 0x1FFFFFFF) | 0xA0000000);
+    }
+
+    public void setAsKseg2Region() {
+        startAddr_ = ((startAddr_ & 0x1FFFFFFF) | 0xC0000000);
+    }
+
+    public void setAsKseg3Region() {
+        startAddr_ = ((startAddr_ & 0x1FFFFFFF) | 0xE0000000);
+    }
+
     @Override
     public String toString() {
         String accessStr = "";
@@ -99,7 +135,7 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
         }
 
         return String.format("%" + (32 - accessStr.length()) + "s%s : ORIGIN = 0x%08X, LENGTH = 0x%X",
-                             name_, access_, startAddr_, (endAddr_ - startAddr_));
+                             name_, access_, startAddr_, length_);
     }
 
     @Override

@@ -83,7 +83,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         String endAddr;
         LinkerMemoryRegion lmr;
         
-        for(Node bootRegion : mainPartition.getBootConfigRegions()) {
+/*        for(Node bootRegion : mainPartition.getBootConfigRegions()) {
             attributes = bootRegion.getAttributes();
             regionId = attributes.getNamedItem("edc:regionid").getNodeValue();
             beginAddr = attributes.getNamedItem("edc:beginaddr").getNodeValue();
@@ -133,5 +133,6 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
                     break;
             }
         }
+*/
     }
 }

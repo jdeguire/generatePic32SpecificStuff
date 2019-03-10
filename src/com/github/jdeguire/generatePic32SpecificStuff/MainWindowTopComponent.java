@@ -214,17 +214,18 @@ public final class MainWindowTopComponent extends TopComponent {
 //                        List<String> nodeNames = gen.makeNodeMap(device);
 //                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
 //                        List<String> nodeNames = gen.getMemorySpaces(device);
+                        List<String> nodeNames = gen.getConfigRegAddresses(device);
 
-                        gen.generate(device);
+//                        gen.generate(device);
                         publish("----------" + System.lineSeparator() + device.getName());
                         
-//                        if(nodeNames.isEmpty()) {
-//                            publish("Nothing here");
-//                        }
-//                        else {
-//                            for(String name : nodeNames)
-//                                publish(name);
-//                        }
+                        if(nodeNames.isEmpty()) {
+                            publish("Nothing here");
+                        }
+                        else {
+                            for(String name : nodeNames)
+                                publish(name);
+                        }
                     }
                 }
             } catch(Exception ex) {

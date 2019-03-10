@@ -29,11 +29,19 @@
 
 package com.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.edc.DCR;
+import com.microchip.crownking.edc.Register;
+import com.microchip.crownking.edc.SFR;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
+import com.microchip.mplab.crownkingx.xMemoryPartition;
 import com.microchip.mplab.crownkingx.xPICFactory;
 import com.microchip.mplab.crownkingx.xPIC;
 import java.util.ArrayList;
+import java.util.List;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 
 /**
@@ -299,7 +307,7 @@ public class TargetDevice {
      * supported that determine whether it is single-precision only or also supports double-precision
      * as well as how many FPU registers are available and whether NEON SIMD extensions are supported.
      *
-     * MIPS devices have only only FPU, so this will return an empty string for MIPS.
+     * MIPS devices have only one FPU, so this will return an empty string for MIPS.
      */
     public String getArmFpuName() {
 		String fpuName = "";
@@ -328,5 +336,105 @@ public class TargetDevice {
 		}
 
         return fpuName;
+    }
+
+    /* Return a list of memory regions used by the target device.  This will return boot memory,
+     * code memory, and data memory regions.
+     */
+    public List<LinkerMemoryRegion> getMemoryRegions() {
+        ArrayList<LinkerMemoryRegion> regions = new ArrayList<>();
+        xMemoryPartition mainPartition = getPic().getMainPartition();
+        NamedNodeMap attributes;
+        LinkerMemoryRegion lmr;
+
+        for(Node bootRegion : mainPartition.getBootConfigRegions()) {
+            attributes = bootRegion.getAttributes();
+
+            lmr = new LinkerMemoryRegion(attributes.getNamedItem("edc:regionid").getNodeValue(),
+                                         attributes.getNamedItem("edc:beginaddr").getNodeValue(),
+                                         attributes.getNamedItem("edc:endaddr").getNodeValue());
+
+            regions.add(lmr);
+        }
+
+        for(Node codeRegion : mainPartition.getCodeRegions()) {
+            attributes = codeRegion.getAttributes();
+
+            lmr = new LinkerMemoryRegion(attributes.getNamedItem("edc:regionid").getNodeValue(),
+                                         attributes.getNamedItem("edc:beginaddr").getNodeValue(),
+                                         attributes.getNamedItem("edc:endaddr").getNodeValue());
+
+            regions.add(lmr);
+        }
+
+        // This actually seems to be for RAM regions despite its name.
+        for(Node gprRegion : mainPartition.getGPRRegions()) {
+            attributes = gprRegion.getAttributes();
+
+            lmr = new LinkerMemoryRegion(attributes.getNamedItem("edc:regionid").getNodeValue(),
+                                         attributes.getNamedItem("edc:beginaddr").getNodeValue(),
+                                         attributes.getNamedItem("edc:endaddr").getNodeValue());
+
+            regions.add(lmr);
+        }
+
+        return regions;
+    }
+
+    /* Return a list of all of the special function registers (used for controlling peripherals) on
+     * the device.  This does not include configuration registers; use getDCRs() for that.  This 
+     * also does not include non-memory-mapped registers (NMMRs).
+     */
+    public List<SFR> getSFRs() {
+        ArrayList<SFR> sfrList = new ArrayList<>(256);
+
+        for(Node sfrSection : getPic().getMainPartition().getSFRRegions()) {
+            NodeList childNodes = sfrSection.getChildNodes();
+
+            for(int i = 0; i < childNodes.getLength(); ++i) {
+                Node currentNode = childNodes.item(i);
+
+                if(currentNode.getNodeName().equals("edc:SFRDef")) {
+                    sfrList.add(new SFR(currentNode));
+                }
+            }
+        }
+
+        return sfrList;
+    }
+
+    /* Return a list of all of the device configuration registers on the device.  This does not 
+     * include special function registers for peripherals; use getSFRs() for that.  This also does 
+     * not include non-memory-mapped registers (NMMRs).
+     */
+    public List<DCR> getDCRs() {
+        ArrayList<DCR> dcrList = new ArrayList<>(256);
+
+        for(Node dcrSection : getPic().getMainPartition().getDCRRegions()) {
+            NodeList childNodes = dcrSection.getChildNodes();
+
+            for(int i = 0; i < childNodes.getLength(); ++i) {
+                Node currentNode = childNodes.item(i);
+
+                if(currentNode.getNodeName().equals("edc:DCRDef")) {
+                    dcrList.add(new DCR(currentNode));
+                }
+            }
+        }
+
+        return dcrList;
+    }
+
+    /* Get the address at which the given register is located.  Registers include SFRs and DCRs, so
+     * objects retrieved with getSFRs() and getDCRs() can be used with this method.
+     */
+    public long getRegisterAddress(Register reg) {
+        String attr = reg.get("_addr");      // The "edc:" part of the attribute name is not needed.
+        long addr = 0;
+
+        if(!attr.isEmpty())
+            addr = Long.decode(attr);
+
+        return addr & 0xFFFFFFFF;
     }
 }

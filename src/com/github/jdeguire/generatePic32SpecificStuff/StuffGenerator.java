@@ -31,6 +31,7 @@ package com.github.jdeguire.generatePic32SpecificStuff;
 
 import com.microchip.crownking.Anomaly;
 import com.microchip.crownking.Pair;
+import com.microchip.crownking.edc.DCR;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -553,5 +554,18 @@ public class StuffGenerator {
         }
 
         return regions;
+    }
+
+    public List<String> getConfigRegAddresses(Device device) 
+            throws Anomaly, SAXException, IOException, ParserConfigurationException {
+        TargetDevice target = new TargetDevice(device.getName());
+
+        ArrayList<String> output = new ArrayList<>();
+
+        for(DCR dcr : target.getDCRs()) {
+            output.add("--" + dcr.getName() + "    0x" + Long.toHexString(target.getRegisterAddress(dcr)));
+        }
+
+        return output;
     }
 }
