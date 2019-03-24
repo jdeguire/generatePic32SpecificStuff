@@ -29,6 +29,8 @@
 
 package com.github.jdeguire.generatePic32SpecificStuff;
 
+import org.w3c.dom.Node;
+
 /* This will represent a single memory region that the linker script will contain in its MEMORY
  * section.  This is here mostly for convience and so we can sort and search regions.
  */
@@ -47,16 +49,20 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
 
     LinkerMemoryRegion(String name, int access, long start, long end) {
         name_ = name;
-        access_ = access & 0x07;
+        access_ = access & 0x08;
         startAddr_ = start & 0xFFFFFFFF;
         length_ = (end & 0xFFFFFFFF) - startAddr_;
     }
 
-    /* Use this one when getting the addresses as strings from the MPLAB X database, which return
-     * strings as read from XML files.
+    /* Use this to create a memory region from a Node object.  It is up to the caller to ensure that
+     * the passed-in Node actually represents a memory region.  Use the "get____Regions()" methods
+     * in the xMemoryPartition and MemoryPartition classes to ensure this.
      */
-    LinkerMemoryRegion(String name, String start, String end) {
-        this(name, 0, (long)Long.decode(start), (long)Long.decode(end));
+    LinkerMemoryRegion(Node regionNode) {
+        this(regionNode.getAttributes().getNamedItem("edc:regionid").getNodeValue(),
+             0,
+             (long)Long.decode(regionNode.getAttributes().getNamedItem("edc:beginaddr").getNodeValue()),
+             (long)Long.decode(regionNode.getAttributes().getNamedItem("edc:endaddr").getNodeValue()));
     }
 
     /* Copy constructor.

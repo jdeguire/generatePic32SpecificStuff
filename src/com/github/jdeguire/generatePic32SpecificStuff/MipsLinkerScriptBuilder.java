@@ -32,6 +32,7 @@ package com.github.jdeguire.generatePic32SpecificStuff;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
 import com.microchip.mplab.crownkingx.xMemoryPartition;
 import java.io.PrintWriter;
+import java.util.List;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 
@@ -82,6 +83,12 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         String beginAddr;
         String endAddr;
         LinkerMemoryRegion lmr;
+
+        List<LinkerMemoryRegion> targetRegions = target.getMemoryRegions();
+
+        for(LinkerMemoryRegion region : targetRegions) {
+            
+        }
         
 /*        for(Node bootRegion : mainPartition.getBootConfigRegions()) {
             attributes = bootRegion.getAttributes();

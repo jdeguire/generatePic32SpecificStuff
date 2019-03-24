@@ -344,40 +344,40 @@ public class TargetDevice {
     public List<LinkerMemoryRegion> getMemoryRegions() {
         ArrayList<LinkerMemoryRegion> regions = new ArrayList<>();
         xMemoryPartition mainPartition = getPic().getMainPartition();
-        NamedNodeMap attributes;
-        LinkerMemoryRegion lmr;
 
+        // MIPS:  This is for the boot flash regions.  The CPU starts executing here at 0x1FC00000.
+        // ARM:   This is for the SAM-BA boot ROM on Atmel devices, which seems to act as a simple 
+        //        UART/USB bootloader and contains a routine for applications to program themselves.
         for(Node bootRegion : mainPartition.getBootConfigRegions()) {
-            attributes = bootRegion.getAttributes();
-
-            lmr = new LinkerMemoryRegion(attributes.getNamedItem("edc:regionid").getNodeValue(),
-                                         attributes.getNamedItem("edc:beginaddr").getNodeValue(),
-                                         attributes.getNamedItem("edc:endaddr").getNodeValue());
-
-            regions.add(lmr);
+            regions.add(new LinkerMemoryRegion(bootRegion));
         }
 
+        // This is the main code region and also includes the ITCM on ARM devices.
         for(Node codeRegion : mainPartition.getCodeRegions()) {
-            attributes = codeRegion.getAttributes();
-
-            lmr = new LinkerMemoryRegion(attributes.getNamedItem("edc:regionid").getNodeValue(),
-                                         attributes.getNamedItem("edc:beginaddr").getNodeValue(),
-                                         attributes.getNamedItem("edc:endaddr").getNodeValue());
-
-            regions.add(lmr);
+            regions.add(new LinkerMemoryRegion(codeRegion));
         }
 
         // This actually seems to be for RAM regions despite its name.
+        // This includes the DTCM on ARM devices.
         for(Node gprRegion : mainPartition.getGPRRegions()) {
-            attributes = gprRegion.getAttributes();
-
-            lmr = new LinkerMemoryRegion(attributes.getNamedItem("edc:regionid").getNodeValue(),
-                                         attributes.getNamedItem("edc:beginaddr").getNodeValue(),
-                                         attributes.getNamedItem("edc:endaddr").getNodeValue());
-
-            regions.add(lmr);
+            regions.add(new LinkerMemoryRegion(gprRegion));
         }
 
+        // Used for the device's external bus interface, if present.
+        for(Node ebiRegion : mainPartition.getEBIRegions()) {
+            regions.add(new LinkerMemoryRegion(ebiRegion));
+        }
+
+        // Used for the device's serial quad interface, if present.
+        for(Node sqiRegion : mainPartition.getSQIRegions()) {
+            regions.add(new LinkerMemoryRegion(sqiRegion));
+        }
+
+        // Used for the device's external DDR or SDRAM interface, if present.
+        for(Node ddrRegion : mainPartition.getDDRRegions()) {
+            regions.add(new LinkerMemoryRegion(ddrRegion));
+        }
+        
         return regions;
     }
 
