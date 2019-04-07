@@ -568,4 +568,15 @@ public class StuffGenerator {
 
         return output;
     }
+
+    public List<String> getAtdfFamily(Device device)
+            throws Anomaly, SAXException, IOException, ParserConfigurationException {
+        TargetDevice target = new TargetDevice(device.getName());
+
+        ArrayList<String> output = new ArrayList<>();
+        output.add(target.getPic().getATDFFamily());
+        output.add(target.getPic().getArchitecture());
+
+        return output;
+    }
 }

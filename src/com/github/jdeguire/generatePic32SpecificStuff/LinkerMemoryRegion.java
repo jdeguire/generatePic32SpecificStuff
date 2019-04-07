@@ -36,6 +36,18 @@ import org.w3c.dom.Node;
  */
 public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
 
+    public enum Type {
+        UNSPECIFIED,
+        BOOT,
+        CODE,
+        SRAM,
+        EBI,
+        SQI,
+        SDRAM,
+        FUSE,
+        PERIPHERAL
+    };
+        
     public static final int READ_ACCESS = 1;
     public static final int WRITE_ACCESS = 2;
     public static final int EXEC_ACCESS = 4;
@@ -45,24 +57,31 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
     private int access_;
     private long startAddr_;
     private long length_;
+    private Type type_;
 
-
-    LinkerMemoryRegion(String name, int access, long start, long end) {
+    
+    LinkerMemoryRegion(String name, int access, long start, long end, Type type) {
         name_ = name;
         access_ = access & 0x08;
         startAddr_ = start & 0xFFFFFFFF;
         length_ = (end & 0xFFFFFFFF) - startAddr_;
+        type_ = type;
+    }
+
+    LinkerMemoryRegion(String name, int access, long start, long end) {
+        this(name, access, start, end, Type.UNSPECIFIED);
     }
 
     /* Use this to create a memory region from a Node object.  It is up to the caller to ensure that
      * the passed-in Node actually represents a memory region.  Use the "get____Regions()" methods
      * in the xMemoryPartition and MemoryPartition classes to ensure this.
      */
-    LinkerMemoryRegion(Node regionNode) {
+    LinkerMemoryRegion(Node regionNode, Type type) {
         this(regionNode.getAttributes().getNamedItem("edc:regionid").getNodeValue(),
              0,
              (long)Long.decode(regionNode.getAttributes().getNamedItem("edc:beginaddr").getNodeValue()),
-             (long)Long.decode(regionNode.getAttributes().getNamedItem("edc:endaddr").getNodeValue()));
+             (long)Long.decode(regionNode.getAttributes().getNamedItem("edc:endaddr").getNodeValue()),
+             type);
     }
 
     /* Copy constructor.
@@ -72,6 +91,7 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
         access_ = other.access_;
         startAddr_ = other.startAddr_;
         length_ = other.length_;
+        type_ = other.type_;
     }
     
     public String getName() {
@@ -86,6 +106,10 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
         return length_;
     }
 
+    public Type getType() {
+        return type_;
+    }
+    
     /* Assign a new name to the region, which can be done when the region name in the device database
      * is different from the name one would use in linker scripts.
      */

@@ -349,34 +349,32 @@ public class TargetDevice {
         // ARM:   This is for the SAM-BA boot ROM on Atmel devices, which seems to act as a simple 
         //        UART/USB bootloader and contains a routine for applications to program themselves.
         for(Node bootRegion : mainPartition.getBootConfigRegions()) {
-            regions.add(new LinkerMemoryRegion(bootRegion));
+            regions.add(new LinkerMemoryRegion(bootRegion, LinkerMemoryRegion.Type.BOOT));
         }
 
         // This is the main code region and also includes the ITCM on ARM devices.
         for(Node codeRegion : mainPartition.getCodeRegions()) {
-            regions.add(new LinkerMemoryRegion(codeRegion));
+            regions.add(new LinkerMemoryRegion(codeRegion, LinkerMemoryRegion.Type.CODE));
         }
 
         // This actually seems to be for RAM regions despite its name.
         // This includes the DTCM on ARM devices.
         for(Node gprRegion : mainPartition.getGPRRegions()) {
-            regions.add(new LinkerMemoryRegion(gprRegion));
+            regions.add(new LinkerMemoryRegion(gprRegion, LinkerMemoryRegion.Type.SRAM));
         }
 
         // Used for the device's external bus interface, if present.
         for(Node ebiRegion : mainPartition.getEBIRegions()) {
-            regions.add(new LinkerMemoryRegion(ebiRegion));
+            regions.add(new LinkerMemoryRegion(ebiRegion, LinkerMemoryRegion.Type.EBI));
         }
 
         // Used for the device's serial quad interface, if present.
         for(Node sqiRegion : mainPartition.getSQIRegions()) {
-            regions.add(new LinkerMemoryRegion(sqiRegion));
+            regions.add(new LinkerMemoryRegion(sqiRegion, LinkerMemoryRegion.Type.SQI));
         }
 
-        // Used for the device's external DDR or SDRAM interface, if present.
-        for(Node ddrRegion : mainPartition.getDDRRegions()) {
-            regions.add(new LinkerMemoryRegion(ddrRegion));
-        }
+        // NOTE:  Some devices have an external SDRAM or DDR2 memory interface with its own region,
+        //        but it is not returned here because neither the ARM or MIPS toolchains use it.
         
         return regions;
     }

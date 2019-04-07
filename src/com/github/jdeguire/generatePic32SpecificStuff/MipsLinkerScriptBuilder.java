@@ -41,13 +41,6 @@ import org.w3c.dom.Node;
  */
 public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
 
-    // OR these with a physical address to convert it into one of the 4 kernel segment addresses 
-    // used in MIPS.
-    private static final long KSEG0_MASK = 0x80000000;
-    private static final long KSEG1_MASK = 0xA0000000;
-    private static final long KSEG2_MASK = 0xC0000000;
-    private static final long KSEG3_MASK = 0xE0000000;
-
     // This is the physical address at which the CPU begin execution when it is reset.
     private static final long MIPS_RESET_PHYS_ADDR  = 0x1FC00000;
 
@@ -60,8 +53,11 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
     public void generate(TargetDevice target) throws java.io.FileNotFoundException {
         String basename = target.getDeviceName().substring(3);
         PrintWriter writer = createNewLinkerFile(basename, "p" + basename);
+        InterruptList intList = new InterruptList(target.getPic());
+        
+        populateMemoryRegions(target, intList);
 
-        populateMemoryRegions(target);
+        addLicenseHeader(writer);
     }
 
 
@@ -69,26 +65,75 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
      * the debugger reserves memory in them.  We have to figure this our by the device family and 
      * create the regions needed manually.
      */
-    private void setupBootRegionByFamily(TargetDevice target, LinkerMemoryRegion lmr) {
-        if(SubFamily.PIC32MZ == target.getSubFamily()) {
-            
+    private void setupBootRegionsByFamily(TargetDevice target, LinkerMemoryRegion lmr) {
+        /* The size of the boot flash depends on the device subfamily and is the main factor in how 
+         * the regions are laid out.  There are 4 different sizes of boot flash--3kB, 12kB, 20kB, 
+         * and 80kB--so we can use that to figure out what we need.  The given region will be a bit 
+         * smaller than those sizes because the flash has other stuff, like the config registers.
+         */
+
+        if(lmr.getLength() <= (3 * 1024)) {
+            // PIC32MM and small PIC32MX:
+            addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0x9FC00490, 0x9FC00BF0));
+            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC00490, 0x9FC00490));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
+        } else if(lmr.getLength() <= (12 * 1024)) {
+            // Large PIC32MX
+            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC00490, 0x9FC00E00));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
+            addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0xBFC02000, 0xBFC00FF0));
+
+        } else if(lmr.getLength() <= (20 * 1024)) {
+            // PIC32MK
+            // The gap between 0x9FC000480 and 0x9FC004B0 is present in the XC32 scripts, so we'll
+            // keep it here for now.  The same goes for the two empty kseg0_boot_mem regions.
+            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC004B0, 0x9FC004B0));
+            addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0x9FC20490, 0x9FC23FB0));
+            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC20490, 0x9FC20490));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00480));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem_4B0", 0, 0xBFC004B0, 0xBFC03FB0));
         } else {
+            // PIC32MZ
+            // The gap between 0x9FC000480 and 0x9FC004B0 is present in the XC32 scripts, so we'll
+            // keep it here for now.  The same goes for the empty kseg0_boot_mem region.
+            // The PIC32MZ does not need to reserve flash for the debugger.
+            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC004B0, 0x9FC004B0));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00480));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem_4B0", 0, 0xBFC004B0, 0xBFC0FF00));
         }
-    }
+   }
     
-    private void populateMemoryRegions(TargetDevice target) {
-        xMemoryPartition mainPartition = target.getPic().getMainPartition();
+    private void populateMemoryRegions(TargetDevice target, InterruptList intList) {
+/*        xMemoryPartition mainPartition = target.getPic().getMainPartition();
         NamedNodeMap attributes;
         String regionId;
         String beginAddr;
         String endAddr;
         LinkerMemoryRegion lmr;
-
+*/
         List<LinkerMemoryRegion> targetRegions = target.getMemoryRegions();
 
         for(LinkerMemoryRegion region : targetRegions) {
-            
+            if(MIPS_RESET_PHYS_ADDR == region.getStartAddress()) {
+                setupBootRegionsByFamily(target, region);
+            } else {
+
+            }
         }
+
+        // Some devices have a separate region for the exception vectors, so add it here.
+        if(!intList.usesVariableOffsets()  &&  SubFamily.PIC32MM != target.getSubFamily()) {
+            long startAddr = intList.getDefaultBaseAddress();
+
+            if(0 == startAddr)
+                startAddr = 0x9D000000;
+
+            // The vectors start at 0x200.  Before that are things like the general exception vector
+            // and TLB refill exception.  Each spot in the vector table has 32 bytes by defualt.
+            long endAddr = startAddr + (0x200 + (32 * (intList.getLastVectorNumber() + 1)));
+
+            addMemoryRegion(new LinkerMemoryRegion("execption_mem", 0, startAddr, endAddr));
+        }    
         
 /*        for(Node bootRegion : mainPartition.getBootConfigRegions()) {
             attributes = bootRegion.getAttributes();

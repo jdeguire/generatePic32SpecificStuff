@@ -110,7 +110,7 @@ public abstract class LinkerScriptBuilder {
         sortRegionList();
 
         for(LinkerMemoryRegion r : regions_) {
-            writer.println(r.toString());
+            writer.println("  " + r.toString());
         }
 
         writer.println("}");
