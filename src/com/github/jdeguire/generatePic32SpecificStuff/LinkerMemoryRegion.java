@@ -74,7 +74,9 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
 
     /* Use this to create a memory region from a Node object.  It is up to the caller to ensure that
      * the passed-in Node actually represents a memory region.  Use the "get____Regions()" methods
-     * in the xMemoryPartition and MemoryPartition classes to ensure this.
+     * in the xMemoryPartition and MemoryPartition classes to ensure this.  The 'type' depends on
+     * the function called to get the region.  For example, the type for "getCodeRegions()" would 
+     * be CODE.
      */
     LinkerMemoryRegion(Node regionNode, Type type) {
         this(regionNode.getAttributes().getNamedItem("edc:regionid").getNodeValue(),

@@ -103,7 +103,7 @@ public abstract class LinkerScriptBuilder {
     /* Sort the memory regions by starting address and add them to the linker script in a MEMORY
      * command.
      */
-    protected void addMemoryRegionCommand(PrintWriter writer) {
+    protected void outputMemoryRegionCommand(PrintWriter writer) {
         writer.println("MEMORY");
         writer.println("{");
 
@@ -114,12 +114,12 @@ public abstract class LinkerScriptBuilder {
         }
 
         writer.println("}");
-        writer.println("");
+        writer.println();
     }
     
     /* Add the license header to the linker file opened by the given writer.
      */
-    protected void addLicenseHeader(PrintWriter writer) {
+    protected void outputLicenseHeader(PrintWriter writer) {
         writer.println("/* License header to be added later. */");
         writer.println("");
     }

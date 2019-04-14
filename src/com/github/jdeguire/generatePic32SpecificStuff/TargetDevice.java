@@ -373,8 +373,10 @@ public class TargetDevice {
             regions.add(new LinkerMemoryRegion(sqiRegion, LinkerMemoryRegion.Type.SQI));
         }
 
-        // NOTE:  Some devices have an external SDRAM or DDR2 memory interface with its own region,
-        //        but it is not returned here because neither the ARM or MIPS toolchains use it.
+        // Used for the device's external DDR or SDRAM interface, if present.
+        for(Node ddrRegion : mainPartition.getDDRRegions()) {
+            regions.add(new LinkerMemoryRegion(ddrRegion, LinkerMemoryRegion.Type.SDRAM));
+        }
         
         return regions;
     }
@@ -424,7 +426,8 @@ public class TargetDevice {
     }
 
     /* Get the address at which the given register is located.  Registers include SFRs and DCRs, so
-     * objects retrieved with getSFRs() and getDCRs() can be used with this method.
+     * objects retrieved with getSFRs() and getDCRs() can be used with this method.  This will return
+     * whatever is in MPLAB X's database, which is the physical address on MIPS devices.
      */
     public long getRegisterAddress(Register reg) {
         String attr = reg.get("_addr");      // The "edc:" part of the attribute name is not needed.

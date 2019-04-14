@@ -29,6 +29,7 @@
 
 package com.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.edc.DCR;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
 import com.microchip.mplab.crownkingx.xMemoryPartition;
 import java.io.PrintWriter;
@@ -54,18 +55,21 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         String basename = target.getDeviceName().substring(3);
         PrintWriter writer = createNewLinkerFile(basename, "p" + basename);
         InterruptList intList = new InterruptList(target.getPic());
-        
-        populateMemoryRegions(target, intList);
+        List<DCR> dcrList = target.getDCRs();
 
-        addLicenseHeader(writer);
+        populateMemoryRegions(target, intList, dcrList);
+
+        outputLicenseHeader(writer);
+        outputMemoryRegionCommand(writer);
+        outputConfigRegSectionsCommand(writer, dcrList);
     }
 
 
     /* Different MIPS devices families have differently-sized boot memory regions and different ways
-     * the debugger reserves memory in them.  We have to figure this our by the device family and 
-     * create the regions needed manually.
+     * the debugger reserves memory in them.  We have to figure this out based on the region size 
+     * and create the regions needed manually.
      */
-    private void setupBootRegionsByFamily(TargetDevice target, LinkerMemoryRegion lmr) {
+    private void setupBootRegionsBySize(LinkerMemoryRegion lmr) {
         /* The size of the boot flash depends on the device subfamily and is the main factor in how 
          * the regions are laid out.  There are 4 different sizes of boot flash--3kB, 12kB, 20kB, 
          * and 80kB--so we can use that to figure out what we need.  The given region will be a bit 
@@ -82,7 +86,6 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
             addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC00490, 0x9FC00E00));
             addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
             addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0xBFC02000, 0xBFC00FF0));
-
         } else if(lmr.getLength() <= (20 * 1024)) {
             // PIC32MK
             // The gap between 0x9FC000480 and 0x9FC004B0 is present in the XC32 scripts, so we'll
@@ -103,21 +106,65 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         }
    }
     
-    private void populateMemoryRegions(TargetDevice target, InterruptList intList) {
-/*        xMemoryPartition mainPartition = target.getPic().getMainPartition();
-        NamedNodeMap attributes;
-        String regionId;
-        String beginAddr;
-        String endAddr;
-        LinkerMemoryRegion lmr;
-*/
+    private void populateMemoryRegions(TargetDevice target, InterruptList intList, List<DCR> dcrList) {
         List<LinkerMemoryRegion> targetRegions = target.getMemoryRegions();
 
         for(LinkerMemoryRegion region : targetRegions) {
-            if(MIPS_RESET_PHYS_ADDR == region.getStartAddress()) {
-                setupBootRegionsByFamily(target, region);
-            } else {
+            switch(region.getType()) {
+                case BOOT:
+                    if(MIPS_RESET_PHYS_ADDR == region.getStartAddress()) {
+                        setupBootRegionsBySize(region);
+                    } else {
+                        region.setAsKseg1Region();
+                        addMemoryRegion(region);
+                    }
+                    break;
+                case CODE:
+                    if(region.getName().equalsIgnoreCase("code")) {
+                        region.setName("kseg0_program_mem");
+                        region.setAccess(LinkerMemoryRegion.EXEC_ACCESS | LinkerMemoryRegion.READ_ACCESS);
+                        region.setAsKseg0Region();
+                        addMemoryRegion(region);
+                    }
+                    break;
+                case SRAM:
+                    if(region.getName().equalsIgnoreCase("kseg1_data_mem")) {
+                        region.setAccess(LinkerMemoryRegion.NOT_EXEC_ACCESS | LinkerMemoryRegion.WRITE_ACCESS);
+                        region.setAsKseg1Region();
+                        addMemoryRegion(region);
+                    } else if(region.getName().equalsIgnoreCase("kseg0_data_mem")) {
+                        region.setAccess(LinkerMemoryRegion.NOT_EXEC_ACCESS | LinkerMemoryRegion.WRITE_ACCESS);
+                        region.setAsKseg0Region();
+                        addMemoryRegion(region);
+                    }
+                    break;
+                case EBI:
+                case SQI:
+                {
+                    LinkerMemoryRegion kseg2_region = new LinkerMemoryRegion(region);
+                    LinkerMemoryRegion kseg3_region = new LinkerMemoryRegion(region);
 
+                    kseg2_region.setName("kseg2_" + region.getName());
+                    kseg2_region.setAsKseg2Region();
+                    addMemoryRegion(kseg2_region);
+
+                    kseg3_region.setName("kseg3_" + region.getName());
+                    kseg3_region.setAsKseg3Region();
+                    addMemoryRegion(kseg3_region);
+
+                    break;
+                }
+                case SDRAM:
+                    region.setAsKseg0Region();
+                    addMemoryRegion(region);
+                    break;
+                case FUSE:
+                case PERIPHERAL:
+                    region.setAsKseg1Region();
+                    addMemoryRegion(region);
+                    break;
+                default:
+                    break;
             }
         }
 
@@ -133,58 +180,37 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
             long endAddr = startAddr + (0x200 + (32 * (intList.getLastVectorNumber() + 1)));
 
             addMemoryRegion(new LinkerMemoryRegion("execption_mem", 0, startAddr, endAddr));
-        }    
-        
-/*        for(Node bootRegion : mainPartition.getBootConfigRegions()) {
-            attributes = bootRegion.getAttributes();
-            regionId = attributes.getNamedItem("edc:regionid").getNodeValue();
-            beginAddr = attributes.getNamedItem("edc:beginaddr").getNodeValue();
-            endAddr = attributes.getNamedItem("edc:endaddr").getNodeValue();
-
-            if(Long.decode(beginAddr) == MIPS_RESET_PHYS_ADDR) {
-                lmr = new LinkerMemoryRegion(regionId, 0, beginAddr, endAddr);
-                setupBootRegionByFamily(target, lmr);
-            } else {
-                lmr = new LinkerMemoryRegion(regionId, 0, beginAddr, endAddr, KSEG1_MASK);
-                addMemoryRegion(lmr);
-            }
         }
 
-        for(Node codeRegion : mainPartition.getCodeRegions()) {
-            attributes = codeRegion.getAttributes();
-            regionId = attributes.getNamedItem("edc:regionid").getNodeValue();
-            beginAddr = attributes.getNamedItem("edc:beginaddr").getNodeValue();
-            endAddr = attributes.getNamedItem("edc:endaddr").getNodeValue();
+        // Each device config register has its own region, which makes it easier to place the
+        // registers in the correct spots when the user specifies their values in code.
+        for(DCR dcr : dcrList) {
+            long dcrAddr = target.getRegisterAddress(dcr);
+            LinkerMemoryRegion dcrRegion = new LinkerMemoryRegion(dcr.getName(),
+                                                                  0,
+                                                                  dcrAddr,
+                                                                  dcrAddr + 4);
+            dcrRegion.setAsKseg1Region();
+            addMemoryRegion(dcrRegion);
+        }
+    }
+    
+    /* Add a SECTIONS {...} command containing just sections for the device config registers.
+     */
+    private void outputConfigRegSectionsCommand(PrintWriter writer, List<DCR> dcrList) {
+        writer.println("SECTIONS");
+        writer.println("{");
 
-            if(regionId.equals("code")) {
-                int access = LinkerMemoryRegion.EXEC_ACCESS | LinkerMemoryRegion.READ_ACCESS;
-                lmr = new LinkerMemoryRegion(regionId, access, beginAddr, endAddr, KSEG1_MASK);
-                addMemoryRegion(lmr);
-            }
+        for(DCR dcr : dcrList) {
+            String sectionName = "config_" + dcr.getName();
+
+            writer.println("  ." + sectionName + " : {");
+            writer.println("    KEEP(*(." + sectionName + "))");
+            writer.println(" } > " + sectionName);
+            writer.println();
         }
 
-        // This actually seems to be for RAM regions despite its name.
-        for(Node gprRegion : mainPartition.getGPRRegions()) {
-            attributes = gprRegion.getAttributes();
-            regionId = attributes.getNamedItem("edc:regionid").getNodeValue();
-            beginAddr = attributes.getNamedItem("edc:beginaddr").getNodeValue();
-            endAddr = attributes.getNamedItem("edc:endaddr").getNodeValue();
-
-            int access = LinkerMemoryRegion.NOT_EXEC_ACCESS | LinkerMemoryRegion.WRITE_ACCESS;
-
-            switch(regionId) {
-                case "kseg0_data_mem":
-                    lmr = new LinkerMemoryRegion(regionId, access, beginAddr, endAddr, KSEG0_MASK);
-                    addMemoryRegion(lmr);
-                    break;
-                case "kseg1_data_mem":
-                    lmr = new LinkerMemoryRegion(regionId, access, beginAddr, endAddr, KSEG1_MASK);
-                    addMemoryRegion(lmr);
-                    break;
-                default:
-                    break;
-            }
-        }
-*/
+        writer.println("}");
+        writer.println();
     }
 }
