@@ -62,8 +62,15 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         outputLicenseHeader(writer);
         outputMemoryRegionCommand(writer);
         outputConfigRegSectionsCommand(writer, dcrList);
-    }
+        
+        writer.println("SECTIONS");
+        writer.println("{");
 
+        outputExceptionTable(writer, intList, target);
+
+        writer.println("}");
+    }
+    
 
     /* Different MIPS devices families have differently-sized boot memory regions and different ways
      * the debugger reserves memory in them.  We have to figure this out based on the region size 
@@ -186,7 +193,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         // registers in the correct spots when the user specifies their values in code.
         for(DCR dcr : dcrList) {
             long dcrAddr = target.getRegisterAddress(dcr);
-            LinkerMemoryRegion dcrRegion = new LinkerMemoryRegion(dcr.getName(),
+            LinkerMemoryRegion dcrRegion = new LinkerMemoryRegion("config_" + dcr.getName(),
                                                                   0,
                                                                   dcrAddr,
                                                                   dcrAddr + 4);
@@ -206,11 +213,76 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
 
             writer.println("  ." + sectionName + " : {");
             writer.println("    KEEP(*(." + sectionName + "))");
-            writer.println(" } > " + sectionName);
+            writer.println("  } > " + sectionName);
             writer.println();
         }
 
         writer.println("}");
         writer.println();
+    }
+
+    private void outputExceptionTable(PrintWriter writer, InterruptList intList, TargetDevice target) {
+        String outputRegion;
+
+        if(null != findRegionByName("exception_mem")) {
+            outputRegion = "exception_mem";
+        } else {
+            outputRegion = "kseg0_program_mem";
+        }
+
+        if(target.hasL1Cache()) {
+            writer.println("  .simple_tlb_refill_excpt _SIMPLE_TLB_REFILL_EXCPT_ADDR :");
+            writer.println("  {");
+            writer.println("    KEEP(*(.simple_tlb_refill_vector))");
+            writer.println("  } > " + outputRegion);
+            writer.println();
+
+            writer.println("  .cache_err_excpt _CACHE_ERR_EXCPT_ADDR :");
+            writer.println("  {");
+            writer.println("    KEEP(*(.cache_err_vector))");
+            writer.println("  } > " + outputRegion);
+            writer.println();
+        }
+
+        writer.println("  .app_excpt _GEN_EXCPT_ADDR :");
+        writer.println("  {");
+        writer.println("    KEEP(*(.gen_handler))");
+        writer.println("  } > " + outputRegion);
+        writer.println();
+
+        if(intList.usesVariableOffsets())
+        {
+            writer.println("  .vectors _ebase_address + 0x200 :");
+            writer.println("  {");
+            writer.println("    /*  Symbol __vector_offset_n points to .vector_n if it exists,");
+            writer.println("     *  otherwise it points to the default handler. The startup code");
+            writer.println("     *  uses these value to set up the OFFxxx registers in the ");
+            writer.println("     *  interrupt controller.");
+            writer.println("     */");
+
+            for(int vectorNum = 0; vectorNum <= intList.getLastVectorNumber(); ++vectorNum) {
+                writer.println("    . = ALIGN(4) ;");
+                writer.println("    KEEP(*(.vector_" + vectorNum + "))");
+                writer.println("     __vector_offset_" + vectorNum + " = (SIZEOF(.vector_" + vectorNum + ") > 0 ? (. - _ebase_address - SIZEOF(.vector_" + vectorNum + ")) : __vector_offset_default);");
+            }
+
+            writer.println("    /* Default interrupt handler */");
+            writer.println("    . = ALIGN(4) ;");
+            writer.println("    __vector_offset_default = . - _ebase_address;");
+            writer.println("    KEEP(*(.vector_default))");
+            writer.println();
+
+            writer.println("    /*  The offset registers hold a 17-bit offset, allowing a max value less");
+            writer.println("     *  than 256*1024, so check for that here.  If you see this error, then ");
+            writer.println("     *  one of your vectors is too large.");
+            writer.println("     */");
+            writer.println("    ASSERT(__vector_offset_default < 256K, \"Error: Vector offset too large.\")");
+
+            writer.println("  } > " + outputRegion);
+            writer.println();
+
+        } else {
+            
+        }
     }
 }
