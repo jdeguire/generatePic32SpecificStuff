@@ -60,13 +60,26 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         populateMemoryRegions(target, intList, dcrList);
 
         outputLicenseHeader(writer);
+// TODO:  Output preamble stuff here
         outputMemoryRegionCommand(writer);
         outputConfigRegSectionsCommand(writer, dcrList);
         
         writer.println("SECTIONS");
         writer.println("{");
 
-        outputExceptionTable(writer, intList, target);
+        outputCommonInitialSections(writer, target);
+        if(intList.usesVariableOffsets())
+            outputVariableOffsetVectors(writer, intList);
+
+// TODO:  Add other sections here
+
+
+        // NOTE:  We output this after other code sections because we need the linker to have 
+        //        allocated the interrupt handlers before trying to allocate the table.  The table
+        //        refers to the sections directly in order to generate trampolines, which will not
+        //        work unless the linker already knows where those sections are.
+        if(!intList.usesVariableOffsets())
+            outputFixedOffsetVectors(writer, intList, target);
 
         writer.println("}");
     }
@@ -95,24 +108,28 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
             addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0xBFC02000, 0xBFC00FF0));
         } else if(lmr.getLength() <= (20 * 1024)) {
             // PIC32MK
-            // The gap between 0x9FC000480 and 0x9FC004B0 is present in the XC32 scripts, so we'll
+            // The gap just before 0x9FC004B0 is present in the XC32 scripts, so we'll
             // keep it here for now.  The same goes for the two empty kseg0_boot_mem regions.
             addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC004B0, 0x9FC004B0));
             addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0x9FC20490, 0x9FC23FB0));
             addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC20490, 0x9FC20490));
-            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00480));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
             addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem_4B0", 0, 0xBFC004B0, 0xBFC03FB0));
         } else {
             // PIC32MZ
-            // The gap between 0x9FC000480 and 0x9FC004B0 is present in the XC32 scripts, so we'll
+            // The gap just before 0x9FC004B0 is present in the XC32 scripts, so we'll
             // keep it here for now.  The same goes for the empty kseg0_boot_mem region.
             // The PIC32MZ does not need to reserve flash for the debugger.
             addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC004B0, 0x9FC004B0));
-            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00480));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
             addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem_4B0", 0, 0xBFC004B0, 0xBFC0FF00));
         }
    }
     
+    /* Walk through the list of all target regions and add the ones that the linker scripts needs,
+     * possibly modifying them along the way.  This will also add regions for the device config
+     * registers.
+     */
     private void populateMemoryRegions(TargetDevice target, InterruptList intList, List<DCR> dcrList) {
         List<LinkerMemoryRegion> targetRegions = target.getMemoryRegions();
 
@@ -175,16 +192,20 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
             }
         }
 
-        // Some devices have a separate region for the exception vectors, so add it here.
-        if(!intList.usesVariableOffsets()  &&  SubFamily.PIC32MM != target.getSubFamily()) {
+        if(!intList.usesVariableOffsets()) {
             long startAddr = intList.getDefaultBaseAddress();
+            long sizePerVector = 32;
 
             if(0 == startAddr)
                 startAddr = 0x9D000000;
 
+            // MicroMIPS-only devices have smaller vectors.
+            if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa())
+                sizePerVector = 8;
+                
             // The vectors start at 0x200.  Before that are things like the general exception vector
-            // and TLB refill exception.  Each spot in the vector table has 32 bytes by defualt.
-            long endAddr = startAddr + (0x200 + (32 * (intList.getLastVectorNumber() + 1)));
+            // and TLB refill exception.
+            long endAddr = startAddr + (0x200 + (sizePerVector * (intList.getLastVectorNumber() + 1)));
 
             addMemoryRegion(new LinkerMemoryRegion("execption_mem", 0, startAddr, endAddr));
         }
@@ -221,68 +242,141 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         writer.println();
     }
 
-    private void outputExceptionTable(PrintWriter writer, InterruptList intList, TargetDevice target) {
-        String outputRegion;
+    /* Output small sections that are found at the start of the main SECTIONS command.  These are 
+     * dictated by the MIPS hardware and are used to handle the placement of the reset vector as 
+     * well as some common exception vectors.
+     */
+    private void outputCommonInitialSections(PrintWriter writer, TargetDevice target) {
+        String outputExceptionRegion;
 
         if(null != findRegionByName("exception_mem")) {
-            outputRegion = "exception_mem";
+            outputExceptionRegion = "exception_mem";
         } else {
-            outputRegion = "kseg0_program_mem";
+            outputExceptionRegion = "kseg0_program_mem";
         }
 
+        writer.println("  /* MIPS CPU starts executing here. */");
+        writer.println("  .reset _RESET_ADDR :");
+        writer.println("  {");
+        writer.println("    KEEP(*(.reset))");
+        writer.println("    KEEP(*(.reset.startup))");
+        writer.println("  } > kseg1_boot_mem");
+        writer.println();
+        
+        writer.println("  /* Boot exception vector; location fixed by hardware. */");
+        writer.println("  .bev_excpt _BEV_EXCPT_ADDR :");
+        writer.println("  {");
+        writer.println("    KEEP(*(.bev_handler))");
+        writer.println("  } > kseg1_boot_mem");
+        writer.println();
+
+        writer.println("  /* Debugger exception vector; location fixed by hardware. */");
+        writer.println("  .dbg_excpt _DBG_EXCPT_ADDR (NOLOAD) :");
+        writer.println("  {");
+        writer.println("    . += (DEFINED (_DEBUGGER) ? 0x16 : 0x0);");
+        writer.println("  } > kseg1_boot_mem");
+        writer.println();
+
         if(target.hasL1Cache()) {
+            writer.println("  .cache_init :");
+            writer.println("  {");
+            writer.println("    *(.cache_init)");
+            writer.println("    *(.cache_init.*)");
+            writer.println("  } > kseg1_boot_mem_4B0");
+            writer.println();
+
+            writer.println("  /* TLB refill vector; location based on EBase address. */");
             writer.println("  .simple_tlb_refill_excpt _SIMPLE_TLB_REFILL_EXCPT_ADDR :");
             writer.println("  {");
             writer.println("    KEEP(*(.simple_tlb_refill_vector))");
-            writer.println("  } > " + outputRegion);
+            writer.println("  } > " + outputExceptionRegion);
             writer.println();
 
+            writer.println("  /* Cache error vector; location based on EBase address. */");
             writer.println("  .cache_err_excpt _CACHE_ERR_EXCPT_ADDR :");
             writer.println("  {");
             writer.println("    KEEP(*(.cache_err_vector))");
-            writer.println("  } > " + outputRegion);
+            writer.println("  } > " + outputExceptionRegion);
             writer.println();
         }
 
+        writer.println("  /* General exception vector; location based on EBase address. */");
         writer.println("  .app_excpt _GEN_EXCPT_ADDR :");
         writer.println("  {");
         writer.println("    KEEP(*(.gen_handler))");
-        writer.println("  } > " + outputRegion);
+        writer.println("  } > " + outputExceptionRegion);
+        writer.println();
+    }
+
+    /* Output an interrupt vector section assuming that the device supports variable offset vectors.
+     * This will set up the vector table so that the interrupt handler is always inline in the table.
+     *
+     * This differs from XC32, in which the user can use a GCC attribute to choose whether to use a
+     * trampoline for each handler (like fixed offset devices) or to inline it.  Here, the user will 
+     * not get a choice.
+     */
+    private void outputVariableOffsetVectors(PrintWriter writer, InterruptList intList) {
+        writer.println("  .vectors _ebase_address + 0x200 :");
+        writer.println("  {");
+        writer.println("    /*  Symbol __vector_offset_n points to .vector_n if it exists,");
+        writer.println("     *  otherwise it points to the default handler. The startup code");
+        writer.println("     *  uses these value to set up the OFFxxx registers in the ");
+        writer.println("     *  interrupt controller.");
+        writer.println("     */");
+
+        for(int vectorNum = 0; vectorNum <= intList.getLastVectorNumber(); ++vectorNum) {
+            writer.println("    . = ALIGN(4) ;");
+            writer.println("    KEEP(*(.vector_" + vectorNum + "))");
+            writer.println("     __vector_offset_" + vectorNum + " = (SIZEOF(.vector_" + vectorNum + ") > 0 ? (. - _ebase_address - SIZEOF(.vector_" + vectorNum + ")) : __vector_offset_default);");
+        }
+
+        writer.println("    /* Default interrupt handler */");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("    __vector_offset_default = . - _ebase_address;");
+        writer.println("    KEEP(*(.vector_default))");
         writer.println();
 
-        if(intList.usesVariableOffsets())
-        {
-            writer.println("  .vectors _ebase_address + 0x200 :");
-            writer.println("  {");
-            writer.println("    /*  Symbol __vector_offset_n points to .vector_n if it exists,");
-            writer.println("     *  otherwise it points to the default handler. The startup code");
-            writer.println("     *  uses these value to set up the OFFxxx registers in the ");
-            writer.println("     *  interrupt controller.");
-            writer.println("     */");
+        writer.println("    /*  The offset registers hold a 17-bit offset, allowing a max value less");
+        writer.println("     *  than 256*1024, so check for that here.  If you see this error, then ");
+        writer.println("     *  one of your vectors is too large.");
+        writer.println("     */");
+        writer.println("    ASSERT(__vector_offset_default < 256K, \"Error: Vector offset too large.\")");
+
+        writer.println("  } > kseg0_program_mem");
+        writer.println();
+    }
+
+    /* Output an interrupt vector section assuming that the device use fixed offset vectors.
+     * This will add instructions into the vector table to act as trampolines to the actual 
+     * handlers.
+     *
+     * This differs from XC32, in which the user can use a GCC attribute to choose whether to use a
+     * trampoline or to inline the handler (like on variable offset devices.  Here, the user will
+     * not get a choice.
+     */
+    private void outputFixedOffsetVectors(PrintWriter writer, InterruptList intList, TargetDevice target) {
+        if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa()) {
+            for(int vectorNum = 0; vectorNum <= intList.getLastVectorNumber(); ++vectorNum) {
+            }
+        } else {
+            writer.println("  /* lui k0, %hi(.vector_n)");
+            writer.println("   * ori k0, k0, %lo(.vector_n)");
+            writer.println("   * jr k0");
+            writer.println("   * ssnop");
+            writer.println("   */");
 
             for(int vectorNum = 0; vectorNum <= intList.getLastVectorNumber(); ++vectorNum) {
-                writer.println("    . = ALIGN(4) ;");
-                writer.println("    KEEP(*(.vector_" + vectorNum + "))");
-                writer.println("     __vector_offset_" + vectorNum + " = (SIZEOF(.vector_" + vectorNum + ") > 0 ? (. - _ebase_address - SIZEOF(.vector_" + vectorNum + ")) : __vector_offset_default);");
+                writer.println("  .vector_dispatch_" + vectorNum + " _ebase_address + 0x200 + ((_vector_spacing << 5) * " + vectorNum + ") :");
+                writer.println("  {");
+                writer.println("    __vector_target_" + vectorNum + " = (SIZEOF(.vector_ " + vectorNum + ") > 0 ? ADDR(.vector_ " + vectorNum + ") : ADDR(.vector_default))");
+                writer.println("     LONG(0x3C1A | ((__vector_target_ " + vectorNum + " >> 16) & 0xFFFF))");
+                writer.println("     LONG(0x375A | ((__vector_target_ " + vectorNum + ") & 0xFFFF))");
+                writer.println("     LONG(0x03400008)");
+                writer.println("     LONG(0x00000040)");
+                writer.println("  } > exception_mem");
             }
-
-            writer.println("    /* Default interrupt handler */");
-            writer.println("    . = ALIGN(4) ;");
-            writer.println("    __vector_offset_default = . - _ebase_address;");
-            writer.println("    KEEP(*(.vector_default))");
-            writer.println();
-
-            writer.println("    /*  The offset registers hold a 17-bit offset, allowing a max value less");
-            writer.println("     *  than 256*1024, so check for that here.  If you see this error, then ");
-            writer.println("     *  one of your vectors is too large.");
-            writer.println("     */");
-            writer.println("    ASSERT(__vector_offset_default < 256K, \"Error: Vector offset too large.\")");
-
-            writer.println("  } > " + outputRegion);
-            writer.println();
-
-        } else {
-            
         }
+
+        writer.println();
     }
 }
