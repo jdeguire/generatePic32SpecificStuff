@@ -60,7 +60,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         populateMemoryRegions(target, intList, dcrList);
 
         outputLicenseHeader(writer);
-// TODO:  Output preamble stuff here
+        outputPreamble(writer, intList.getDefaultBaseAddress());
         outputMemoryRegionCommand(writer);
         outputConfigRegSectionsCommand(writer, dcrList);
         
@@ -222,6 +222,48 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
             addMemoryRegion(dcrRegion);
         }
     }
+
+    /* Output symbol definitions and commands that are set at the top of the linker script before
+     * any other regions or sections are defined.
+     */
+    private void outputPreamble(PrintWriter writer, long defaultEBaseAddress) {
+        if(0 == defaultEBaseAddress)
+            defaultEBaseAddress = 0x9D000000;
+
+        writer.println("OUTPUT_FORMAT(\"elf32-tradlittlemips\")");
+        writer.println("ENTRY(_reset)");
+        writer.println();
+
+        writer.println("/*");
+        writer.println(" * Provide for a minimum stack and heap size; these can be overridden");
+        writer.println(" * using the linker\'s --defsym option on the command line.");
+        writer.println(" */");
+        writer.println("EXTERN (_min_stack_size _min_heap_size)");
+        writer.println("PROVIDE(_min_stack_size = 0x400);");
+        writer.println();
+
+        writer.println("/*");
+        writer.println(" * Provide symbols for linker and startup code to set up the interrupt table;");
+        writer.println(" * these can be overridden using the linker\'s --defsym option on the command line.");
+        writer.println(" */");
+        writer.println("PROVIDE(_vector_spacing = 0x0001);");
+        writer.println(String.format("PROVIDE(_ebase_address = 0x%08X);", defaultEBaseAddress));
+        writer.println();
+
+        writer.println("/*");
+        writer.println(" * These memory address symbols are used below for locating their appropriate;");
+        writer.println(" * sections.  The TLB Refill and Cache Error address apply only to devices with");
+        writer.println(" * an L1 cache.");
+        writer.println(" */");
+        writer.println("_RESET_ADDR                    = 0xBFC00000;");
+        writer.println("_BEV_EXCPT_ADDR                = 0xBFC00380;");
+        writer.println("_DBG_EXCPT_ADDR                = 0xBFC00480;");
+        writer.println("_SIMPLE_TLB_REFILL_EXCPT_ADDR  = _ebase_address + 0;");
+        writer.println("_CACHE_ERR_EXCPT_ADDR          = _ebase_address + 0x100;");
+        writer.println("_GEN_EXCPT_ADDR                = _ebase_address + 0x180;");
+        writer.println();
+        writer.println();
+    }
     
     /* Add a SECTIONS {...} command containing just sections for the device config registers.
      */
@@ -351,12 +393,22 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
      * handlers.
      *
      * This differs from XC32, in which the user can use a GCC attribute to choose whether to use a
-     * trampoline or to inline the handler (like on variable offset devices.  Here, the user will
+     * trampoline or to inline the handler (like on variable offset devices).  Here, the user will
      * not get a choice.
      */
     private void outputFixedOffsetVectors(PrintWriter writer, InterruptList intList, TargetDevice target) {
         if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa()) {
+            writer.println("  /* j (.vector_n >> 1)");
+            writer.println("   * ssnop");
+            writer.println("   */");
+
             for(int vectorNum = 0; vectorNum <= intList.getLastVectorNumber(); ++vectorNum) {
+                writer.println("  .vector_dispatch_" + vectorNum + " _ebase_address + 0x200 + ((_vector_spacing << 3) * " + vectorNum + ") :");
+                writer.println("  {");
+                writer.println("    __vector_target_" + vectorNum + " = (SIZEOF(.vector_ " + vectorNum + ") > 0 ? ADDR(.vector_ " + vectorNum + ") : ADDR(.vector_default))");
+                writer.println("     LONG(0xD4000000 | ((__vector_target_ " + vectorNum + " >> 1) & 0x03FFFFFF))");
+                writer.println("     LONG(0x00000800)");
+                writer.println("  } > exception_mem");
             }
         } else {
             writer.println("  /* lui k0, %hi(.vector_n)");
@@ -369,8 +421,8 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
                 writer.println("  .vector_dispatch_" + vectorNum + " _ebase_address + 0x200 + ((_vector_spacing << 5) * " + vectorNum + ") :");
                 writer.println("  {");
                 writer.println("    __vector_target_" + vectorNum + " = (SIZEOF(.vector_ " + vectorNum + ") > 0 ? ADDR(.vector_ " + vectorNum + ") : ADDR(.vector_default))");
-                writer.println("     LONG(0x3C1A | ((__vector_target_ " + vectorNum + " >> 16) & 0xFFFF))");
-                writer.println("     LONG(0x375A | ((__vector_target_ " + vectorNum + ") & 0xFFFF))");
+                writer.println("     LONG(0x3C1A0000 | ((__vector_target_ " + vectorNum + " >> 16) & 0xFFFF))");
+                writer.println("     LONG(0x375A0000 | ((__vector_target_ " + vectorNum + ") & 0xFFFF))");
                 writer.println("     LONG(0x03400008)");
                 writer.println("     LONG(0x00000040)");
                 writer.println("  } > exception_mem");
