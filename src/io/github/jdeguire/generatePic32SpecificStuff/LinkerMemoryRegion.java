@@ -27,7 +27,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.github.jdeguire.generatePic32SpecificStuff;
+package io.github.jdeguire.generatePic32SpecificStuff;
 
 import org.w3c.dom.Node;
 

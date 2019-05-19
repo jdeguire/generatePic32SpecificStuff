@@ -27,7 +27,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.github.jdeguire.generatePic32SpecificStuff;
+package io.github.jdeguire.generatePic32SpecificStuff;
 
 import com.microchip.mplab.crownkingx.xPIC;
 import java.util.ArrayList;
@@ -129,7 +129,7 @@ public class InterruptList {
 
         Node varOffsetsNode = intListAttrs.getNamedItem("edc:hasvariableoffsets");
         if(null != varOffsetsNode) {
-            usesVariableOffsets_ = (boolean)Boolean.parseBoolean(varOffsetsNode.getNodeValue());
+            usesVariableOffsets_ = Boolean.parseBoolean(varOffsetsNode.getNodeValue());
         }
 
         // Now look at the child nodes, which will be the interrupt vectors ("edc:Interrupt") and 

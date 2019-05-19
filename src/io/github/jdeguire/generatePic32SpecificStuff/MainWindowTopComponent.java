@@ -27,7 +27,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.github.jdeguire.generatePic32SpecificStuff;
+package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.util.List;
 import javax.swing.SwingWorker;
@@ -45,7 +45,7 @@ import javax.swing.JFileChooser;
  * Top component which displays something.
  */
 @ConvertAsProperties(
-        dtd = "-//com.github.jdeguire.generatePic32SpecificStuff//MainWindow//EN",
+        dtd = "-//io.github.jdeguire.generatePic32SpecificStuff//MainWindow//EN",
         autostore = false
 )
 @TopComponent.Description(
@@ -54,7 +54,7 @@ import javax.swing.JFileChooser;
         persistenceType = TopComponent.PERSISTENCE_ALWAYS
 )
 @TopComponent.Registration(mode = "rightSlidingSide", openAtStartup = false)
-@ActionID(category = "Window", id = "com.github.jdeguire.generatePic32SpecificStuff.MainWindowTopComponent")
+@ActionID(category = "Window", id = "io.github.jdeguire.generatePic32SpecificStuff.MainWindowTopComponent")
 @ActionReference(path = "Menu/Tools/Embedded" /*, position = 333 */)
 @TopComponent.OpenActionRegistration(
         displayName = "#CTL_MainWindowAction",

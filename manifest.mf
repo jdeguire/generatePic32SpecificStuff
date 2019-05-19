@@ -1,8 +1,8 @@
 Manifest-Version: 1.0
 AutoUpdate-Show-In-Client: true
-OpenIDE-Module: com.github.jdeguire.generatePic32SpecificStuff
-OpenIDE-Module-Layer: com/github/jdeguire/generatePic32SpecificStuff/layer.xml
-OpenIDE-Module-Localizing-Bundle: com/github/jdeguire/generatePic32SpecificStuff/Bundle.properties
+OpenIDE-Module: io.github.jdeguire.generatePic32SpecificStuff
+OpenIDE-Module-Layer: io/github/jdeguire/generatePic32SpecificStuff/layer.xml
+OpenIDE-Module-Localizing-Bundle: io/github/jdeguire/generatePic32SpecificStuff/Bundle.properties
 OpenIDE-Module-Requires: org.openide.windows.WindowManager
 OpenIDE-Module-Specification-Version: 0.10
 

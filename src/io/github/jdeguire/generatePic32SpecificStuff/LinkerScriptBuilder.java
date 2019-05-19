@@ -27,7 +27,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.github.jdeguire.generatePic32SpecificStuff;
+package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.io.File;
 import java.io.PrintWriter;
@@ -64,15 +64,7 @@ public abstract class LinkerScriptBuilder {
      */
     protected PrintWriter createNewLinkerFile(String subdirName, String filename)
                             throws java.io.FileNotFoundException {
-        File temp = new File(basepath_ + subdirName + File.separator + filename + ".ld");
-        temp.getParentFile().mkdirs();
-        
-        return new PrintWriter(temp) {
-                        @Override
-                        public void println() {
-                            write('\n');
-                        }
-                    };
+        return Utils.CreateUnixPrintWriter(basepath_ + subdirName + File.separator + filename + ".ld");
     }
 
 

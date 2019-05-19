@@ -27,7 +27,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.github.jdeguire.generatePic32SpecificStuff;
+package io.github.jdeguire.generatePic32SpecificStuff;
 
 import com.microchip.crownking.edc.DCR;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
@@ -109,10 +109,9 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         } else if(lmr.getLength() <= (20 * 1024)) {
             // PIC32MK
             // The gap just before 0x9FC004B0 is present in the XC32 scripts, so we'll
-            // keep it here for now.  The same goes for the two empty kseg0_boot_mem regions.
+            // keep it here for now.  The same goes for the empty kseg0_boot_mem region.
             addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC004B0, 0x9FC004B0));
             addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0x9FC20490, 0x9FC23FB0));
-            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC20490, 0x9FC20490));
             addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
             addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem_4B0", 0, 0xBFC004B0, 0xBFC03FB0));
         } else {

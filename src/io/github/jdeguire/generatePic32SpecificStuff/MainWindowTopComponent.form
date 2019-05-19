@@ -58,7 +58,7 @@
     <Component class="javax.swing.JButton" name="StartButton">
       <Properties>
         <Property name="text" type="java.lang.String" editor="org.netbeans.modules.i18n.form.FormI18nStringEditor">
-          <ResourceString bundle="com/github/jdeguire/generatePic32SpecificStuff/Bundle.properties" key="MainWindowTopComponent.StartButton.text" replaceFormat="org.openide.util.NbBundle.getMessage({sourceFileName}.class, &quot;{key}&quot;)"/>
+          <ResourceString bundle="io/github/jdeguire/generatePic32SpecificStuff/Bundle.properties" key="MainWindowTopComponent.StartButton.text" replaceFormat="org.openide.util.NbBundle.getMessage({sourceFileName}.class, &quot;{key}&quot;)"/>
         </Property>
       </Properties>
       <Events>
