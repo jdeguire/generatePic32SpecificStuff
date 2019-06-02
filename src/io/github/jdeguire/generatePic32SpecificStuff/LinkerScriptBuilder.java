@@ -8,8 +8,8 @@
  *   list of conditions and the following disclaimer.
  *
  * * Redistributions in binary form must reproduce the above copyright notice,
- *  this list of conditions and the following disclaimer in the documentation
- *  and/or other materials provided with the distribution.
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
  * 
  * * Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from
@@ -64,7 +64,7 @@ public abstract class LinkerScriptBuilder {
      */
     protected PrintWriter createNewLinkerFile(String subdirName, String filename)
                             throws java.io.FileNotFoundException {
-        return Utils.CreateUnixPrintWriter(basepath_ + subdirName + File.separator + filename + ".ld");
+        return Utils.createUnixPrintWriter(basepath_ + subdirName + File.separator + filename + ".ld");
     }
 
 
@@ -112,7 +112,12 @@ public abstract class LinkerScriptBuilder {
     /* Add the license header to the linker file opened by the given writer.
      */
     protected void outputLicenseHeader(PrintWriter writer) {
-        writer.println("/* License header to be added later. */");
-        writer.println("");
+        String header = (Utils.generatedByString() + "\n\n" +
+                         Utils.generatorLicenseString() + "\n\n" +
+                         "This file is generated based on sources files included with Microchip " +
+                         "Technology's XC32 toolchain.  Microchip's license is reproduced below:\n\n" +
+                         Utils.microchipLicenseString());
+
+        Utils.writeMultilineCComment(writer, 0, header);
     }
 }

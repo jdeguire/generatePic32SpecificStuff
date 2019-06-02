@@ -8,8 +8,8 @@
  *   list of conditions and the following disclaimer.
  *
  * * Redistributions in binary form must reproduce the above copyright notice,
- *  this list of conditions and the following disclaimer in the documentation
- *  and/or other materials provided with the distribution.
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
  * 
  * * Neither the name of the copyright holder nor the names of its
  *   contributors may be used to endorse or promote products derived from
@@ -30,12 +30,8 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import com.microchip.crownking.edc.DCR;
-import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
-import com.microchip.mplab.crownkingx.xMemoryPartition;
 import java.io.PrintWriter;
 import java.util.List;
-import org.w3c.dom.NamedNodeMap;
-import org.w3c.dom.Node;
 
 /**
  * A subclass of the LinkerScriptBuilder that handles MIPS devices.
@@ -71,8 +67,14 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         if(intList.usesVariableOffsets())
             outputVariableOffsetVectors(writer, intList);
 
-// TODO:  Add other sections here
-
+        outputCodeSections(writer);
+        outputInitializationSections(writer);
+        outputCtorSections(writer);
+        outputReadOnlySections(writer);
+        outputDebugDataSection(writer, target.hasFpu(), target.supportsDspR2Ase());
+        outputDataSections(writer);
+        outputRuntimeMemorySections(writer);
+        outputElfDebugSections(writer);
 
         // NOTE:  We output this after other code sections because we need the linker to have 
         //        allocated the interrupt handlers before trying to allocate the table.  The table
@@ -125,7 +127,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         }
    }
     
-    /* Walk through the list of all target regions and add the ones that the linker scripts needs,
+    /* Walk through the list of all target regions and add the ones that the linker script needs,
      * possibly modifying them along the way.  This will also add regions for the device config
      * registers.
      */
@@ -233,27 +235,25 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         writer.println("ENTRY(_reset)");
         writer.println();
 
-        writer.println("/*");
-        writer.println(" * Provide for a minimum stack and heap size; these can be overridden");
-        writer.println(" * using the linker\'s --defsym option on the command line.");
-        writer.println(" */");
+        Utils.writeMultilineCComment(writer, 0, 
+                ("Provide for a minimum stack and heap size; these can be overridden using the " +
+                 "linker\'s --defsym option on the command line."));
         writer.println("EXTERN (_min_stack_size _min_heap_size)");
         writer.println("PROVIDE(_min_stack_size = 0x400);");
+        writer.println("PROVIDE(_min_heap_size = 0);");
         writer.println();
 
-        writer.println("/*");
-        writer.println(" * Provide symbols for linker and startup code to set up the interrupt table;");
-        writer.println(" * these can be overridden using the linker\'s --defsym option on the command line.");
-        writer.println(" */");
+        Utils.writeMultilineCComment(writer, 0, 
+                ("Provide symbols for linker and startup code to set up the interrupt table; " +
+                 "these can be overridden using the linker\'s --defsym option on the command line."));
         writer.println("PROVIDE(_vector_spacing = 0x0001);");
         writer.println(String.format("PROVIDE(_ebase_address = 0x%08X);", defaultEBaseAddress));
         writer.println();
 
-        writer.println("/*");
-        writer.println(" * These memory address symbols are used below for locating their appropriate;");
-        writer.println(" * sections.  The TLB Refill and Cache Error address apply only to devices with");
-        writer.println(" * an L1 cache.");
-        writer.println(" */");
+        Utils.writeMultilineCComment(writer, 0, 
+                ("These memory address symbols are used below for locating their appropriate " +
+                 "sections.  The TLB Refill and Cache Error address apply only to devices with " +
+                 "an L1 cache."));
         writer.println("_RESET_ADDR                    = 0xBFC00000;");
         writer.println("_BEV_EXCPT_ADDR                = 0xBFC00380;");
         writer.println("_DBG_EXCPT_ADDR                = 0xBFC00480;");
@@ -349,6 +349,392 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         writer.println();
     }
 
+    private void outputCodeSections(PrintWriter writer) {
+        writer.println("  .text :");
+        writer.println("  {");
+        writer.println("    *(.text)");
+        writer.println("    *(.text.*)");
+        writer.println("    *(.stub .gnu.linkonce.t.*)");
+        writer.println("    KEEP (*(.text.*personality*))");
+        writer.println("    *(.mips16.fn.*)");
+        writer.println("    *(.mips16.call.*)");
+        writer.println("    *(.gnu.warning)");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+    }
+
+    private void outputInitializationSections(PrintWriter writer) {
+        writer.println("  /* Global-namespace object initialization */");
+        writer.println("  .init   :");
+        writer.println("  {");
+        writer.println("    KEEP (*crti.o(.init))");
+        writer.println("    KEEP (*crtbegin.o(.init))");
+        writer.println("    KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o *crtn.o ).init))");
+        writer.println("    KEEP (*crtend.o(.init))");
+        writer.println("    KEEP (*crtn.o(.init))");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+
+        writer.println("  .fini   :");
+        writer.println("  {");
+        writer.println("    KEEP (*(.fini))");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+
+        writer.println("  .preinit_array   :");
+        writer.println("  {");
+        writer.println("    PROVIDE_HIDDEN (__preinit_array_start = .);");
+        writer.println("writer.println(\"    KEEP (*(.preinit_array))");
+        writer.println("    PROVIDE_HIDDEN (__preinit_array_end = .);");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+
+        writer.println("  .init_array   :");
+        writer.println("  {");
+        writer.println("    PROVIDE_HIDDEN (__init_array_start = .);");
+        writer.println("    KEEP (*(SORT(.init_array.*)))");
+        writer.println("    KEEP (*(.init_array))");
+        writer.println("    PROVIDE_HIDDEN (__init_array_end = .);");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+
+        writer.println("  .fini_array   :");
+        writer.println("  {");
+        writer.println("    PROVIDE_HIDDEN (__fini_array_start = .);");
+        writer.println("    KEEP (*(SORT(.fini_array.*)))");
+        writer.println("    KEEP (*(.fini_array))");
+        writer.println("    PROVIDE_HIDDEN (__fini_array_end = .);");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+    }
+
+    private void outputCtorSections(PrintWriter writer) {
+        writer.println("  .ctors   :");
+        writer.println("  {");
+        writer.println("    /* GCC uses crtbegin.o to find the start of");
+        writer.println("       the constructors, so we make sure it is");
+        writer.println("       first.  Because this is a wildcard, it");
+        writer.println("       doesn't matter if the user does not");
+        writer.println("       actually link against crtbegin.o; the");
+        writer.println("       linker won't look for a file to match a");
+        writer.println("       wildcard.  The wildcard also means that it");
+        writer.println("       doesn't matter which directory crtbegin.o");
+        writer.println("       is in.  */");
+        writer.println("    KEEP (*crtbegin.o(.ctors))");
+        writer.println("    KEEP (*crtbegin?.o(.ctors))");
+        writer.println("    /* We don't want to include the .ctor section from");
+        writer.println("       the crtend.o file until after the sorted ctors.");
+        writer.println("       The .ctor section from the crtend file contains the");
+        writer.println("       end of ctors marker and it must be last */");
+        writer.println("    KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o ) .ctors))");
+        writer.println("    KEEP (*(SORT(.ctors.*)))");
+        writer.println("    KEEP (*(.ctors))");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+
+        writer.println("  .dtors   :");
+        writer.println("  {");
+        writer.println("    KEEP (*crtbegin.o(.dtors))");
+        writer.println("    KEEP (*crtbegin?.o(.dtors))");
+        writer.println("    KEEP (*(EXCLUDE_FILE (*crtend.o *crtend?.o ) .dtors))");
+        writer.println("    KEEP (*(SORT(.dtors.*)))");
+        writer.println("    KEEP (*(.dtors))");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+    }
+
+    private void outputReadOnlySections(PrintWriter writer) {
+        writer.println("  .rodata   :");
+        writer.println("  {");
+        writer.println("    *( .gnu.linkonce.r.*)");
+        writer.println("    *(.rodata1)");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+
+        Utils.writeMultilineCComment(writer, 2, 
+                ("Small initialized constant global and static data can be placed in the .sdata2 " +
+                 "section.  This is different from .sdata, which contains small initialized " + 
+                 "non-constant global and static data."));
+        writer.println("  .sdata2 ALIGN(4) :");
+        writer.println("  {");
+        writer.println("    *(.sdata2 .sdata2.* .gnu.linkonce.s2.*)");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+
+        Utils.writeMultilineCComment(writer, 2, 
+                ("Uninitialized constant global and static data (i.e., variables which will always " +
+                 "be zero).  Again, this is different from .sbss, which contains small " + 
+                 "non-initialized, non-constant global and static data."));
+        writer.println("  .sbss2 ALIGN(4) :");
+        writer.println("  {");
+        writer.println("    *(.sbss2 .sbss2.* .gnu.linkonce.sb2.*)");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >kseg0_program_mem");
+        writer.println();
+
+        writer.println("  .eh_frame_hdr   :");
+        writer.println("  {");
+        writer.println("    *(.eh_frame_hdr)");
+        writer.println("  } >kseg0_program_mem");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println();
+
+        writer.println("  .eh_frame   : ONLY_IF_RO");
+        writer.println("  {");
+        writer.println("    KEEP (*(.eh_frame))");
+        writer.println("  } >kseg0_program_mem");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println();
+
+        writer.println("  .gcc_except_table   : ONLY_IF_RO");
+        writer.println("  {");
+        writer.println("    *(.gcc_except_table .gcc_except_table.*)");
+        writer.println("  } >kseg0_program_mem");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println();
+    }
+
+    private void outputDebugDataSection(PrintWriter writer, boolean hasFpu, boolean hasDspr2) {
+        writer.println("  .dbg_data (NOLOAD) :");
+        writer.println("  {");
+        writer.println("    . += (DEFINED (_DEBUGGER) ? 0x200 : 0x0);");
+
+        if(hasDspr2) {
+            writer.println("    /* Additional data memory required for DSPr2 registers */");
+            writer.println("    . += (DEFINED (_DEBUGGER) ? 0x80 : 0x0);");
+        }
+        if(hasFpu) {
+            writer.println("    /* Additional data memory required for FPU64 registers */");
+            writer.println("    . += (DEFINED (_DEBUGGER) ? 0x100 : 0x0);");
+        }
+
+        if(null != findRegionByName("kseg0_data_mem"))
+            writer.println("  } >kseg0_data_mem");
+        else
+            writer.println("  } >kseg1_data_mem");
+        writer.println();
+    }
+    
+    private void outputDataSections(PrintWriter writer) {
+        String dataRegion;
+
+        if(null != findRegionByName("kseg0_data_mem"))
+            dataRegion = "kseg0_data_mem";
+        else
+            dataRegion = "kseg1_data_mem";
+
+        writer.println("  .jcr   :");
+        writer.println("  {");
+        writer.println("    KEEP (*(.jcr))");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >" + dataRegion);
+        writer.println();
+
+        writer.println("  .eh_frame    : ONLY_IF_RW");
+        writer.println("  {");
+        writer.println("    KEEP (*(.eh_frame))");
+        writer.println("  } >" + dataRegion);
+        writer.println("    . = ALIGN(4) ;");
+        writer.println();
+
+        writer.println("  .gcc_except_table    : ONLY_IF_RW");
+        writer.println("  {");
+        writer.println("    *(.gcc_except_table .gcc_except_table.*)");
+        writer.println("  } >" + dataRegion);
+        writer.println("    . = ALIGN(4) ;");
+        writer.println();
+
+        writer.println("  .persist (NOLOAD) :");
+        writer.println("  {");
+        writer.println("    _persist_begin = .;");
+        writer.println("    *(.persist .persist.*)");
+        writer.println("    *(.pbss .pbss.*)");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("    _persist_end = .;");
+        writer.println("  } >" + dataRegion);
+        writer.println();
+
+        writer.println("  .data   :");
+        writer.println("  {");
+        writer.println("    *(.data)");
+        writer.println("    *(.data.*)");
+        writer.println("    *( .gnu.linkonce.d.*)");
+        writer.println("    SORT(CONSTRUCTORS)");
+        writer.println("    *(.data1)");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >" + dataRegion);
+        writer.println();
+
+        writer.println("  . = .;");
+        writer.println("  _gp = ALIGN(16) + 0x7ff0;");
+        writer.println();
+
+        writer.println("  .got ALIGN(4) :");
+        writer.println("  {");
+        writer.println("    *(.got.plt) *(.got)");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >" + dataRegion);
+        writer.println();
+
+        Utils.writeMultilineCComment(writer, 2, 
+                ("We want the small data sections together, so single-instruction offsets can " +
+                 "access them all, and initialized data all before uninitialized, so we can " + 
+                 "shorten the on-disk segment size."));
+        writer.println("  .sdata ALIGN(4) :");
+        writer.println("  {");
+        writer.println("    _sdata_begin = . ;");
+        writer.println("    *(.sdata .sdata.* .gnu.linkonce.s.*)");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("    _sdata_end = . ;");
+        writer.println("  } >" + dataRegion);
+        writer.println();
+
+        writer.println("  .lit8           :");
+        writer.println("  {");
+        writer.println("    *(.lit8)");
+        writer.println("  } >" + dataRegion);
+        writer.println("  .lit4           :");
+        writer.println("  {");
+        writer.println("    *(.lit4)");
+        writer.println("  } >" + dataRegion);
+        writer.println();
+
+        writer.println("  . = ALIGN (4) ;");
+        writer.println("  _data_end = . ;");
+        writer.println("  _bss_begin = . ;");
+        writer.println();
+
+        writer.println("  .sbss ALIGN(4) :");
+        writer.println("  {");
+        writer.println("    _sbss_begin = . ;");
+        writer.println("    *(.dynsbss)");
+        writer.println("    *(.sbss .sbss.* .gnu.linkonce.sb.*)");
+        writer.println("    *(.scommon)");
+        writer.println("    _sbss_end = . ;");
+        writer.println("    . = ALIGN(4) ;");
+        writer.println("  } >" + dataRegion);
+        writer.println();
+
+        writer.println("  .bss     :");
+        writer.println("  {");
+        writer.println("    *(.bss)");
+        writer.println("    *(.bss.*)");
+        writer.println("    *(.dynbss)");
+        writer.println("    *(.gnu.linkonce.b.*)");
+        writer.println("    *(COMMON)");
+        writer.println("   /* Align here to ensure that the .bss section occupies space up to");
+        writer.println("      _end.  Align after .bss to ensure correct alignment even if the");
+        writer.println("      .bss section disappears because there are no input sections. */");
+        writer.println("   . = ALIGN(. != 0 ? 4 : 1);");
+        writer.println("  } >" + dataRegion);
+        writer.println();
+
+        writer.println("  . = ALIGN(4) ;");
+        writer.println("  _end = . ;");
+        writer.println("  _bss_end = . ;");
+        writer.println();
+    }
+
+    private void outputRuntimeMemorySections(PrintWriter writer) {
+        String dataRegion;
+
+        if(null != findRegionByName("kseg0_data_mem"))
+            dataRegion = "kseg0_data_mem";
+        else
+            dataRegion = "kseg1_data_mem";
+
+        writer.println("  .heap :");
+        writer.println("  {");
+        writer.println("    _heap_start = .");
+        writer.println("    . += _min_heap_size");
+        writer.println("    _heap_end = .");
+        writer.println("  } >" + dataRegion);
+        writer.println();
+
+        writer.println("  . = ALIGN(4) ;");
+        writer.println();
+        
+        Utils.writeMultilineCComment(writer, 2,
+                ("Allocate some space for a stack at the end of memory because the stack grows " +
+                 "downward.  This is just the minimum stack size that will be allowed; the stack " +
+                 "can actually grow larger. Use this symbol to check for overflow."));
+        writer.println("_stack_limit = .");
+        writer.println("  .stack ORIGIN(" + dataRegion + ") + LENGTH(" + dataRegion + ") - _min_stack_size :");
+        writer.println("  {");
+        writer.println("    . += _min_stack_size");
+        writer.println("  } >" + dataRegion);
+                
+        writer.println("  . = ALIGN(4) ;");
+        writer.println("  _stack = . - 4");
+        writer.println("  ASSERT(_stack < ORIGIN(" + dataRegion + ") + LENGTH(" + dataRegion + "), \"Error: Not enough room for stack.\")");
+        writer.println();
+    }
+
+    private void outputElfDebugSections(PrintWriter writer) {
+        writer.println("    /* The .pdr section belongs in the absolute section */");
+        writer.println("    /DISCARD/ : { *(.pdr) }");
+        writer.println("  .gptab.sdata : { *(.gptab.data) *(.gptab.sdata) }");
+        writer.println("  .gptab.sbss : { *(.gptab.bss) *(.gptab.sbss) }");
+        writer.println("  .mdebug.abi32 0 : { KEEP(*(.mdebug.abi32)) }");
+        writer.println("  .mdebug.abiN32 0 : { KEEP(*(.mdebug.abiN32)) }");
+        writer.println("  .mdebug.abi64 0 : { KEEP(*(.mdebug.abi64)) }");
+        writer.println("  .mdebug.abiO64 0 : { KEEP(*(.mdebug.abiO64)) }");
+        writer.println("  .mdebug.eabi32 0 : { KEEP(*(.mdebug.eabi32)) }");
+        writer.println("  .mdebug.eabi64 0 : { KEEP(*(.mdebug.eabi64)) }");
+        writer.println("  .gcc_compiled_long32 : { KEEP(*(.gcc_compiled_long32)) }");
+        writer.println("  .gcc_compiled_long64 : { KEEP(*(.gcc_compiled_long64)) }");
+        writer.println("  /* Stabs debugging sections.  */");
+        writer.println("  .stab          0 : { *(.stab) }");
+        writer.println("  .stabstr       0 : { *(.stabstr) }");
+        writer.println("  .stab.excl     0 : { *(.stab.excl) }");
+        writer.println("  .stab.exclstr  0 : { *(.stab.exclstr) }");
+        writer.println("  .stab.index    0 : { *(.stab.index) }");
+        writer.println("  .stab.indexstr 0 : { *(.stab.indexstr) }");
+        writer.println("  .comment       0 : { *(.comment) }");
+        writer.println("  /* DWARF debug sections used by MPLAB X for source-level debugging. ");
+        writer.println("     Symbols in the DWARF debugging sections are relative to the beginning");
+        writer.println("     of the section so we begin them at 0.  */");
+        writer.println("  /* DWARF 1 */");
+        writer.println("  .debug          0 : { *.elf(.debug) *(.debug) }");
+        writer.println("  .line           0 : { *.elf(.line) *(.line) }");
+        writer.println("  /* GNU DWARF 1 extensions */");
+        writer.println("  .debug_srcinfo  0 : { *.elf(.debug_srcinfo) *(.debug_srcinfo) }");
+        writer.println("  .debug_sfnames  0 : { *.elf(.debug_sfnames) *(.debug_sfnames) }");
+        writer.println("  /* DWARF 1.1 and DWARF 2 */");
+        writer.println("  .debug_aranges  0 : { *.elf(.debug_aranges) *(.debug_aranges) }");
+        writer.println("  .debug_pubnames 0 : { *.elf(.debug_pubnames) *(.debug_pubnames) }");
+        writer.println("  /* DWARF 2 */");
+        writer.println("  .debug_info     0 : { *.elf(.debug_info .gnu.linkonce.wi.*) *(.debug_info .gnu.linkonce.wi.*) }");
+        writer.println("  .debug_abbrev   0 : { *.elf(.debug_abbrev) *(.debug_abbrev) }");
+        writer.println("  .debug_line     0 : { *.elf(.debug_line) *(.debug_line) }");
+        writer.println("  .debug_frame    0 : { *.elf(.debug_frame) *(.debug_frame) }");
+        writer.println("  .debug_str      0 : { *.elf(.debug_str) *(.debug_str) }");
+        writer.println("  .debug_loc      0 : { *.elf(.debug_loc) *(.debug_loc) }");
+        writer.println("  .debug_macinfo  0 : { *.elf(.debug_macinfo) *(.debug_macinfo) }");
+        writer.println("  /* SGI/MIPS DWARF 2 extensions */");
+        writer.println("  .debug_weaknames 0 : { *.elf(.debug_weaknames) *(.debug_weaknames) }");
+        writer.println("  .debug_funcnames 0 : { *.elf(.debug_funcnames) *(.debug_funcnames) }");
+        writer.println("  .debug_typenames 0 : { *.elf(.debug_typenames) *(.debug_typenames) }");
+        writer.println("  .debug_varnames  0 : { *.elf(.debug_varnames) *(.debug_varnames) }");
+        writer.println("  .debug_pubtypes 0 : { *.elf(.debug_pubtypes) *(.debug_pubtypes) }");
+        writer.println("  .debug_ranges   0 : { *.elf(.debug_ranges) *(.debug_ranges) }");
+        writer.println("  /DISCARD/ : { *(.rel.dyn) }");
+        writer.println("  .gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }");
+        writer.println("  /DISCARD/ : { *(.note.GNU-stack) }");
+        writer.println("  /DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.gnu.lto_*) *(.discard) }");
+        writer.println();
+    }
+
     /* Output an interrupt vector section assuming that the device supports variable offset vectors.
      * This will set up the vector table so that the interrupt handler is always inline in the table.
      *
@@ -359,11 +745,11 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
     private void outputVariableOffsetVectors(PrintWriter writer, InterruptList intList) {
         writer.println("  .vectors _ebase_address + 0x200 :");
         writer.println("  {");
-        writer.println("    /*  Symbol __vector_offset_n points to .vector_n if it exists,");
-        writer.println("     *  otherwise it points to the default handler. The startup code");
-        writer.println("     *  uses these value to set up the OFFxxx registers in the ");
-        writer.println("     *  interrupt controller.");
-        writer.println("     */");
+
+        Utils.writeMultilineCComment(writer, 4, 
+                ("Symbol __vector_offset_n points to .vector_n if it exists, otherwise it points " +
+                 "to the default handler. The startup code uses these value to set up the OFFxxx " +
+                 "registers in the interrupt controller."));
 
         for(int vectorNum = 0; vectorNum <= intList.getLastVectorNumber(); ++vectorNum) {
             writer.println("    . = ALIGN(4) ;");
@@ -377,10 +763,10 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         writer.println("    KEEP(*(.vector_default))");
         writer.println();
 
-        writer.println("    /*  The offset registers hold a 17-bit offset, allowing a max value less");
-        writer.println("     *  than 256*1024, so check for that here.  If you see this error, then ");
-        writer.println("     *  one of your vectors is too large.");
-        writer.println("     */");
+        Utils.writeMultilineCComment(writer, 4, 
+                ("The offset registers hold a 17-bit offset, allowing a max value less than " +
+                 "256*1024, so check for that here.  If you see this error, then one of your " +
+                 "vectors is too large."));
         writer.println("    ASSERT(__vector_offset_default < 256K, \"Error: Vector offset too large.\")");
 
         writer.println("  } > kseg0_program_mem");
