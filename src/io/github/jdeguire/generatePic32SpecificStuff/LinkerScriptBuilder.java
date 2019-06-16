@@ -41,7 +41,8 @@ public abstract class LinkerScriptBuilder {
 
     protected ArrayList<LinkerMemoryRegion> regions_;
     protected String basepath_;
-    
+    protected PrintWriter writer_;
+
     /* Create a new builder that can be used to generate scripts for multiple devices, all rooted at
      * the given base path (which should be a directory).  For example, if the base path is "example/",
      * then the linker sripts will be output at "example/devicename/devicename.ld" or something
@@ -58,13 +59,13 @@ public abstract class LinkerScriptBuilder {
     abstract public void generate(TargetDevice target) throws java.io.FileNotFoundException;
 
 
-    /* Create a new linker script file using the given subdirectory and file names, returning a 
-     * PrintWriter that is used to write text to it.  This creates a version of the PrintWrite that 
-     * always uses Unix line separators ('\n').  This will add the ".ld" extension to the filename.
+    /* Create a new linker script file using the given subdirectory and file names, updating the
+     * local PrintWriter with the new one.  This creates a version of the PrintWrite that always
+     * uses Unix line separators ('\n').  This will add the ".ld" extension to the filename.
      */
-    protected PrintWriter createNewLinkerFile(String subdirName, String filename)
+    protected void createNewLinkerFile(String subdirName, String filename)
                             throws java.io.FileNotFoundException {
-        return Utils.createUnixPrintWriter(basepath_ + subdirName + File.separator + filename + ".ld");
+        writer_ = Utils.createUnixPrintWriter(basepath_ + subdirName + File.separator + filename + ".ld");
     }
 
 
@@ -72,6 +73,10 @@ public abstract class LinkerScriptBuilder {
         regions_.add(region);
     }
     
+    protected void clearMemoryRegions() {
+        regions_.clear();
+    }
+
     /* Find the region with the given name and return it or return null if no such region could be 
      * found.
      */
@@ -95,29 +100,29 @@ public abstract class LinkerScriptBuilder {
     /* Sort the memory regions by starting address and add them to the linker script in a MEMORY
      * command.
      */
-    protected void outputMemoryRegionCommand(PrintWriter writer) {
-        writer.println("MEMORY");
-        writer.println("{");
+    protected void outputMemoryRegionCommand() {
+        writer_.println("MEMORY");
+        writer_.println("{");
 
         sortRegionList();
 
         for(LinkerMemoryRegion r : regions_) {
-            writer.println("  " + r.toString());
+            writer_.println("  " + r.toString());
         }
 
-        writer.println("}");
-        writer.println();
+        writer_.println("}");
+        writer_.println();
     }
     
     /* Add the license header to the linker file opened by the given writer.
      */
-    protected void outputLicenseHeader(PrintWriter writer) {
+    protected void outputLicenseHeader() {
         String header = (Utils.generatedByString() + "\n\n" +
                          Utils.generatorLicenseString() + "\n\n" +
                          "This file is generated based on sources files included with Microchip " +
                          "Technology's XC32 toolchain.  Microchip's license is reproduced below:\n\n" +
                          Utils.microchipLicenseString());
 
-        Utils.writeMultilineCComment(writer, 0, header);
+        Utils.writeMultilineCComment(writer_, 0, header);
     }
 }

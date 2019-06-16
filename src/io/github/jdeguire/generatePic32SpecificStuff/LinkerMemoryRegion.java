@@ -47,11 +47,12 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
         FUSE,
         PERIPHERAL
     };
-        
-    public static final int READ_ACCESS = 1;
-    public static final int WRITE_ACCESS = 2;
-    public static final int EXEC_ACCESS = 4;
-    public static final int NOT_EXEC_ACCESS = 8;
+
+    public static final int READ_ACCESS = 0x01;
+    public static final int WRITE_ACCESS = 0x02;
+    public static final int EXEC_ACCESS = 0x04;
+    public static final int ALL_ACCESS = 0x07;
+    public static final int NOT_EXEC_ACCESS = 0x08;
 
     private String name_;
     private int access_;

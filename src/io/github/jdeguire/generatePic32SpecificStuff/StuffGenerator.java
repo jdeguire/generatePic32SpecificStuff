@@ -115,13 +115,16 @@ public class StuffGenerator {
     public void generate(Device device)
             throws Anomaly, SAXException, IOException, ParserConfigurationException {
         TargetDevice target = new TargetDevice(device.getName());
-
+        LinkerScriptBuilder lsb;
+        
         if(target.isArm()) {
-            // TODO...
+            // TODO:  We'll need to check for Cortex-A devices in the future.
+            lsb = new CortexMLinkerScriptBuilder(outputDirBase_ + "/lib/proc");
         } else {
-            LinkerScriptBuilder lsb = new MipsLinkerScriptBuilder(outputDirBase_ + "/lib/proc");
-            lsb.generate(target);
-        }            
+            lsb = new MipsLinkerScriptBuilder(outputDirBase_ + "/lib/proc");
+        }
+
+        lsb.generate(target);
     }
 
     /**
@@ -254,7 +257,7 @@ public class StuffGenerator {
 
         ArrayList<String> spaces = new ArrayList<>();
         Pair<Long, Long> temp;
-        
+/*        
         temp = mainPartition.getTestRange();
         if(temp != null) {
             spaces.add("Test Region: " + Long.toHexString(temp.first)
@@ -276,7 +279,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getICSPWriteInhibitRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-
+*/
         temp = mainPartition.getBootConfigRange();
         if(temp != null) {
             spaces.add("Boot Cfg Region: " + Long.toHexString(temp.first)
@@ -284,14 +287,14 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getBootConfigRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-
+/*
         temp = mainPartition.getBootRAMRange();
         if(temp != null) {
             spaces.add("Boot RAM Region: " + Long.toHexString(temp.first)
                         + " -> " + Long.toHexString(temp.second));
             spaces.add(System.lineSeparator());
         }
-
+*/
         temp = mainPartition.getCodeRange();
         if(temp != null) {
             spaces.add("Code Region: " + Long.toHexString(temp.first)
@@ -299,7 +302,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getCodeRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-
+/*
         temp = mainPartition.getDCIRange();
         if(temp != null) {
             spaces.add("DCI Region: " + Long.toHexString(temp.first)
@@ -315,7 +318,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getDCRRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-        
+*/        
         temp = mainPartition.getDDRRange();
         if(temp != null) {
             spaces.add("DDR Region: " + Long.toHexString(temp.first)
@@ -323,7 +326,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getDDRRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-
+/*
         temp = mainPartition.getDIARange();
         if(temp != null) {
             spaces.add("DIA Region: " + Long.toHexString(temp.first)
@@ -353,7 +356,7 @@ public class StuffGenerator {
                         + " -> " + Long.toHexString(temp.second));
             spaces.add(System.lineSeparator());
         }
-
+*/
         temp = mainPartition.getEBIRange();
         if(temp != null) {
             spaces.add("EBI Region: " + Long.toHexString(temp.first)
@@ -361,7 +364,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getEBIRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-
+/*
         temp = mainPartition.getExternalCodeRange();
         if(temp != null) {
             spaces.add("External Code Region: " + Long.toHexString(temp.first)
@@ -384,7 +387,7 @@ public class StuffGenerator {
                         + " -> " + Long.toHexString(temp.second));
             spaces.add(System.lineSeparator());
         }
-
+*/
         temp = mainPartition.getGPRRange();
         if(temp != null) { 
             spaces.add("GPR Region: " + Long.toHexString(temp.first)
@@ -392,7 +395,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getGPRRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-
+/*
         temp = mainPartition.getInstRange();
         if(temp != null) {
             spaces.add("Inst Region: " + Long.toHexString(temp.first)
@@ -435,7 +438,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getSPIFlashRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-
+*/
         temp = mainPartition.getSQIRange();
         if(temp != null ) {
             spaces.add("SQI Region: " + Long.toHexString(temp.first)
