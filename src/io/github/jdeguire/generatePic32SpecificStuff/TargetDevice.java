@@ -217,6 +217,15 @@ public class TargetDevice {
 			return "arm-none-eabi";
     }
 
+    /* Get the CPU name to be used with Clang's "-mtune=" option, such as "cortex-m7" or "mips32r2".
+     */
+    public String getCpuName() {
+        if(isMips32())
+            return getArchNameForCompiler();
+        else
+            return pic_.getArchitecture().toLowerCase();
+    }
+    
     /* Return True if this is a MIPS32 device.
      */
     public boolean isMips32() {

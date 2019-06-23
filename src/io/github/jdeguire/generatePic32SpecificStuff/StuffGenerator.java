@@ -38,11 +38,8 @@ import java.util.ArrayList;
 import com.microchip.crownking.mplabinfo.DeviceSupport;
 import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
 import com.microchip.crownking.mplabinfo.DeviceSupportException;
-import com.microchip.crownking.mplabinfo.FamilyDefinitions;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
-import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
 import com.microchip.mplab.crownkingx.xMemoryPartition;
-import com.microchip.mplab.crownkingx.xPICFactory;
 import com.microchip.mplab.crownkingx.xPIC;
 import java.io.IOException;
 import javax.xml.parsers.ParserConfigurationException;
@@ -116,12 +113,16 @@ public class StuffGenerator {
             throws Anomaly, SAXException, IOException, ParserConfigurationException {
         TargetDevice target = new TargetDevice(device.getName());
         LinkerScriptBuilder lsb;
-        
+
         if(target.isArm()) {
-            // TODO:  We'll need to check for Cortex-A devices in the future.
-            lsb = new CortexMLinkerScriptBuilder(outputDirBase_ + "/lib/proc");
+            // TODO:  We'll need to target Cortex-A devices in the future.
+            if(target.supportsArmIsa()) {
+                lsb = new CortexMLinkerScriptBuilder(outputDirBase_ + "/cortex-a/lib/proc");
+            } else {
+                lsb = new CortexMLinkerScriptBuilder(outputDirBase_ + "/cortex-m/lib/proc");                
+            }
         } else {
-            lsb = new MipsLinkerScriptBuilder(outputDirBase_ + "/lib/proc");
+            lsb = new MipsLinkerScriptBuilder(outputDirBase_ + "/mips32/lib/proc");
         }
 
         lsb.generate(target);
@@ -572,14 +573,15 @@ public class StuffGenerator {
         return output;
     }
 
-    public List<String> getAtdfFamily(Device device)
+    public List<String> getAtdfInfo(Device device)
             throws Anomaly, SAXException, IOException, ParserConfigurationException {
         TargetDevice target = new TargetDevice(device.getName());
 
         ArrayList<String> output = new ArrayList<>();
         output.add(target.getPic().getATDFFamily());
-        output.add(target.getPic().getArchitecture());
-
+        output.add(target.getCpuName());
+        output.add(System.getProperty("packslib.packsfolder"));
+        
         return output;
     }
 }

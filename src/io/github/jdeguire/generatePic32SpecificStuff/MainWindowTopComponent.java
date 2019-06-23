@@ -70,7 +70,6 @@ public final class MainWindowTopComponent extends TopComponent {
 
     StuffGeneratorWorker worker = null;
     JFileChooser filechooser;
-    String outputpath;
     boolean working = false;
     
     public MainWindowTopComponent() {
@@ -137,10 +136,10 @@ public final class MainWindowTopComponent extends TopComponent {
             if(filechooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
                 working = true;
 
-                outputpath = filechooser.getSelectedFile().toString();
+                String outputpath = filechooser.getSelectedFile().toString();
                 OutputLog.setText("Outputting to " + outputpath);
 
-                worker = new StuffGeneratorWorker();            
+                worker = new StuffGeneratorWorker(outputpath);            
                 worker.execute();
             }
         }
@@ -185,13 +184,20 @@ public final class MainWindowTopComponent extends TopComponent {
      */
     private class StuffGeneratorWorker extends SwingWorker<Void, String> {
 
+        private final String outputpath;
+
+        public StuffGeneratorWorker(String outputpath) {
+            super();
+            this.outputpath = outputpath;
+        }
+
         /* This runs in a background worker thread, so outer class members and the UI should not be
          * updated here.  The return value will be made available to other threads via the get()
          * method when this returns or interim results can be output using the publish() method.
          */
         @Override
         public Void doInBackground() {
-            StuffGenerator gen = new StuffGenerator("");
+            StuffGenerator gen = new StuffGenerator(outputpath);
 
             try {
                 List<Device> deviceList = gen.getDeviceList();
@@ -214,9 +220,9 @@ public final class MainWindowTopComponent extends TopComponent {
                        "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
 //                        List<String> nodeNames = gen.makeNodeMap(device);
 //                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
-                        List<String> nodeNames = gen.getMemorySpaces(device);
+//                        List<String> nodeNames = gen.getMemorySpaces(device);
 //                        List<String> nodeNames = gen.getConfigRegAddresses(device);
-//                        List<String> nodeNames = gen.getAtdfFamily(device);
+                        List<String> nodeNames = gen.getAtdfInfo(device);
 
 //                        gen.generate(device);
                         publish("----------" + System.lineSeparator() + device.getName());

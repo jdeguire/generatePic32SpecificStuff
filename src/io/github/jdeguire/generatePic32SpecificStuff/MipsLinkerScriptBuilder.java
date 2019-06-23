@@ -47,11 +47,10 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
 
     @Override
     public void generate(TargetDevice target) throws java.io.FileNotFoundException {
-        String basename = target.getDeviceName().substring(3);
         InterruptList intList = new InterruptList(target.getPic());
         List<DCR> dcrList = target.getDCRs();
 
-        createNewLinkerFile(basename, "p" + basename);
+        createNewLinkerFile(target);
 
         clearMemoryRegions();
         populateMemoryRegions(target, intList, dcrList);

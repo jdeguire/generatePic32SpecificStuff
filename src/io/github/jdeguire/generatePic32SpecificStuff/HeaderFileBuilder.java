@@ -30,108 +30,60 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.Collections;
 
 /**
- * This is a base class for building default linker scripts for the different target devices.
+ * This is a base class for building device-specific header files that contain register definitions,
+ * part-specific macros, and interrupt vector names.
  */
-public abstract class LinkerScriptBuilder {
-
-    protected ArrayList<LinkerMemoryRegion> regions_;
+public abstract class HeaderFileBuilder {
     protected String basepath_;
     protected PrintWriter writer_;
 
     /* Create a new builder that can be used to generate scripts for multiple devices, all rooted at
-     * the given base path (which should be a directory).  Use getLinkerScriptRelativePath() to
+     * the given base path (which should be a directory).  Use getHeaderRelativePath() to
      * determine where a particular target's script will be located.
      */
-    LinkerScriptBuilder(String basepath) {
-        regions_ = new ArrayList<>();
+    HeaderFileBuilder(String basepath) {
         basepath_ = basepath;
     }
 
-    /* Generate a linker script for the given device.
+    /* Generate a linker script for the given device, using its name for the subdirectory and the
+     * name of the script itself.
      */
     abstract public void generate(TargetDevice target) throws java.io.FileNotFoundException;
 
-    /* Return the path to the linker script, including the linker script file itself, used in the
+    /* Return the path to the header file, including the linker script file itself, used in the
      * generate() method.  The returned path is relative to the base path given in the constructor 
      * for this class.
      */
-    public String getLinkerScriptRelativePath(TargetDevice target) {
-        String devicename = target.getDeviceName();
+    public String getHeaderRelativePath(TargetDevice target) {
+        String devicename = target.getDeviceName().toLowerCase();
         String pathname;
 
         if(target.isMips32()) {
-            if(devicename.startsWith("PIC32")) {
+            if(devicename.startsWith("pic32")) {
                 devicename = devicename.substring(3);
             }
 
-            pathname = devicename + "/p" + devicename + ".ld";
+            pathname = "p" + devicename + ".ld";
         } else {
-            if(devicename.startsWith("SAM")) {
-                devicename = "AT" + devicename;
+            if(devicename.startsWith("atsam")) {
+                devicename = devicename.substring(2);
             }
 
-            pathname = devicename + "/" + devicename + ".ld";                
+            pathname = devicename + ".ld";                
         }
 
         return pathname;
     }
     
-    /* Create a new linker script file based on the target, updating the local PrintWriter with the 
+    /* Create a new header file based on the target, updating the local PrintWriter with the 
      * new one.  This creates a version of the PrintWrite that always uses Unix line separators ('\n').
      */
-    protected void createNewLinkerFile(TargetDevice target)
+    protected void createNewHeaderFile(TargetDevice target)
                             throws java.io.FileNotFoundException {
-        writer_ = Utils.createUnixPrintWriter(basepath_ + "/" + getLinkerScriptRelativePath(target));
-    }
-
-
-    protected void addMemoryRegion(LinkerMemoryRegion region) {
-        regions_.add(region);
-    }
-    
-    protected void clearMemoryRegions() {
-        regions_.clear();
-    }
-
-    /* Find the region with the given name and return it or return null if no such region could be 
-     * found.
-     */
-    protected LinkerMemoryRegion findRegionByName(String name) {
-        for(LinkerMemoryRegion region : regions_) {
-            if(name.equals(region.getName()))
-                return region;
-        }
-
-        return null;
-    }
-
-    /* Sort the list of memory regions based on their starting address, with lower address coming 
-     * before higher addresses.
-     */
-    protected void sortRegionList() {
-        Collections.sort(regions_);
-    }
-
-
-    /* Sort the memory regions by starting address and add them to the linker script in a MEMORY
-     * command.
-     */
-    protected void outputMemoryRegionCommand() {
-        writer_.println("MEMORY");
-        writer_.println("{");
-
-        sortRegionList();
-
-        for(LinkerMemoryRegion r : regions_) {
-            writer_.println("  " + r.toString());
-        }
-
-        writer_.println("}");
-        writer_.println();
+        writer_ = Utils.createUnixPrintWriter(basepath_ + "/" + getHeaderRelativePath(target));
     }
 
     /* Add the license header to the linker file opened by the given writer.
@@ -145,4 +97,5 @@ public abstract class LinkerScriptBuilder {
 
         Utils.writeMultilineCComment(writer_, 0, header);
     }
+
 }

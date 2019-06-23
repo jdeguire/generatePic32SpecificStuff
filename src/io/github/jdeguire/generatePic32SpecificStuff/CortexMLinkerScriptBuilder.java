@@ -44,7 +44,7 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
     public void generate(TargetDevice target) throws java.io.FileNotFoundException {
         String basename = target.getDeviceName();
 
-        createNewLinkerFile(basename, basename);
+        createNewLinkerFile(target);
 
         clearMemoryRegions();
         populateMemoryRegions(target);
