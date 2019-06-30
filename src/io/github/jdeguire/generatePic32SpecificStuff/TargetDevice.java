@@ -29,6 +29,7 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.Pair;
 import com.microchip.crownking.edc.DCR;
 import com.microchip.crownking.edc.Register;
 import com.microchip.crownking.edc.SFR;
@@ -37,8 +38,17 @@ import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
 import com.microchip.mplab.crownkingx.xMemoryPartition;
 import com.microchip.mplab.crownkingx.xPICFactory;
 import com.microchip.mplab.crownkingx.xPIC;
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.apache.commons.io.FileUtils;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
@@ -67,6 +77,7 @@ public class TargetDevice {
     final private xPIC pic_;
     final private String name_;
 	private ArrayList<String> instructionSets_;
+    private static HashMap<String, String> atdfCache_ = new HashMap<>(100);
 
     /* Create a new TargetDevice based on the given name.  Throws an exception if the given name is
      * not recognized by this class.  Note that this class parses the name just enough to determine
@@ -81,7 +92,7 @@ public class TargetDevice {
 
         name_ = devname.toUpperCase();
         pic_ = (xPIC)xPICFactory.getInstance().get(name_);
-
+        
 		if(Family.PIC32 == pic_.getFamily()  ||  Family.ARM32BIT == pic_.getFamily()) {
    			instructionSets_ = new ArrayList<>(pic_.getInstructionSet().getSubsetIDs());
 
@@ -445,5 +456,141 @@ public class TargetDevice {
             addr = Long.decode(attr);
 
         return addr & 0xFFFFFFFF;
+    }
+
+
+    /*******
+     * Atmel ATDF file stuff below here.  This may get moved to its own file at some point, but keep
+     * it here for now.
+     */
+    public class AtdfParameter{
+        public String name;
+        public String value;
+        public String caption;
+        
+        AtdfParameter(Node atdfNode) {
+            NamedNodeMap attrs = atdfNode.getAttributes();
+
+            Node nameNode = attrs.getNamedItem("name");
+            Node valueNode = attrs.getNamedItem("value");
+            Node captionNode = attrs.getNamedItem("caption");
+
+            if(null == nameNode)
+                name = "";
+            else
+                name = nameNode.getNodeValue();
+
+            if(null == valueNode)
+                value = "";
+            else
+                value = valueNode.getNodeValue();
+
+           if(null == captionNode)
+                caption = "";
+            else
+                caption = captionNode.getNodeValue();
+        }
+    }
+
+    private void populateAtdfCache() {
+        File packsdir = new File(System.getProperty("packslib.packsfolder"));
+        String exts[] = {"atdf", "ATDF"};
+        Collection<File> atdfFiles = FileUtils.listFiles(packsdir, exts, true);
+
+        for(File f : atdfFiles) {
+            String basename = f.getName();
+            basename = basename.substring(0, basename.lastIndexOf('.'));
+
+            atdfCache_.put(basename, f.getAbsolutePath());
+        }
+    }
+
+    public Document getAtdfDocument() {
+        Document atdfDoc = null;
+
+        try {
+            if(atdfCache_.isEmpty())
+                populateAtdfCache();
+
+            String devname = name_;
+            if(devname.startsWith("SAM"))
+                devname = "AT" + devname;
+
+            String atdfPath = atdfCache_.get(devname);
+
+            // Based on example code from:
+            // https://www.mkyong.com/java/how-to-read-xml-file-in-java-dom-parser/
+            if(null != atdfPath) {
+                File atdfFile = new File(atdfPath);
+
+                DocumentBuilder docBuilder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+                atdfDoc = docBuilder.parse(atdfFile);
+                atdfDoc.getDocumentElement().normalize();
+            }
+        } catch(Exception e) {
+            atdfDoc = null;
+        }
+
+        return atdfDoc;
+    }
+
+    public List<AtdfParameter> getAtdfParameters(Document atdfDoc, String peripheral) {
+        ArrayList<AtdfParameter> params = new ArrayList<>(16);
+        Element atdfElement = atdfDoc.getDocumentElement();
+
+        // Get to the "<device>" node, which is under the "<devices>" node.  There should be only
+        // one "<device>" node since each ATDF file seems to correspond to a single device.
+        Node devicesNode = Utils.getFirstChildNodeByName((Node)atdfElement, "devices");
+        Node deviceNode = Utils.getFirstChildNodeByName(devicesNode, "device");
+        Node targetNode = null;
+
+        // Navigate to peripheral node if a peripheral is provided.
+        if(null != peripheral  &&  !peripheral.isEmpty()) {
+            // We need to search for the peripheral's basename--that is, a peripheral name minus
+            // the instance number.  So "ADC1" would have a basename of "ADC".
+            int basesplit = peripheral.length()-1;
+            while(basesplit > 0  &&  Character.isDigit(peripheral.charAt(basesplit)))
+                --basesplit;
+
+            String basename = peripheral.substring(0, basesplit+1);
+            Node peripheralsNode = Utils.getFirstChildNodeByName(deviceNode, "peripherals");
+            List<Node> moduleNodes = Utils.getAllChildNodesByName(peripheralsNode, "module");
+
+            for(Node module : moduleNodes) {
+                // Find the base module node from the basename.
+                NamedNodeMap modAttrs = module.getAttributes();
+
+                if(modAttrs.getNamedItem("name").getNodeValue().equals(basename)) {
+                    // Found the base module node, so now we can get out instance node.
+                    List<Node> instanceNodes = Utils.getAllChildNodesByName(module, "instance");
+                    
+                    for(Node instance : instanceNodes) {
+                        NamedNodeMap instAttrs = module.getAttributes();
+
+                        if(instAttrs.getNamedItem("name").getNodeValue().equals(peripheral)) {
+                            targetNode = instance;
+                            break;
+                        }
+                    }
+
+                    if(null != targetNode)
+                        break;
+                }
+            }
+        } else {
+            // Else we'll get the parameters for the device itself.
+            targetNode = deviceNode;
+        }
+
+        Node parametersNode = Utils.getFirstChildNodeByName(targetNode, "parameters");
+        if(null != parametersNode) {
+            List<Node> paramsList = Utils.getAllChildNodesByName(parametersNode, "param");
+
+            for(Node paramNode : paramsList) {
+                params.add(new AtdfParameter(paramNode));
+            }
+        }
+
+        return params;
     }
 }

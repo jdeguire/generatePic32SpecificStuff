@@ -41,8 +41,12 @@ import com.microchip.crownking.mplabinfo.DeviceSupportException;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
 import com.microchip.mplab.crownkingx.xMemoryPartition;
 import com.microchip.mplab.crownkingx.xPIC;
+import java.io.File;
 import java.io.IOException;
+import java.util.Collection;
 import javax.xml.parsers.ParserConfigurationException;
+import org.apache.commons.io.FileUtils;
+import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -258,29 +262,7 @@ public class StuffGenerator {
 
         ArrayList<String> spaces = new ArrayList<>();
         Pair<Long, Long> temp;
-/*        
-        temp = mainPartition.getTestRange();
-        if(temp != null) {
-            spaces.add("Test Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.add(System.lineSeparator());
-        }
 
-        temp = mainPartition.getEmulationRegsRange();
-        if(temp != null) {
-            spaces.add("Emulation Regs Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.add(System.lineSeparator());
-        }
-
-        temp = mainPartition.getICSPWriteInhibitRange();
-        if(temp != null) {
-            spaces.add("ICSP Write Inhibit Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getICSPWriteInhibitRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
-*/
         temp = mainPartition.getBootConfigRange();
         if(temp != null) {
             spaces.add("Boot Cfg Region: " + Long.toHexString(temp.first)
@@ -288,14 +270,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getBootConfigRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-/*
-        temp = mainPartition.getBootRAMRange();
-        if(temp != null) {
-            spaces.add("Boot RAM Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.add(System.lineSeparator());
-        }
-*/
+
         temp = mainPartition.getCodeRange();
         if(temp != null) {
             spaces.add("Code Region: " + Long.toHexString(temp.first)
@@ -303,23 +278,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getCodeRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-/*
-        temp = mainPartition.getDCIRange();
-        if(temp != null) {
-            spaces.add("DCI Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getDCIRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
 
-        temp = mainPartition.getDCRRange();
-        if(temp != null) {
-            spaces.add("DCR Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getDCRRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
-*/        
         temp = mainPartition.getDDRRange();
         if(temp != null) {
             spaces.add("DDR Region: " + Long.toHexString(temp.first)
@@ -327,37 +286,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getDDRRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-/*
-        temp = mainPartition.getDIARange();
-        if(temp != null) {
-            spaces.add("DIA Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getDIARegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
 
-        temp = mainPartition.getDPRRange();
-        if(temp != null) {
-            spaces.add("DPR Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getDPRRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
-
-        temp = mainPartition.getDataFlashSpaceRange();
-        if(temp != null) {
-            spaces.add("Data Flash Space Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.add(System.lineSeparator());
-        }
-
-        temp = mainPartition.getDeviceIDRange();
-        if(temp != null) {
-            spaces.add("Device ID Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.add(System.lineSeparator());
-        }
-*/
         temp = mainPartition.getEBIRange();
         if(temp != null) {
             spaces.add("EBI Region: " + Long.toHexString(temp.first)
@@ -365,30 +294,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getEBIRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-/*
-        temp = mainPartition.getExternalCodeRange();
-        if(temp != null) {
-            spaces.add("External Code Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getExternalCodeRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
 
-        temp = mainPartition.getFileRange();
-        if(temp != null) {
-            spaces.add("File Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getFileRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
-
-        temp = mainPartition.getFlashDataRange();
-        if(temp != null) {
-            spaces.add("Flash Data Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.add(System.lineSeparator());
-        }
-*/
         temp = mainPartition.getGPRRange();
         if(temp != null) { 
             spaces.add("GPR Region: " + Long.toHexString(temp.first)
@@ -396,50 +302,7 @@ public class StuffGenerator {
             spaces.addAll(getChildNodes(mainPartition.getGPRRegions(), -1));
             spaces.add(System.lineSeparator());
         }
-/*
-        temp = mainPartition.getInstRange();
-        if(temp != null) {
-            spaces.add("Inst Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getInstRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
 
-        temp = mainPartition.getLinearDataRange();
-        if(temp != null) {
-            spaces.add("Linear Data Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.add(System.lineSeparator());
-        }
-
-        temp = mainPartition.getLinearRange();
-        if(temp != null) {
-            spaces.add("Linear Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getLinearizedRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
-
-        spaces.add("NMMR Region: ");
-        spaces.addAll(getChildNodes(mainPartition.getNMMRPlaces(), -1));
-        spaces.add(System.lineSeparator());
-
-        temp = mainPartition.getSFRRange();
-        if(temp != null) {
-            spaces.add("SFR Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getSFRRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
-
-        temp = mainPartition.getSPIFlashRange();
-        if(temp != null) { 
-            spaces.add("SPI Flash Region: " + Long.toHexString(temp.first)
-                        + " -> " + Long.toHexString(temp.second));
-            spaces.addAll(getChildNodes(mainPartition.getSPIFlashRegions(), -1));
-            spaces.add(System.lineSeparator());
-        }
-*/
         temp = mainPartition.getSQIRange();
         if(temp != null ) {
             spaces.add("SQI Region: " + Long.toHexString(temp.first)
@@ -581,7 +444,15 @@ public class StuffGenerator {
         output.add(target.getPic().getATDFFamily());
         output.add(target.getCpuName());
         output.add(System.getProperty("packslib.packsfolder"));
-        
+
+        Document atdfDoc = target.getAtdfDocument();
+        if(null != atdfDoc) {
+            List<TargetDevice.AtdfParameter> params = target.getAtdfParameters(atdfDoc, null);
+            for(TargetDevice.AtdfParameter p : params) {
+                output.add(p.name + " = " + p.value + "  ;  " + p.caption);
+            }
+        }
+
         return output;
     }
 }

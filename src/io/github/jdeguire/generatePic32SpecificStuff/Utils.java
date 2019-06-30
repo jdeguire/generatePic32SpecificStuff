@@ -32,8 +32,13 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 import java.io.File;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /**
  * This is just a place to put simple utility functions that do not really fit anywhere else.
@@ -158,6 +163,72 @@ public class Utils {
         }
 
         return sb.toString();
+    }
+
+    /* Find the first child of the given Node object with the given name.  Returns null if a child
+     * with the given name is not found.  This method is not recursive.
+     */
+    public static Node getFirstChildNodeByName(Node node, String name) {
+        Node child = null;
+
+        if(null != node  &&  node.hasChildNodes()) {
+            NodeList children = node.getChildNodes();
+            
+            for(int i = 0; i < children.getLength(); ++i) {
+                if(children.item(i).getNodeName().equals(name)) {
+                    child = children.item(i);
+                    break;
+                }
+            }
+        }
+
+        return child;
+    }
+
+    /* Find all direct children of the given Node object with the given name.  Returns an empty list
+     * if no children with the given name are found.  This method is not recursive.
+     */
+    public static List<Node> getAllChildNodesByName(Node node, String name) {
+        ArrayList<Node> namedChildren = new ArrayList<>(10);
+
+        if(null != node  &&  node.hasChildNodes()) {
+            NodeList children = node.getChildNodes();
+
+            for(int i = 0; i < children.getLength(); ++i) {
+                if(children.item(i).getNodeName().equals(name)) {
+                    namedChildren.add(children.item(i));
+                }
+            }
+        }
+
+        return namedChildren;
+    }
+
+    /* Find the first child of the given Node object that has an attribute of the given value.
+     * Returns null if one could not be found.  This method is not recursive.  Pass in a null for
+     * 'value' if you care only that the Node has the attribute and not its actual value.
+     */
+    public static Node getFirstChildNodeByAttribute(Node node, String attrname, String value) {
+        Node child = null;
+
+        if(null != node  &&  node.hasChildNodes()) {
+            NodeList children = node.getChildNodes();
+
+            for(int i = 0; i < children.getLength(); ++i) {
+                if(children.item(i).hasAttributes()) {
+                    Node attributeNode = children.item(i).getAttributes().getNamedItem(attrname);
+
+                    if(null != attributeNode) {
+                        if(null == value  ||  attributeNode.getNodeValue().equals(value)) {
+                            child = children.item(i);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return child;
     }
 
     /* Return today's date with the given date format.  See the Java docs for SimpleDateFormat for
