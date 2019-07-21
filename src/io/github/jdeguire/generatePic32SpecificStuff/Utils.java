@@ -36,7 +36,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
@@ -165,70 +164,86 @@ public class Utils {
         return sb.toString();
     }
 
-    /* Find the first child of the given Node object with the given name.  Returns null if a child
-     * with the given name is not found.  This method is not recursive.
+    /* Find the first child of the given node that meets the criteria set by the other arguments.  
+     * Set the argument to null to allow the child to always pass through the filter.  For example,
+     * use
+     * <code>
+     * filterFirstChildNode(someNode, null, "my_attribute", "my_value");
+     * </code>
+     * to look for any node that has the given attribute with the given value.  The attribute value
+     * is checked only if the attribute name is non-null.
      */
-    public static Node getFirstChildNodeByName(Node node, String name) {
-        Node child = null;
-
+    public static Node filterFirstChildNode(Node node, String nodename, String attrname, String attrvalue) {
         if(null != node  &&  node.hasChildNodes()) {
             NodeList children = node.getChildNodes();
-            
+
             for(int i = 0; i < children.getLength(); ++i) {
-                if(children.item(i).getNodeName().equals(name)) {
-                    child = children.item(i);
-                    break;
+                Node child = children.item(i);
+
+                if(null != nodename  &&  !child.getNodeName().equals(nodename)) {
+                    continue;
                 }
-            }
-        }
 
-        return child;
-    }
+                if(null != attrname) {
+                    if(!child.hasAttributes()) {
+                        continue;
+                    }
 
-    /* Find all direct children of the given Node object with the given name.  Returns an empty list
-     * if no children with the given name are found.  This method is not recursive.
-     */
-    public static List<Node> getAllChildNodesByName(Node node, String name) {
-        ArrayList<Node> namedChildren = new ArrayList<>(10);
+                    Node attributeNode = child.getAttributes().getNamedItem(attrname);
 
-        if(null != node  &&  node.hasChildNodes()) {
-            NodeList children = node.getChildNodes();
-
-            for(int i = 0; i < children.getLength(); ++i) {
-                if(children.item(i).getNodeName().equals(name)) {
-                    namedChildren.add(children.item(i));
-                }
-            }
-        }
-
-        return namedChildren;
-    }
-
-    /* Find the first child of the given Node object that has an attribute of the given value.
-     * Returns null if one could not be found.  This method is not recursive.  Pass in a null for
-     * 'value' if you care only that the Node has the attribute and not its actual value.
-     */
-    public static Node getFirstChildNodeByAttribute(Node node, String attrname, String value) {
-        Node child = null;
-
-        if(null != node  &&  node.hasChildNodes()) {
-            NodeList children = node.getChildNodes();
-
-            for(int i = 0; i < children.getLength(); ++i) {
-                if(children.item(i).hasAttributes()) {
-                    Node attributeNode = children.item(i).getAttributes().getNamedItem(attrname);
-
-                    if(null != attributeNode) {
-                        if(null == value  ||  attributeNode.getNodeValue().equals(value)) {
-                            child = children.item(i);
-                            break;
-                        }
+                    if(null == attributeNode || 
+                       (null != attrvalue  &&  !attributeNode.getNodeValue().equals(attrvalue))) {
+                        continue;
                     }
                 }
+
+                return child;
             }
         }
 
-        return child;
+        return null;        
+    }
+
+    /* Find the all children of the given node that meets the criteria set by the other arguments.  
+     * Set the argument to null to allow the children to always pass through the filter.  For example,
+     * use
+     * <code>
+     * filterFirstChildNode(someNode, "my_name", "my_attribute", null);
+     * </code>
+     * to look for all nodes named "my_name" and with the attribute "my_attribute" regardless of the
+     * the attribute's value.  The attribute value is checked only if the attribute name is non-null.
+     */
+    public static List<Node> filterAllChildNodes(Node node, String nodename, String attrname, String attrvalue) {
+        ArrayList<Node> filteredChildren = new ArrayList<>(10);
+        
+        if(null != node  &&  node.hasChildNodes()) {
+            NodeList children = node.getChildNodes();
+
+            for(int i = 0; i < children.getLength(); ++i) {
+                Node child = children.item(i);
+
+                if(null != nodename  &&  !child.getNodeName().equals(nodename)) {
+                    continue;
+                }
+
+                if(null != attrname) {
+                    if(!child.hasAttributes()) {
+                        continue;
+                    }
+
+                    Node attributeNode = child.getAttributes().getNamedItem(attrname);
+
+                    if(null == attributeNode || 
+                       (null != attrvalue  &&  !attributeNode.getNodeValue().equals(attrvalue))) {
+                        continue;
+                    }
+                }
+
+                filteredChildren.add(child);
+            }
+        }
+
+        return filteredChildren;
     }
 
     /* Return today's date with the given date format.  See the Java docs for SimpleDateFormat for

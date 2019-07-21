@@ -63,7 +63,7 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
         outputVectorsSection();
         outputTextSection();
         outputArmStackUnwindSection();
-        outputDataSections();
+        outputDataSections(target.hasL1Cache());
         outputRuntimeMemorySections();
 
         writer_.println("    . = ALIGN(4);");
@@ -224,13 +224,22 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
 
     /* Output sections for data as opposed to code.
     */
-    private void outputDataSections() {
+    private void outputDataSections(boolean hasCache) {
         writer_.println("    .relocate : AT (_etext)");
         writer_.println("    {");
         writer_.println("        . = ALIGN(4);");
         writer_.println("        _srelocate = .;");
         writer_.println("        *(.ramfunc .ramfunc.*);");
         writer_.println("        *(.data .data.*);");
+        if(hasCache) {
+            writer_.println("        . = ALIGN(32);");
+            writer_.println("        /* For data that should bypass the cache (eg. will be accessed by DMA). */");
+            writer_.println("        /* User code must configure the MPU for this section. */");
+            writer_.println("        _sunchacheddata = .;");
+            writer_.println("        *(.uncacheddata .uncacheddata.*)");
+            writer_.println("        . = ALIGN(. - _suncacheddata <= 32 ? 32 : 1 << LOG2CEIL(. - _suncacheddata));");
+            writer_.println("        _euncacheddata = .;");
+        }
         writer_.println("        . = ALIGN(4);");
         writer_.println("        _erelocate = .;");
         writer_.println("    } > ram");

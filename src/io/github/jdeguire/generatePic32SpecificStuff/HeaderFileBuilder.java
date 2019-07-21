@@ -79,7 +79,7 @@ public abstract class HeaderFileBuilder {
     }
     
     /* Create a new header file based on the target, updating the local PrintWriter with the 
-     * new one.  This creates a version of the PrintWrite that always uses Unix line separators ('\n').
+     * new one.  This creates a version of the PrintWriter that always uses Unix line separators ('\n').
      */
     protected void createNewHeaderFile(TargetDevice target)
                             throws java.io.FileNotFoundException {

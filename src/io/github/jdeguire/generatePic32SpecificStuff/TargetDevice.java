@@ -538,11 +538,10 @@ public class TargetDevice {
         ArrayList<AtdfParameter> params = new ArrayList<>(16);
         Element atdfElement = atdfDoc.getDocumentElement();
 
-        // Get to the "<device>" node, which is under the "<devices>" node.  There should be only
-        // one "<device>" node since each ATDF file seems to correspond to a single device.
-        Node devicesNode = Utils.getFirstChildNodeByName((Node)atdfElement, "devices");
-        Node deviceNode = Utils.getFirstChildNodeByName(devicesNode, "device");
-        Node targetNode = null;
+        // Get to the "<device>" node, which is under the "<devices>" node.
+        Node devicesNode = Utils.filterFirstChildNode((Node)atdfElement, "devices", null, null);
+        Node deviceNode = Utils.filterFirstChildNode(devicesNode, "device", "name", name_);
+        Node targetNode;
 
         // Navigate to peripheral node if a peripheral is provided.
         if(null != peripheral  &&  !peripheral.isEmpty()) {
@@ -553,38 +552,18 @@ public class TargetDevice {
                 --basesplit;
 
             String basename = peripheral.substring(0, basesplit+1);
-            Node peripheralsNode = Utils.getFirstChildNodeByName(deviceNode, "peripherals");
-            List<Node> moduleNodes = Utils.getAllChildNodesByName(peripheralsNode, "module");
+            Node peripheralsNode = Utils.filterFirstChildNode(deviceNode, "peripherals", null, null);
+            Node moduleNode = Utils.filterFirstChildNode(peripheralsNode, "module", "name", basename);
 
-            for(Node module : moduleNodes) {
-                // Find the base module node from the basename.
-                NamedNodeMap modAttrs = module.getAttributes();
-
-                if(modAttrs.getNamedItem("name").getNodeValue().equals(basename)) {
-                    // Found the base module node, so now we can get out instance node.
-                    List<Node> instanceNodes = Utils.getAllChildNodesByName(module, "instance");
-                    
-                    for(Node instance : instanceNodes) {
-                        NamedNodeMap instAttrs = module.getAttributes();
-
-                        if(instAttrs.getNamedItem("name").getNodeValue().equals(peripheral)) {
-                            targetNode = instance;
-                            break;
-                        }
-                    }
-
-                    if(null != targetNode)
-                        break;
-                }
-            }
+            targetNode = Utils.filterFirstChildNode(moduleNode, "instance", "name", peripheral);
         } else {
             // Else we'll get the parameters for the device itself.
             targetNode = deviceNode;
         }
 
-        Node parametersNode = Utils.getFirstChildNodeByName(targetNode, "parameters");
+        Node parametersNode = Utils.filterFirstChildNode(targetNode, "parameters", null, null);
         if(null != parametersNode) {
-            List<Node> paramsList = Utils.getAllChildNodesByName(parametersNode, "param");
+            List<Node> paramsList = Utils.filterAllChildNodes(parametersNode, "param", null, null);
 
             for(Node paramNode : paramsList) {
                 params.add(new AtdfParameter(paramNode));
