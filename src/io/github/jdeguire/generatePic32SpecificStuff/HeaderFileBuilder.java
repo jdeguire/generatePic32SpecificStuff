@@ -30,7 +30,6 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.io.PrintWriter;
-import java.util.Collections;
 
 /**
  * This is a base class for building device-specific header files that contain register definitions,
@@ -66,13 +65,13 @@ public abstract class HeaderFileBuilder {
                 devicename = devicename.substring(3);
             }
 
-            pathname = "p" + devicename + ".ld";
+            pathname = "p" + devicename + ".h";
         } else {
             if(devicename.startsWith("atsam")) {
                 devicename = devicename.substring(2);
             }
 
-            pathname = devicename + ".ld";                
+            pathname = devicename + ".h";
         }
 
         return pathname;

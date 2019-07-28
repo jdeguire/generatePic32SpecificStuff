@@ -118,6 +118,7 @@ public class StuffGenerator {
         TargetDevice target = new TargetDevice(device.getName());
         LinkerScriptBuilder lsb;
 
+        // TODO:  We should create these in the constructor since we don't need new ones every time.
         if(target.isArm()) {
             // TODO:  We'll need to target Cortex-A devices in the future.
             if(target.supportsArmIsa()) {
@@ -454,5 +455,17 @@ public class StuffGenerator {
         }
 
         return output;
+    }
+
+    public List<String> getHeaderFileStuff(Device device)
+            throws Anomaly, SAXException, IOException, ParserConfigurationException {
+        TargetDevice target = new TargetDevice(device.getName());
+        CortexMHeaderFileBuilder cortexm_hfb = new CortexMHeaderFileBuilder(outputDirBase_ + "/cortex-m/include/proc");
+
+        if(target.isArm()) {
+            cortexm_hfb.generate(target);
+        }
+
+        return new ArrayList<>();
     }
 }

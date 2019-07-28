@@ -137,7 +137,7 @@ public final class MainWindowTopComponent extends TopComponent {
                 working = true;
 
                 String outputpath = filechooser.getSelectedFile().toString();
-                OutputLog.setText("Outputting to " + outputpath);
+                OutputLog.setText("Outputting to " + outputpath + System.lineSeparator());
 
                 worker = new StuffGeneratorWorker(outputpath);            
                 worker.execute();
@@ -222,9 +222,10 @@ public final class MainWindowTopComponent extends TopComponent {
 //                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
 //                        List<String> nodeNames = gen.getMemorySpaces(device);
 //                        List<String> nodeNames = gen.getConfigRegAddresses(device);
-                        List<String> nodeNames = gen.getAtdfInfo(device);
-
+//                        List<String> nodeNames = gen.getAtdfInfo(device);
+                        List<String> nodeNames = gen.getHeaderFileStuff(device);
 //                        gen.generate(device);
+
                         publish("----------" + System.lineSeparator() + device.getName());
                         
                         if(nodeNames.isEmpty()) {
@@ -237,7 +238,10 @@ public final class MainWindowTopComponent extends TopComponent {
                     }
                 }
             } catch(Exception ex) {
-                publish(ex.getMessage());
+                publish(ex.toString());
+                for(StackTraceElement elm : ex.getStackTrace()) {
+                    publish(elm.toString());
+                }
             }
 
             return null;

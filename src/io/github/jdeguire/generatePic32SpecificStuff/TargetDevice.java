@@ -29,7 +29,6 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
-import com.microchip.crownking.Pair;
 import com.microchip.crownking.edc.DCR;
 import com.microchip.crownking.edc.Register;
 import com.microchip.crownking.edc.SFR;
@@ -449,12 +448,7 @@ public class TargetDevice {
      * whatever is in MPLAB X's database, which is the physical address on MIPS devices.
      */
     public long getRegisterAddress(Register reg) {
-        String attr = reg.get("_addr");      // The "edc:" part of the attribute name is not needed.
-        long addr = 0;
-
-        if(!attr.isEmpty())
-            addr = Long.decode(attr);
-
+        long addr = reg.getAsLongElse("_addr", Long.valueOf(0));
         return addr & 0xFFFFFFFF;
     }
 
