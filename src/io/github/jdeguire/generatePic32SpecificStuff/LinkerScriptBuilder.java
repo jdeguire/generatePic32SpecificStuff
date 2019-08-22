@@ -88,6 +88,13 @@ public abstract class LinkerScriptBuilder {
         writer_ = Utils.createUnixPrintWriter(basepath_ + "/" + getLinkerScriptRelativePath(target));
     }
 
+    /* Close the linker file, which ensures that the writer's contents have been flushed to disk.  
+     * Do this at the end of the your generate() method.
+     */
+    protected void closeLinkerFile() {
+        writer_.close();
+    }
+
 
     protected void addMemoryRegion(LinkerMemoryRegion region) {
         regions_.add(region);

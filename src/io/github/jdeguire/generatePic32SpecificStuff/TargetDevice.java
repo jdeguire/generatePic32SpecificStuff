@@ -183,16 +183,21 @@ public class TargetDevice {
 						break;
 					case "armv7m":                               // Cortex M3
 					case "armv7em":                              // Cortex M4, M7
-						/* NOTE:  Microchip does not have any active M3 devices, so their database 
-						          uses "armv7m" for M4 and M7 devices.	*/
-						arch = TargetArch.ARMV7EM;
-						found = true;
+                        // NOTE:  Microchip's EDC files do not actually distinguish between ARMv7-M
+                        //        and ARMV7-EM, so we'll do it here.
+                        if(getCpuName().equals("cortex-m3"))
+    						arch = TargetArch.ARMV7M;
+                        else
+                            arch = TargetArch.ARMV7EM;
+
+                        found = true;
 						break;
 					case "armv8a":                               // Cortex A3x, A5x, A7x
 						arch = TargetArch.ARMV8A;
 						found = true;
 						break;
-					case "armv8m.base":                          // Cortex M23
+                    case "armv8m":
+                    case "armv8m.base":                          // Cortex M23
 						arch = TargetArch.ARMV8M_BASE;
 						found = true;
 						break;
@@ -262,11 +267,10 @@ public class TargetDevice {
         
         if(getSubFamily() == SubFamily.PIC32MZ) {
             result = true;
-        } else if(isArm()) {
-            TargetArch arch = getArch();
-
-            if(arch == TargetArch.ARMV7A  ||  arch == TargetArch.ARMV7EM  ||  arch == TargetArch.ARMV8A)
-                result = true;
+        } else if(getCpuName().equals("cortex-m7")) {
+            result = true;
+        } else if(getCpuName().startsWith("cortex-a")) {
+            result = true;
         }
 
         return result;
@@ -331,26 +335,26 @@ public class TargetDevice {
 		String fpuName = "";
 
 		if(isArm()  &&  hasFpu()) {
-			TargetArch arch = getArch();
-
-			if(TargetArch.ARMV7M == arch  ||  TargetArch.ARMV7EM == arch) {
-				if(pic_.getArchitecture().equalsIgnoreCase("Cortex-M7"))
-					fpuName = "vfp5-dp-d16";
-				else
-					fpuName = "vfp4-sp-d16";
-			}
-			else if(TargetArch.ARMV7A == arch) {
-                // There does not yet seem to be a way to check for NEON other than name.
-                String name = getDeviceName();
-                
-                if(name.startsWith("SAMA5D3")  ||  name.startsWith("ATSAMA5D3"))
-                    fpuName = "neon-vfpv4";
-                else
+			switch (getArch()) {
+                case ARMV7M:
+                case ARMV7EM:
+                    if(getCpuName().equals("cortex-m7"))
+                        fpuName = "vfp5-dp-d16";
+                    else
+                        fpuName = "vfp4-sp-d16";
+                    break;
+                case ARMV7A:
+                    // There does not yet seem to be a way to check for NEON other than name.
+                    String name = getDeviceName();
+                    if(name.startsWith("SAMA5D3")  ||  name.startsWith("ATSAMA5D3"))
+                        fpuName = "vfp4-dp-d16";
+                    else
+                        fpuName = "neon-vfpv4";
+                    break;
+                default:
                     fpuName = "vfp4-dp-d16";
-			}
-			else {
-				fpuName = "vfp4-dp-d16";
-			}
+                    break;
+            }
 		}
 
         return fpuName;

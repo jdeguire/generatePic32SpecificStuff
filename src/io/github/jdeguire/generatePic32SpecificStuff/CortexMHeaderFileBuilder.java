@@ -41,7 +41,7 @@ import org.w3c.dom.Node;
  */
 public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
 
-    private HashMap<String, ArrayList<SFR>> peripheralSFRs_ = new HashMap<>(20);
+    private final HashMap<String, ArrayList<SFR>> peripheralSFRs_ = new HashMap<>(20);
 
     CortexMHeaderFileBuilder(String basepath) {
         super(basepath);
@@ -58,6 +58,8 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
 
 
         outputLicenseHeader();
+
+        closeHeaderFile();
     }
 
     private void populateSFRs(TargetDevice target) {
@@ -77,18 +79,19 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         // Now, get all of the SFRs and put them with their member peripherals.
         List<SFR> allSFRs = target.getSFRs();
         for(SFR sfr : allSFRs) {
-            // This gets the member peripherals from the "ltx:memberofperipheral" XML attribute.
-            List<String> peripheralIDs = sfr.getPeripheralIDs();
+            // Anything above this range is reserved for system functions and the ARM private 
+            // peripheral bus (NVIC, SysTic, etc.), which we can ignore.
+            if(target.getRegisterAddress(sfr) < 0xE0000000) {
+                // This gets the member peripherals from the "ltx:memberofperipheral" XML attribute.
+                List<String> peripheralIDs = sfr.getPeripheralIDs();
 
-            // Some registers may be missing the peripheral ID (ICTR on SAME54 for example), but
-            // they may not be needed since the particular ones are system control ones and thus
-            // covered by the CMSIS headers.
-            if(!peripheralIDs.isEmpty()) {
-                String peripheralId = peripheralIDs.get(0);
-                ArrayList<SFR> peripheralList = peripheralSFRs_.get(peripheralId);
+                if(!peripheralIDs.isEmpty()) {
+                    String peripheralId = peripheralIDs.get(0);
+                    ArrayList<SFR> peripheralList = peripheralSFRs_.get(peripheralId);
 
-                if(null != peripheralList) {
-                    peripheralList.add(sfr);
+                    if(null != peripheralList) {
+                        peripheralList.add(sfr);
+                    }
                 }
             }
         }

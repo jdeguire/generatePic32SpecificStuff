@@ -152,15 +152,15 @@ public class Utils {
                     count = 0;
                 } else {
                     sb.append(str.substring(index-count, lastWhiteSpace));
-                    count -= lastWhiteSpace;
-                    index -= lastWhiteSpace;
+                    count = 0;
+                    index = lastWhiteSpace + 1;
                     lastWhiteSpace = -1;
                 }
 
                 sb.append('\n');
             }
         }
-
+        
         return sb.toString();
     }
 
@@ -246,6 +246,8 @@ public class Utils {
         return filteredChildren;
     }
 
+// TODO:  Add functions to get attributes of Nodes
+
     /* Return today's date with the given date format.  See the Java docs for SimpleDateFormat for
      * what the format string should contain.  Note that the format string is case-sensive ("m" is 
      * for minutes and "M" is for months, for example) and that the number of successive letters may
@@ -275,7 +277,7 @@ public class Utils {
         return ("Copyright (c)" + todaysDate("yyyy") + ", Jesse DeGuire\n" +
                 "All rights reserved.\n" +
                 "\n" +
-                "Redistribution and use in source and binary forms, with or without" +
+                "Redistribution and use in source and binary forms, with or without " +
                 "modification, are permitted provided that the following conditions are met:\n" +
                 "\n" +
                 "* Redistributions of source code must retain the above copyright notice, this\n" +
@@ -289,15 +291,15 @@ public class Utils {
                 "  contributors may be used to endorse or promote products derived from\n" +
                 "  this software without specific prior written permission.\n" +
                 "\n" +
-                "THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"" +
-                "AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE" +
-                "IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE" +
-                "DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE" +
-                "FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL" +
-                "DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR" +
-                "SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER" +
-                "CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY," +
-                "OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE" +
+                "THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" " +
+                "AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE " +
+                "IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE " +
+                "DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE " +
+                "FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL " +
+                "DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR " +
+                "SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER " +
+                "CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, " +
+                "OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE " +
                 "OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.");
     }
 
@@ -309,12 +311,11 @@ public class Utils {
         return ("Copyright (c) 2018, Microchip Technology Inc. and its subsidiaries (\"Microchip\")\n" +
                 "All rights reserved.\n" +
                 "\n" +
-                "This software is developed by Microchip Technology Inc. and its" +
+                "This software is developed by Microchip Technology Inc. and its " +
                 "subsidiaries (\"Microchip\").\n" +
                 "\n" +
-                "Redistribution and use in source and binary forms, with or without" +
-                "modification, are permitted provided that the following conditions are" + 
-                "met:\n" +
+                "Redistribution and use in source and binary forms, with or without " +
+                "modification, are permitted provided that the following conditions are met:\n" +
                 "\n" +
                 "1.      Redistributions of source code must retain the above copyright\n" +
                 "        notice, this list of conditions and the following disclaimer.\n" +
@@ -326,15 +327,15 @@ public class Utils {
                 "        derived from this software without specific prior written\n" +
                 "        permission.\n" +
                 "\n" +
-                "THIS SOFTWARE IS PROVIDED BY MICROCHIP \"AS IS\" AND ANY EXPRESS OR IMPLIED" +
-                "WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF" +
-                "MERCHANTABILITY AND FITNESS FOR PURPOSE ARE DISCLAIMED. IN NO EVENT" +
-                "SHALL MICROCHIP BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL," +
-                "EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING BUT NOT LIMITED TO" +
-                "PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA OR PROFITS;" +
-                "OR BUSINESS INTERRUPTION) HOWSOEVER CAUSED AND ON ANY THEORY OF LIABILITY," +
-                "WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR" +
-                "OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF" +
+                "THIS SOFTWARE IS PROVIDED BY MICROCHIP \"AS IS\" AND ANY EXPRESS OR IMPLIED " +
+                "WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF " +
+                "MERCHANTABILITY AND FITNESS FOR PURPOSE ARE DISCLAIMED. IN NO EVENT " +
+                "SHALL MICROCHIP BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, " +
+                "EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING BUT NOT LIMITED TO " +
+                "PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA OR PROFITS; " +
+                "OR BUSINESS INTERRUPTION) HOWSOEVER CAUSED AND ON ANY THEORY OF LIABILITY, " +
+                "WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR " +
+                "OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF " +
                 "ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.");
     }
 }

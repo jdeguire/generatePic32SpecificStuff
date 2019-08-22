@@ -41,11 +41,8 @@ import com.microchip.crownking.mplabinfo.DeviceSupportException;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
 import com.microchip.mplab.crownkingx.xMemoryPartition;
 import com.microchip.mplab.crownkingx.xPIC;
-import java.io.File;
 import java.io.IOException;
-import java.util.Collection;
 import javax.xml.parsers.ParserConfigurationException;
-import org.apache.commons.io.FileUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -62,7 +59,9 @@ import org.xml.sax.SAXException;
  */
 public class StuffGenerator {
 
-    private String outputDirBase_;
+    private final String outputDirBase_;
+    CortexMLinkerScriptBuilder cortexmLinkerBuilder_;
+    MipsLinkerScriptBuilder mipsLinkerBuilder_;
     
     /**
      * Constructor for the Stuff Generator.
@@ -73,6 +72,9 @@ public class StuffGenerator {
      */
     public StuffGenerator(String outputDir) {
         outputDirBase_ = outputDir;
+
+        cortexmLinkerBuilder_ = new CortexMLinkerScriptBuilder(outputDirBase_ + "/cortex-m/lib/proc");
+        mipsLinkerBuilder_ = new MipsLinkerScriptBuilder(outputDirBase_ + "/mips32/lib/proc");
     }
 
     
@@ -116,21 +118,15 @@ public class StuffGenerator {
     public void generate(Device device)
             throws Anomaly, SAXException, IOException, ParserConfigurationException {
         TargetDevice target = new TargetDevice(device.getName());
-        LinkerScriptBuilder lsb;
 
-        // TODO:  We should create these in the constructor since we don't need new ones every time.
         if(target.isArm()) {
             // TODO:  We'll need to target Cortex-A devices in the future.
-            if(target.supportsArmIsa()) {
-                lsb = new CortexMLinkerScriptBuilder(outputDirBase_ + "/cortex-a/lib/proc");
-            } else {
-                lsb = new CortexMLinkerScriptBuilder(outputDirBase_ + "/cortex-m/lib/proc");                
+            if(!target.supportsArmIsa()) {
+                cortexmLinkerBuilder_.generate(target);
             }
         } else {
-            lsb = new MipsLinkerScriptBuilder(outputDirBase_ + "/mips32/lib/proc");
+            mipsLinkerBuilder_.generate(target);
         }
-
-        lsb.generate(target);
     }
 
     /**

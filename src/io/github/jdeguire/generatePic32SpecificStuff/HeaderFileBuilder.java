@@ -85,14 +85,24 @@ public abstract class HeaderFileBuilder {
         writer_ = Utils.createUnixPrintWriter(basepath_ + "/" + getHeaderRelativePath(target));
     }
 
+    /* Close the header file, which ensures that the writer's contents have been flushed to disk.  
+     * Do this at the end of the your generate() method.
+     */
+    protected void closeHeaderFile() {
+        writer_.close();
+    }
+    
     /* Add the license header to the linker file opened by the given writer.
      */
     protected void outputLicenseHeader() {
         String header = (Utils.generatedByString() + "\n\n" +
                          Utils.generatorLicenseString() + "\n\n" +
-                         "This file is generated based on sources files included with Microchip " +
+                         "                                               ******\n\n" + 
+                         "This file is generated based on source files included with Microchip " +
                          "Technology's XC32 toolchain.  Microchip's license is reproduced below:\n\n" +
                          Utils.microchipLicenseString());
+
+// TODO:  The Atmel header files have a different license, so this needs to be updated.
 
         Utils.writeMultilineCComment(writer_, 0, header);
     }

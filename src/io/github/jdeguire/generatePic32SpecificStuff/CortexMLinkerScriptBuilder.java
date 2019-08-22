@@ -42,8 +42,6 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
 
     @Override
     public void generate(TargetDevice target) throws java.io.FileNotFoundException {
-        String basename = target.getDeviceName();
-
         createNewLinkerFile(target);
 
         clearMemoryRegions();
@@ -73,6 +71,8 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
         outputElfDebugSections();
 
         writer_.println("}");
+
+        closeLinkerFile();
     }
 
     /* Walk through the list of all target regions and add the ones that the linker script needs,
@@ -146,10 +146,12 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
         writer_.println("    {");
         writer_.println("        . = ALIGN(4);");
         writer_.println("        _sfixed = .;");
+        writer_.println("        __svectors = .;");
         writer_.println("        KEEP(*(.vectors .vectors.* .vectors_default .vectors_default.*))");
         writer_.println("        KEEP(*(.isr_vector))");
         writer_.println("        KEEP(*(.reset*))");
         writer_.println("        KEEP(*(.after_vectors))");
+        writer_.println("        __evectors = .;");
         writer_.println("    } > rom");
         writer_.println();
     }
@@ -201,6 +203,9 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
         writer_.println("        KEEP (*crtend.o(.dtors))");
         writer_.println();
         writer_.println("        . = ALIGN(4);");
+        writer_.println();
+        writer_.println("        KEEP(*(.eh_frame*))");
+        writer_.println();
         writer_.println("        _efixed = .;            /* End of text section */");
         writer_.println("    } > rom");
         writer_.println();
@@ -217,8 +222,8 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
         writer_.println("    } > rom");
         writer_.println("    PROVIDE_HIDDEN (__exidx_end = .);");
         writer_.println();
-        writer_.println("    . = ALIGN(4);");
-        writer_.println("    _etext = .;");
+        writer_.println("    _etext = ALIGN(4);");
+        writer_.println("    __etext = _etext;");
         writer_.println();
     }
 
@@ -229,22 +234,38 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
         writer_.println("    {");
         writer_.println("        . = ALIGN(4);");
         writer_.println("        _srelocate = .;");
-        writer_.println("        *(.ramfunc .ramfunc.*);");
-        writer_.println("        *(.data .data.*);");
+        writer_.println("        __data_start__ = .;");
         if(hasCache) {
-            writer_.println("        . = ALIGN(32);");
             writer_.println("        /* For data that should bypass the cache (eg. will be accessed by DMA). */");
             writer_.println("        /* User code must configure the MPU for this section. */");
-            writer_.println("        _sunchacheddata = .;");
+            writer_.println("        __uncached_data_start__ = .;");
             writer_.println("        *(.uncacheddata .uncacheddata.*)");
             writer_.println("        . = ALIGN(. - _suncacheddata <= 32 ? 32 : 1 << LOG2CEIL(. - _suncacheddata));");
-            writer_.println("        _euncacheddata = .;");
+            writer_.println("        __uncached_data_end__ = .;");
         }
+        writer_.println("        *(.ramfunc .ramfunc.*);");
+        writer_.println("        *(.data .data.*);");
         writer_.println("        . = ALIGN(4);");
+        writer_.println("        __data_end__ = .;");
         writer_.println("        _erelocate = .;");
         writer_.println("    } > ram");
         writer_.println();
 
+        Utils.writeMultilineCComment(writer_, 2, 
+                ("Use the \'section\' attribute to put data in this section that you want to " +
+                 "persist through software resets."));
+        writer_.println("  .persist (NOLOAD) :");
+        writer_.println("  {");
+        writer_.println("    _persist_begin = .;");
+        writer_.println("    __persist_start__ = .;");
+        writer_.println("    *(.persist .persist.*)");
+        writer_.println("    *(.pbss .pbss.*)");
+        writer_.println("    . = ALIGN(4) ;");
+        writer_.println("    __persist_end__ = .;");
+        writer_.println("    _persist_end = .;");
+        writer_.println("  } > ram");
+        writer_.println();
+        
         writer_.println("    .bss (NOLOAD) :");
         writer_.println("    {");
         writer_.println("        . = ALIGN(4);");
@@ -273,6 +294,7 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
         writer_.println("    . += _min_heap_size ;");
         writer_.println("    . = ALIGN(8) ;");
         writer_.println("    _eheap = . ;");
+        writer_.println("    __HeapLimit = . ;");
         writer_.println("  } > ram");
         writer_.println();
 
@@ -280,17 +302,20 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
                 ("Allocate some space for a stack at the end of memory because the stack grows " +
                  "downward.  This is just the minimum stack size that will be allowed; the stack " +
                  "can actually grow larger. Use this symbol to check for overflow."));
-        writer_.println("_stack_limit = . ;");
+        writer_.println("  __StackLimit = . ;");
+        writer_.println("  /* Ensure stack size is properly aligned. */");
+        writer_.println("  _min_stack_size = (_min_stack_size + 7) & 0x07 ;");
         writer_.println("  .stack ORIGIN(ram) + LENGTH(ram) - _min_stack_size :");
         writer_.println("  {");
         writer_.println("    . = ALIGN(8) ;");
         writer_.println("    _sstack = . ;");
         writer_.println("    . += _min_stack_size ;");
-        writer_.println("    . = ALIGN(8) ;");
         writer_.println("    _estack = . ;");
+        writer_.println("    __StackTop = . ;");
         writer_.println("  } > ram");
-
-        writer_.println("  ASSERT(_estack - _stack_limit <= _min_stack_size, \"Error: Not enough room for stack.\");");
+        writer_.println("  PROVIDE(__stack = __StackTop);");
+        writer_.println();
+        writer_.println("  ASSERT((_estack - __StackLimit) >= _min_stack_size, \"Error: Not enough room for stack.\");");
         writer_.println();
     }
 

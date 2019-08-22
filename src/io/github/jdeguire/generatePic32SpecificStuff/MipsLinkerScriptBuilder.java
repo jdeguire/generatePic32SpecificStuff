@@ -84,6 +84,8 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
             outputFixedOffsetVectors(intList, target);
 
         writer_.println("}");
+
+        closeLinkerFile();
     }
     
 
@@ -568,14 +570,22 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         writer_.println("    . = ALIGN(4) ;");
         writer_.println();
 
+        Utils.writeMultilineCComment(writer_, 2, 
+                ("Use the \'section\' attribute to put data in this section that you want to " +
+                 "persist through software resets."));
         writer_.println("  .persist (NOLOAD) :");
         writer_.println("  {");
         writer_.println("    _persist_begin = .;");
+        writer_.println("    __persist_start__ = .;");
         writer_.println("    *(.persist .persist.*)");
         writer_.println("    *(.pbss .pbss.*)");
         writer_.println("    . = ALIGN(4) ;");
+        writer_.println("    __persist_end__ = .;");
         writer_.println("    _persist_end = .;");
         writer_.println("  } >" + dataRegion);
+        writer_.println();
+
+        writer_.println("  __data_start__ = .;");
         writer_.println();
 
         writer_.println("  .data   :");
@@ -625,7 +635,9 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
 
         writer_.println("  . = ALIGN (4) ;");
         writer_.println("  _data_end = . ;");
+        writer_.println("  __data_end__ = .;");
         writer_.println("  _bss_begin = . ;");
+        writer_.println("  __bss_start__ = .;");
         writer_.println();
 
         writer_.println("  .sbss ALIGN(4) :");
@@ -656,6 +668,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         writer_.println("  . = ALIGN(4) ;");
         writer_.println("  _end = . ;");
         writer_.println("  _bss_end = . ;");
+        writer_.println("  __bss_end__ = .;");
         writer_.println();
     }
 
@@ -677,6 +690,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         writer_.println("    . += _min_heap_size ;");
         writer_.println("    . = ALIGN(4) ;");
         writer_.println("    _eheap = . ;");
+        writer_.println("    __HeapLimit = . ;");
         writer_.println("  } >" + dataRegion);
         writer_.println();
 
@@ -684,16 +698,19 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
                 ("Allocate some space for a stack at the end of memory because the stack grows " +
                  "downward.  This is just the minimum stack size that will be allowed; the stack " +
                  "can actually grow larger. Use this symbol to check for overflow."));
-        writer_.println("_stack_limit = . ;");
+        writer_.println("  __StackLimit = . ;");
+        writer_.println("  /* Ensure stack size is properly aligned. */");
+        writer_.println("  _min_stack_size = (_min_stack_size + 3) & 0x03 ;");
         writer_.println("  .stack ORIGIN(" + dataRegion + ") + LENGTH(" + dataRegion + ") - _min_stack_size :");
         writer_.println("  {");
         writer_.println("    _sstack = . ;");
         writer_.println("    . += _min_stack_size ;");
-        writer_.println("    . = ALIGN(4) ;");
         writer_.println("    _estack = . ;");
+        writer_.println("    __StackTop = . ;");
         writer_.println("  } >" + dataRegion);
-
-        writer_.println("  ASSERT(_estack - _stack_limit <= _min_stack_size, \"Error: Not enough room for stack.\");");
+        writer_.println("  PROVIDE(__stack = __StackTop);");
+        writer_.println();
+        writer_.println("  ASSERT((_estack - __StackLimit) >= _min_stack_size, \"Error: Not enough room for stack.\");");
         writer_.println();
     }
 
