@@ -32,7 +32,6 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 import com.microchip.mplab.crownkingx.xPIC;
 import java.util.ArrayList;
 import java.util.List;
-import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
@@ -61,45 +60,27 @@ public class InterruptList {
          * are named "edc:Interrupt" and "edc:InterruptRequest".
          */
         Interrupt(Node node) {
-            name_ = node.getAttributes().getNamedItem("edc:cname").getNodeValue();
-            description_ = node.getAttributes().getNamedItem("edc:desc").getNodeValue();
-
-            Node memberAttrNode = node.getAttributes().getNamedItem("ltx:memberofperipheral");
-            if(null != memberAttrNode) {
-                owningPeripheral_ = memberAttrNode.getNodeValue();
-            } else {
-                owningPeripheral_ = "";
-            }
-
-            irq_ = Integer.decode(node.getAttributes().getNamedItem("edc:irq").getNodeValue());
+            name_ = Utils.getNodeAttribute(node, "edc:cname", "");
+            description_ = Utils.getNodeAttribute(node, "edc:desc", "");
+            owningPeripheral_ = Utils.getNodeAttribute(node, "ltx:memberofperipheral", "");
+            irq_ = Utils.getNodeAttributeAsInt(node, "edc:irq", -1);
         }
 
-        /* Get the name of the interrupt as it would be used in code.
-         */
-        public String getName() {
-            return name_;
-        }
+        /* Get the name of the interrupt as it would be used in code. */
+        public String getName()              { return name_; }
 
-        /* Get a description of the interrupt as would be used in a simple comment.
-         */
-        public String getDescription() {
-            return description_;            
-        }
+        /* Get a description of the interrupt as would be used in a simple comment. */
+        public String getDescription()       { return description_; }
 
         /* Get the name of the peripheral that uses this interrupt.  This is not used by MIPS
-         * devices and so will return an empty string.
-         */
-        public String getOwningPeripheral() {
-            return owningPeripheral_;
-        }
+         * devices and so will return an empty string. */
+        public String getOwningPeripheral()  { return owningPeripheral_; }
 
         /* Get the IRQ or vector number for this interrupt, depending on if this was created from an
-         * "edc:Interrupt" (vector) or "edc:InterruptRequest" (IRQ) node.
-         */
-        public int getIntNumber() {
-            return irq_;
-        }
+         * "edc:Interrupt" (vector) or "edc:InterruptRequest" (IRQ) node. */
+        public int getIntNumber()            { return irq_; }
     }
+
 
     final private ArrayList<Interrupt> vectors_;
     final private ArrayList<Interrupt> requests_;
@@ -113,24 +94,12 @@ public class InterruptList {
         requests_ = new ArrayList<>(32);
 
         Node intListNode = pic.first("InterruptList");     // The "edc:" prefix is not needed here.
-        NamedNodeMap intListAttrs = intListNode.getAttributes();
 
         // Look for attributes pertaining to the list node itself.
         //
-        Node defaultBaseNode = intListAttrs.getNamedItem("ltx:defaultbaseaddr");
-        if(null != defaultBaseNode) {
-            defaultBaseAddr_ = (long)Long.decode(defaultBaseNode.getNodeValue()) & 0xFFFFFFFF;
-        }
-
-        Node shadowRegsNode = intListAttrs.getNamedItem("edc:shadowsetcount");
-        if(null != shadowRegsNode) {
-            shadowRegs_ = (int)Integer.decode(shadowRegsNode.getNodeValue());
-        }
-
-        Node varOffsetsNode = intListAttrs.getNamedItem("edc:hasvariableoffsets");
-        if(null != varOffsetsNode) {
-            usesVariableOffsets_ = Boolean.parseBoolean(varOffsetsNode.getNodeValue());
-        }
+        defaultBaseAddr_ = Utils.getNodeAttributeAsLong(intListNode, "ltx:defaultbaseaddr", 0) & 0xFFFFFFFF;
+        shadowRegs_ = Utils.getNodeAttributeAsInt(intListNode, "edc:shadowsetcount", 1);
+        usesVariableOffsets_ = Utils.getNodeAttributeAsBool(intListNode, "edc:hasvariableoffsets", false);
 
         // Now look at the child nodes, which will be the interrupt vectors ("edc:Interrupt") and 
         // interrupt requests ("edc:InterruptRequest").  The latter is present only on PIC32MX 

@@ -442,11 +442,11 @@ public class StuffGenerator {
         output.add(target.getCpuName());
         output.add(System.getProperty("packslib.packsfolder"));
 
-        Document atdfDoc = target.getAtdfDocument();
+        AtdfDoc atdfDoc = target.getAtdfDocument();
         if(null != atdfDoc) {
-            List<TargetDevice.AtdfParameter> params = target.getAtdfParameters(atdfDoc, null);
-            for(TargetDevice.AtdfParameter p : params) {
-                output.add(p.name + " = " + p.value + "  ;  " + p.caption);
+            List<AtdfDoc.Parameter> params = atdfDoc.getAtdfParameters(null);
+            for(AtdfDoc.Parameter p : params) {
+                output.add(p.getName() + " = " + p.getValue() + "  ;  " + p.getCaption());
             }
         }
 

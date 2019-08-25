@@ -246,7 +246,69 @@ public class Utils {
         return filteredChildren;
     }
 
-// TODO:  Add functions to get attributes of Nodes
+    /* Return given node attribute as a String or return the given fallback value if the node does
+     * not have an attribute of the given name.
+     */
+    public static String getNodeAttribute(Node node, String attrname, String fallback) {
+        Node attrNode = node.getAttributes().getNamedItem(attrname);
+        String attrValue = fallback;
+
+        if(null != attrNode)
+            attrValue = attrNode.getNodeValue();
+
+        return attrValue;
+    }
+
+    /* Like above, but attempts to parse the attribute value as an integer.  This will return the 
+     * fallback value if the attribute does not exist or if the value cannot be parsed as an int.
+    */
+    public static int getNodeAttributeAsInt(Node node, String attrname, int fallback) {
+        int result = fallback;
+
+        try {
+            String attrStr = getNodeAttribute(node, attrname, null);
+
+            if(null != attrStr)
+                result = Integer.decode(attrStr);
+        } catch(NumberFormatException nfe) {
+            result = fallback;
+        }
+
+        return result;
+    }
+
+    /* Like above, but attempts to parse the attribute value as a long.  This will return the 
+     * fallback value if the attribute does not exist or if the value cannot be parsed as a long.
+    */
+    public static long getNodeAttributeAsLong(Node node, String attrname, long fallback) {
+        long result = fallback;
+
+        try {
+            String attrStr = getNodeAttribute(node, attrname, null);
+
+            if(null != attrStr)
+                result = Long.decode(attrStr);
+        } catch(NumberFormatException nfe) {
+            result = fallback;
+        }
+
+        return result;
+    }
+
+    /* Like above, but attempts to parse the attribute value as a boolean.  This will return the 
+     * fallback value if the attribute does not exist.  This will return False if the attribute does
+     * exist, but it is not the string "True" (ignoring case).
+    */
+    public static boolean getNodeAttributeAsBool(Node node, String attrname, boolean fallback) {
+        boolean result = fallback;
+
+        String attrStr = getNodeAttribute(node, attrname, null);
+        if(null != attrStr)
+            result = Boolean.parseBoolean(attrStr);
+
+        return result;
+    }
+
 
     /* Return today's date with the given date format.  See the Java docs for SimpleDateFormat for
      * what the format string should contain.  Note that the format string is case-sensive ("m" is 

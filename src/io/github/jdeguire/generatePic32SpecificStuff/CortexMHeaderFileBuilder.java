@@ -30,7 +30,6 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import com.microchip.crownking.edc.SFR;
-import com.microchip.mplab.crownkingx.xPIC;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -72,8 +71,9 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
 
         // Initialize the map with the listed peripherals.
         for(Node node : peripheralNodes) {
-            Node attr = node.getAttributes().getNamedItem("edc:cname");
-            peripheralSFRs_.put(attr.getNodeValue(), new ArrayList<SFR>(10));
+            String peripheralName = Utils.getNodeAttribute(node, "edc:cname", null);
+            if(null != peripheralName)
+                peripheralSFRs_.put(peripheralName, new ArrayList<SFR>(10));
         }
 
         // Now, get all of the SFRs and put them with their member peripherals.

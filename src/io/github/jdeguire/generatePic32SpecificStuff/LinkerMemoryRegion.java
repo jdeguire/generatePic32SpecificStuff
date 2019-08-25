@@ -80,10 +80,10 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
      * be CODE.
      */
     LinkerMemoryRegion(Node regionNode, Type type) {
-        this(regionNode.getAttributes().getNamedItem("edc:regionid").getNodeValue(),
+        this(Utils.getNodeAttribute(regionNode, "edc:regionid", ""),
              0,
-             (long)Long.decode(regionNode.getAttributes().getNamedItem("edc:beginaddr").getNodeValue()),
-             (long)Long.decode(regionNode.getAttributes().getNamedItem("edc:endaddr").getNodeValue()),
+             Utils.getNodeAttributeAsLong(regionNode, "edc:beginaddr", 0),
+             Utils.getNodeAttributeAsLong(regionNode, "edc:endaddr", 0),
              type);
     }
 
