@@ -175,7 +175,7 @@ public class TargetDevice {
 					case "armv7m":                               // Cortex M3
 					case "armv7em":                              // Cortex M4, M7
                         // NOTE:  Microchip's EDC files do not actually distinguish between ARMv7-M
-                        //        and ARMV7-EM, so we'll do it here.
+                        //        and ARMV7E-M, so we'll do it here.
                         if(getCpuName().equals("cortex-m3"))
     						arch = TargetArch.ARMV7M;
                         else

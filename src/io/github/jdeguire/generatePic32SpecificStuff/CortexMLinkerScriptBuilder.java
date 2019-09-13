@@ -256,11 +256,19 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
                  "persist through software resets."));
         writer_.println("  .persist (NOLOAD) :");
         writer_.println("  {");
+        if(hasCache) {
+            writer_.println("    /* Ensure normal and persistent sections do not overlap 32-byte cache line. */");
+            writer_.println("    . = ALIGN(32) ;");
+        }
         writer_.println("    _persist_begin = .;");
         writer_.println("    __persist_start__ = .;");
         writer_.println("    *(.persist .persist.*)");
         writer_.println("    *(.pbss .pbss.*)");
-        writer_.println("    . = ALIGN(4) ;");
+        if(hasCache) {
+            writer_.println("    . = ALIGN(32) ;");
+        } else {
+            writer_.println("    . = ALIGN(4) ;");
+        }
         writer_.println("    __persist_end__ = .;");
         writer_.println("    _persist_end = .;");
         writer_.println("  } > ram");

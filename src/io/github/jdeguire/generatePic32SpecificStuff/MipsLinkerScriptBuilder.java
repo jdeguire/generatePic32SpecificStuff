@@ -72,7 +72,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         outputCtorSections();
         outputReadOnlySections();
         outputDebugDataSection(target.hasFpu(), target.supportsDspR2Ase());
-        outputDataSections();
+        outputDataSections(target.hasL1Cache());
         outputRuntimeMemorySections();
         outputElfDebugSections();
 
@@ -89,7 +89,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
     }
     
 
-    /* Different MIPS devices families have differently-sized boot memory regions and different ways
+    /* Different MIPS device families have differently-sized boot memory regions and different ways
      * the debugger reserves memory in them.  We have to figure this out based on the region size 
      * and create the regions needed manually.
      */
@@ -101,7 +101,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
          */
 
         if(lmr.getLength() <= (3 * 1024)) {
-            // PIC32MM and small PIC32MX:
+            // PIC32MM and small PIC32MX
             addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0x9FC00490, 0x9FC00BF0));
             addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC00490, 0x9FC00490));
             addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
@@ -541,7 +541,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
     
     /* Output sections for data as opposed to code.
     */
-    private void outputDataSections() {
+    private void outputDataSections(boolean hasCache) {
         String dataRegion;
 
         if(null != findRegionByName("kseg0_data_mem"))
@@ -575,11 +575,19 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
                  "persist through software resets."));
         writer_.println("  .persist (NOLOAD) :");
         writer_.println("  {");
+        if(hasCache) {
+            writer_.println("    /* Ensure normal and persistent sections do not overlap 16-byte cache line. */");
+            writer_.println("    . = ALIGN(16) ;");
+        }
         writer_.println("    _persist_begin = .;");
         writer_.println("    __persist_start__ = .;");
         writer_.println("    *(.persist .persist.*)");
         writer_.println("    *(.pbss .pbss.*)");
-        writer_.println("    . = ALIGN(4) ;");
+        if(hasCache) {
+            writer_.println("    . = ALIGN(16) ;");
+        } else {
+            writer_.println("    . = ALIGN(4) ;");
+        }
         writer_.println("    __persist_end__ = .;");
         writer_.println("    _persist_end = .;");
         writer_.println("  } >" + dataRegion);

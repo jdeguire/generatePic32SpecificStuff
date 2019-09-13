@@ -94,13 +94,13 @@ public abstract class HeaderFileBuilder {
     
     /* Add the license header to the linker file opened by the given writer.
      */
-    protected void outputLicenseHeader() {
+    protected void outputLicenseHeader(boolean useApache) {
         String header = (Utils.generatedByString() + "\n\n" +
                          Utils.generatorLicenseString() + "\n\n" +
                          "                                               ******\n\n" + 
                          "This file is generated based on source files included with Microchip " +
                          "Technology's XC32 toolchain.  Microchip's license is reproduced below:\n\n" +
-                         Utils.microchipLicenseString());
+                         (useApache ? Utils.apacheLicenseString() : Utils.microchipLicenseString()));
 
 // TODO:  The Atmel header files have a different license, so this needs to be updated.
 

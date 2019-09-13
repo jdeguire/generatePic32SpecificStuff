@@ -444,7 +444,7 @@ public class StuffGenerator {
 
         AtdfDoc atdfDoc = target.getAtdfDocument();
         if(null != atdfDoc) {
-            List<AtdfDoc.Parameter> params = atdfDoc.getAtdfParameters(null);
+            List<AtdfDoc.Parameter> params = atdfDoc.getDeviceParameters();
             for(AtdfDoc.Parameter p : params) {
                 output.add(p.getName() + " = " + p.getValue() + "  ;  " + p.getCaption());
             }

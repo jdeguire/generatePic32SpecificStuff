@@ -61,6 +61,7 @@ public class Utils {
                     };
     }
 
+
     /* Write a multiline C comment using the given writer, automatically wrapping the string at 100
      * characters.  This will add 'indent' number of spaces before the comment block (max 60).  The 
      * comment will be laid out like the one containing this text.  This does not trim whitespace.
@@ -95,6 +96,7 @@ public class Utils {
      * string while adding newline ('\n') characters into it where needed to wrap the string to the
      * given width.
      */
+// TODO:  This should probably just return an array of lines
     public static String createWrappedString(String str, int width) {
         if(str.isEmpty()) {
             return "";
@@ -131,7 +133,8 @@ public class Utils {
                 case ' ':
                 case '\t':
                     lastWhiteSpace = index;
-                    // fall through
+                    ++count;
+                    break;
                 default:
                     ++count;
                     break;
@@ -163,6 +166,7 @@ public class Utils {
         
         return sb.toString();
     }
+
 
     /* Find the first child of the given node that meets the criteria set by the other arguments.  
      * Set the argument to null to allow the child to always pass through the filter.  For example,
@@ -310,6 +314,24 @@ public class Utils {
     }
 
 
+    /* Strip off trailing decimal digits from the given string and return the result.  This is useful
+     * for getting the basename of a peripheral.  For example, "ADC1" would return "ADC" and "GMAC"
+     * would just return "GMAC".
+     */
+    public static String getInstanceBasename(String instance) {
+        String basename = "";
+
+        if(null != instance  &&  !instance.isEmpty()) {
+            int basesplit = instance.length()-1;
+            while(basesplit > 0  &&  Character.isDigit(instance.charAt(basesplit)))
+                --basesplit;
+
+            basename = instance.substring(0, basesplit+1);
+        }
+
+        return basename;
+    }
+
     /* Return today's date with the given date format.  See the Java docs for SimpleDateFormat for
      * what the format string should contain.  Note that the format string is case-sensive ("m" is 
      * for minutes and "M" is for months, for example) and that the number of successive letters may
@@ -366,8 +388,8 @@ public class Utils {
     }
 
     /* This is the license as was given in Microchip's generated processor-specific files.  This 
-     * should be included in files that this generates because these files are based on the ones
-     * Microchip provides with XC32.
+     * should be included in link script and MIPS header files that this generates because these 
+     * files are based on the ones Microchip provides with XC32.
      */
     public static String microchipLicenseString() {
         return ("Copyright (c) 2018, Microchip Technology Inc. and its subsidiaries (\"Microchip\")\n" +
@@ -399,5 +421,27 @@ public class Utils {
                 "WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR " +
                 "OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF " +
                 "ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.");
+    }
+
+    /* This is the license as was given in Atmel's generated processor-specific files.  This 
+     * should be included in Atmel header files that this generates because these files are based 
+     * on the ones Microchip provides with XC32 for the SAM devices.
+     */
+    public static String apacheLicenseString() {
+        return ("Copyright (c) 2018 Microchip Technology Inc.\n" +
+                "\n" +
+                "SPDX-License-Identifier: Apache-2.0\n" +
+                "\n" +
+                "Licensed under the Apache License, Version 2.0 (the \"License\"); you may " +
+                "not use this file except in compliance with the License. " +
+                "You may obtain a copy of the License at \n" +
+                "\n" +
+                "http://www.apache.org/licenses/LICENSE-2.0" + "\n" +
+                "\n" +
+                "Unless required by applicable law or agreed to in writing, software " +
+                "distributed under the License is distributed on an AS IS BASIS, WITHOUT " +
+                "WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. " +
+                "See the License for the specific language governing permissions and " +
+                "limitations under the License.");
     }
 }

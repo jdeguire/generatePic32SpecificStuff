@@ -56,7 +56,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         populateSFRs(target);
 
 
-        outputLicenseHeader();
+        outputLicenseHeader(true);
 
         closeHeaderFile();
     }

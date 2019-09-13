@@ -38,7 +38,6 @@ import org.openide.windows.TopComponent;
 import org.openide.util.NbBundle.Messages;
 
 import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
-import java.util.ArrayList;
 import javax.swing.JFileChooser;
 
 /**
