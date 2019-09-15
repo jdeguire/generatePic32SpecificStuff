@@ -29,18 +29,20 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.edc.Bitfield;
 import com.microchip.crownking.edc.SFR;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.w3c.dom.Node;
 
 /**
  * A subclass of the HeaderFileBuilder that handles ARM Cortex-M devices.
  */
 public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
-
-    private final HashMap<String, ArrayList<SFR>> peripheralSFRs_ = new HashMap<>(20);
+    
+    private final LinkedHashMap<String, ArrayList<SFR>> peripheralSFRs_ = new LinkedHashMap<>(20);
 
     CortexMHeaderFileBuilder(String basepath) {
         super(basepath);
@@ -55,8 +57,10 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         peripheralSFRs_.clear();
         populateSFRs(target);
 
-
         outputLicenseHeader(true);
+
+        Map.Entry<String, ArrayList<SFR>> entry = peripheralSFRs_.entrySet().iterator().next();
+        outputSFRDefinition(entry.getValue().get(0));
 
         closeHeaderFile();
     }
@@ -81,7 +85,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         for(SFR sfr : allSFRs) {
             // Anything above this range is reserved for system functions and the ARM private 
             // peripheral bus (NVIC, SysTic, etc.), which we can ignore.
-            if(target.getRegisterAddress(sfr) < 0xE0000000) {
+            if(target.getRegisterAddress(sfr) < 0xE0000000L) {
                 // This gets the member peripherals from the "ltx:memberofperipheral" XML attribute.
                 List<String> peripheralIDs = sfr.getPeripheralIDs();
 
@@ -94,6 +98,82 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                     }
                 }
             }
+        }
+    }
+
+    private void outputSFRDefinition(SFR sfr) {
+        if(null != sfr) {
+            String type = getTypeFromSfrWidth(sfr);
+            
+            outputNoAssemblyStart();
+
+            writer_.println("typedef union {");
+            writer_.println("  struct {");
+
+            int nextpos = 0;
+            int gap;
+            for(Bitfield bf : sfr.getBitfields()) {
+                int place = bf.getPlace().intValue();
+                int width = bf.getWidth().intValue();
+
+                // Do we have a gap we need to fill in our bitfield?
+                gap = place - nextpos;
+                if(gap > 0) {
+                    writer_.println("    " + type + "  :" + gap + ";");
+                }
+
+                String fieldstr = "    " + type + "  " + bf.getName() + ":" + width + ";";
+                while(fieldstr.length() < 36)
+                    fieldstr += ' ';
+
+                if(width > 1) {
+                    fieldstr += String.format("/* bit: %2d..%2d  %s */", place, place+width, bf.getDesc());
+                } else {
+                    fieldstr += String.format("/* bit:     %2d  %s */", place, bf.getDesc());                    
+                }
+
+                writer_.println(fieldstr);
+                nextpos = place + width;
+            }
+
+            // Fill unused bits at end if needed
+            gap = (int)sfr.getWidth() - nextpos;
+            if(gap > 0) {
+                writer_.println("    " + type + "  :" + gap + ";");
+            }
+
+            writer_.println("  } bit;");
+            writer_.println("  " + type + " reg;");
+
+            String name = sfr.getName();
+            String peripheral = sfr.getPeripheralIDs().get(0);
+            if(name.startsWith(peripheral)) {
+                writer_.println("} " + name + "_Type;");
+            } else {
+                writer_.println("} " + peripheral + "_" + name + "_Type;");
+            }
+
+            outputNoAssemblyEnd();
+        }
+    }
+
+    private void outputNoAssemblyStart() {
+        writer_.println("#if !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__))");
+    }
+
+    private void outputNoAssemblyEnd() {
+        writer_.println("#endif /* !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__)) */");
+    }
+
+    private String getTypeFromSfrWidth(SFR sfr) {
+        int regSize = (int)sfr.getWidth();
+
+        if(regSize <= 8) {
+            return "uint8_t";
+        } else if(regSize <= 16) {
+            return "uint16_t";
+        } else {
+            return "uint32_t";
         }
     }
 }
