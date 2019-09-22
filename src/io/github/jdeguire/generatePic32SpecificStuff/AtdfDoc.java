@@ -53,12 +53,12 @@ import org.xml.sax.SAXException;
 public class AtdfDoc {
 
     /**
-     * This encapsulates the info from "parameter" XML nodes, which contains macro names and values
+     * This encapsulates the info from "parameter" XML nodes, which contain macro names and values
      * that pertain to the device itself or its peripheral instances.  Property and Parameter XML 
      * nodes are pretty much the same, but we'll have different classes in case that changes in the 
      * future.
      */
-    public class Parameter{
+    public class Parameter {
         private final String name_;
         private final String value_;
         private final String caption_;
@@ -80,7 +80,7 @@ public class AtdfDoc {
     }
 
     /**
-     * This encapsulates the info from "property" XML nodes, which contains macro names and values
+     * This encapsulates the info from "property" XML nodes, which contain macro names and values
      * that pertain to the device itself.  Property and Parameter XML nodes are pretty much the 
      * same, but we'll have different classes in case that changes in the future.
      */
@@ -141,8 +141,8 @@ public class AtdfDoc {
     }
 
     /**
-     * This encapsulates the info from the "memory-segment" XML nodes, which appear to contain info about
-     * the pins used by a particular peripheral instance.
+     * This encapsulates the info from the "memory-segment" XML nodes, which appear to contain info
+     * about the pins used by a particular peripheral instance.
      */
     public class MemSegment {
         private final String name_;
@@ -171,10 +171,71 @@ public class AtdfDoc {
         public long getPageSize()      { return pageSize_; }
     }
 
+    /**
+     * This encapsulates the info from "register" XML nodes, which contain basic info about a 
+     * peripheral register, such as its access type and offset.
+     */
+    public class Register {
+        public static final int REG_READ  = 0x01;
+        public static final int REG_WRITE = 0x02;
+        public static final int REG_RW    = 0x03;
+
+        private final String name_;
+        private final long offset_;
+        private final int rw_;
+        private final int size_;
+        private final int count_;
+        private final long init_;
+        private final String caption_;
+
+        Register(Node atdfNode) {
+           name_ = Utils.getNodeAttribute(atdfNode, "name", "");
+           offset_ = Utils.getNodeAttributeAsLong(atdfNode, "offset", 0);
+           
+           int rw_temp = 0;
+           String readwrite = Utils.getNodeAttribute(atdfNode, "rw", "R");
+           for(char c : readwrite.toCharArray()) {
+               if('r' == c  ||  'R' == c) {
+                   rw_temp |= REG_READ;
+               } else if('w' == c  ||  'W' == c) {
+                   rw_temp |= REG_WRITE;
+               }
+           }
+           rw_ = rw_temp;
+
+           size_ = Utils.getNodeAttributeAsInt(atdfNode, "size", 1);
+           count_ = Utils.getNodeAttributeAsInt(atdfNode, "count", 1);
+           init_ = Utils.getNodeAttributeAsLong(atdfNode, "initval", 0);
+           caption_ = Utils.getNodeAttribute(atdfNode, "caption", "");
+        }
+
+        /* Get the regiser name. */
+        public String getName()        { return name_; }
+
+        /* Get number of bytes from which this register is offset from the base peripheral address. */
+        public long getBaseOffset()    { return offset_; }
+
+        /* Return a value indicating the read/write access of this register. */
+        public int getRw()             { return rw_; }
+
+        /* Get the size of the register in bytes. */
+        public int getSize()           { return size_; }
+
+        /* Get the number of registers that match this definition. */
+        public int getCount()          { return count_; }
+
+        /* Get the initial value of the register. */
+        public long getInitValue()     { return init_; }
+
+        /* Get the regiser caption, which would be a C comment describing the register. */
+        public String getCaption()     { return caption_; }
+    }
+
 
     private static final HashMap<String, String> DOC_CACHE_ = new HashMap<>(100);
     private final Node deviceNode_;
-    
+    private final Node modulesNode_;
+
     /* Create a new AtdfDoc object by opening the appropriate ATDF file in the MPLAB X database.  If
      * the file cannot be found or if it does not appear to be a valid ATDF file, this will throw
      * an exception to indicate such.
@@ -204,17 +265,18 @@ public class AtdfDoc {
             Element atdfElement = doc.getDocumentElement();
             Node devicesNode = Utils.filterFirstChildNode((Node)atdfElement, "devices", null, null);
             deviceNode_ = Utils.filterFirstChildNode(devicesNode, "device", "name", devname);
+            modulesNode_ = Utils.filterFirstChildNode((Node)atdfElement, "modules", null, null);
 
             if(null == deviceNode_) {
                 throw new SAXException("Device node not found for device " + devname +
                                         ".  Is " + atdfPath + " a valid ATDF file?");
             }
 
-            // Just try this as a simple sanity check.
-            if(null == getPeripheralsNode()) {
-                throw new SAXException("Peripherals node not found for device " + devname +
+            if(null == modulesNode_) {
+                throw new SAXException("Modules node not found for device " + devname +
                                         ".  Is " + atdfPath + " a valid ATDF file?");
             }
+
         } else {
             throw new FileNotFoundException("Cannot find ATDF file for device " + devname);
         }
@@ -367,6 +429,24 @@ public class AtdfDoc {
         }
 
         return id;
+    }
+
+    /* Get a Register object for the given named register as part of the named peripheral.  The 
+     * object will contain some information about the register, such as its size and its read/write
+     * access.  This will return null if the register could not be found.
+     */
+    public Register getPeripheralRegister(String peripheral, String register) {
+        String peripheralBase = Utils.getInstanceBasename(peripheral);
+        String registerBase = Utils.getInstanceBasename(register);
+        Node moduleNode = Utils.filterFirstChildNode(modulesNode_, "module", "name", peripheralBase);
+        Node regGroupNode = Utils.filterFirstChildNode(moduleNode, "register-group", "name", peripheralBase);
+        Node registerNode = Utils.filterFirstChildNode(regGroupNode, "register", "name", registerBase);
+
+        if(null != registerNode) {
+            return new Register(registerNode);
+        } else {
+            return null;
+        }
     }
 
 

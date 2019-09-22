@@ -51,6 +51,12 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
     @Override
     public void generate(TargetDevice target) throws java.io.FileNotFoundException {
         String basename = target.getDeviceName();
+        AtdfDoc atdfDoc;
+        try {
+            atdfDoc = new AtdfDoc(basename);
+        } catch(Exception ex) {
+            throw new java.io.FileNotFoundException(ex.getMessage());
+        }
 
         createNewHeaderFile(target);
 
@@ -60,12 +66,20 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         outputLicenseHeader(true);
 
         Map.Entry<String, ArrayList<SFR>> entry = peripheralSFRs_.entrySet().iterator().next();
-        outputSFRDefinition(entry.getValue().get(0));
+        String previousBasename = "";
+        for(SFR sfr : entry.getValue()) {
+            String sfrBasename = Utils.getInstanceBasename(sfr.getName());
+            if(!previousBasename.equals(sfrBasename)) {
+                previousBasename = sfrBasename;
+                outputSFRDefinition(sfr, atdfDoc);
+            }
+        }
 
         closeHeaderFile();
     }
 
     private void populateSFRs(TargetDevice target) {
+// TODO:  Do we even need this first part?  Could we just add peripherals as they appear?
         // The "edc:" prefix is not needed because we're going through the 'xPIC' object.
         Node peripheralListNode = target.getPic().first("PeripheralList");
 
@@ -93,6 +107,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                     String peripheralId = peripheralIDs.get(0);
                     ArrayList<SFR> peripheralList = peripheralSFRs_.get(peripheralId);
 
+// TODO:  Could we just add peripherals as they appear (ie. when this is null)?
                     if(null != peripheralList) {
                         peripheralList.add(sfr);
                     }
@@ -101,59 +116,201 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
-    private void outputSFRDefinition(SFR sfr) {
+    private void outputSFRDefinition(SFR sfr, AtdfDoc atdfDoc) {
         if(null != sfr) {
+            ArrayList<String> bits = new ArrayList<>(32);
+            ArrayList<String> vecs = new ArrayList<>(32);
+//            ArrayList<String> macros = new ArrayList<>(32);
+
             String type = getTypeFromSfrWidth(sfr);
-            
+            int bfNextpos = 0;
+            int bfGap;
+            String vecName = "";
+            String vecDesc = "";
+            int vecPlace = 0;
+            int vecWidth = 0;
+            int vecNextpos = 0;
+            int vecGap;
+            boolean hasVecs = false;
+            for(Bitfield bf : sfr.getBitfields()) {
+                String bfName = bf.getName();
+                String bfDesc = bf.getDesc();
+                int bfPlace = bf.getPlace().intValue();
+                int bfWidth = bf.getWidth().intValue();
+
+                // Do we have a gap we need to fill in our bitfield?
+                bfGap = bfPlace - bfNextpos;
+                if(bfGap > 0) {
+                    if(!vecName.isEmpty()) {
+                        vecGap = vecPlace - vecNextpos;
+                        if(vecGap > 0)
+                            vecs.add("    " + type + "  :" + vecGap + ";");
+
+                        String vecstr = "    " + type + "  " + vecName + ":" + vecWidth + ";";
+                        while(vecstr.length() < 36)
+                            vecstr += ' ';
+
+                        if(vecWidth > 1) {
+                            vecstr += String.format("/* bit: %2d..%2d  %s */", vecPlace, vecPlace+vecWidth-1, vecDesc);
+                        } else {
+                            vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
+                        }
+
+                        vecs.add(vecstr);
+                        vecName = "";
+                        vecNextpos = vecPlace + vecWidth;
+                    }
+
+                    bits.add("    " + type + "  :" + bfGap + ";");
+                }
+
+                // Check if we need to start a new vector or continue a vector from this bitfield.
+                String bfBasename = Utils.getInstanceBasename(bfName);
+                if(!bfBasename.equals(bfName)  &&  bfWidth == 1) {
+                    if(bfBasename.equals(vecName)) {
+                        // Continue a current vector.
+                        ++vecWidth;
+                    } else {
+                        // Start a new vector and output the old one.
+                        if(!vecName.isEmpty()) {
+                            vecGap = vecPlace - vecNextpos;
+                            if(vecGap > 0)
+                                vecs.add("    " + type + "  :" + vecGap + ";");
+
+                            String vecstr = "    " + type + "  " + vecName + ":" + vecWidth + ";";
+                            while(vecstr.length() < 36)
+                                vecstr += ' ';
+
+                            if(vecWidth > 1) {
+                                vecstr += String.format("/* bit: %2d..%2d  %s */", vecPlace, vecPlace+vecWidth-1, vecDesc);
+                            } else {
+                                vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
+                            }
+
+                            vecs.add(vecstr);
+                            vecName = "";
+                            vecNextpos = vecPlace + vecWidth;
+                        }
+
+                        vecName = bfBasename;
+                        vecDesc = bfDesc.replaceAll("\\d", "x");
+                        vecPlace = bfPlace;
+                        vecWidth = 1;
+                        hasVecs = true;
+                    }
+                } else if(!vecName.isEmpty()) {
+                    // Not part of a vector, so any existing one has ended.
+                    vecGap = vecPlace - vecNextpos;
+                    if(vecGap > 0)
+                        vecs.add("    " + type + "  :" + vecGap + ";");
+
+                    String vecstr = "    " + type + "  " + vecName + ":" + vecWidth + ";";
+                    while(vecstr.length() < 36)
+                        vecstr += ' ';
+
+                    if(vecWidth > 1) {
+                        vecstr += String.format("/* bit: %2d..%2d  %s */", vecPlace, vecPlace+vecWidth-1, vecDesc);
+                    } else {
+                        vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
+                    }
+
+                    vecs.add(vecstr);
+                    vecName = "";
+                    vecNextpos = vecPlace + vecWidth;
+                }
+
+
+                String bitstr = "    " + type + "  " + bfName + ":" + bfWidth + ";";
+                while(bitstr.length() < 36)
+                    bitstr += ' ';
+
+                if(bfWidth > 1) {
+                    bitstr += String.format("/* bit: %2d..%2d  %s */", bfPlace, bfPlace+bfWidth-1, bfDesc);
+                } else {
+                    bitstr += String.format("/* bit:     %2d  %s */", bfPlace, bfDesc);                    
+                }
+
+                bits.add(bitstr);
+                bfNextpos = bfPlace + bfWidth;
+            }
+
+            // Add last vector field if one is present.
+            if(!vecName.isEmpty()) {
+                vecGap = vecPlace - vecNextpos;
+                if(vecGap > 0)
+                    vecs.add("    " + type + "  :" + vecGap + ";");
+
+                String vecstr = "    " + type + "  " + vecName + ":" + vecWidth + ";";
+                while(vecstr.length() < 36)
+                    vecstr += ' ';
+
+                if(vecWidth > 1) {
+                    vecstr += String.format("/* bit: %2d..%2d  %s */", vecPlace, vecPlace+vecWidth-1, vecDesc);
+                } else {
+                    vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
+                }
+
+                vecs.add(vecstr);
+                vecNextpos = vecPlace + vecWidth;
+            }
+
+            // Fill unused bits at end if needed.
+            bfGap = (int)sfr.getWidth() - bfNextpos;
+            if(bfGap > 0) {
+                bits.add("    " + type + "  :" + bfGap + ";");
+            }
+
+            vecGap = (int)sfr.getWidth() - vecNextpos;
+            if(vecGap > 0) {
+                vecs.add("    " + type + "  :" + vecGap + ";");
+            }
+
+            String sfrName = Utils.getInstanceBasename(sfr.getName());
+            String peripheralBasename = Utils.getInstanceBasename(sfr.getPeripheralIDs().get(0));
+            AtdfDoc.Register atdfRegister = atdfDoc.getPeripheralRegister(peripheralBasename, sfrName);
+
+            if(!sfrName.startsWith(peripheralBasename))
+                sfrName = peripheralBasename + "_" + sfrName;
+
+            String rwStr;
+            switch(atdfRegister.getRw()) {
+                case AtdfDoc.Register.REG_RW:
+                    rwStr = "R/W";
+                    break;
+                case AtdfDoc.Register.REG_READ:
+                    rwStr = "R";
+                    break;
+                default:
+                    rwStr = "W";
+                    break;
+            }
+
+            String captionStr = ("/* -------- " + sfrName + " : (" + peripheralBasename + " Offset: ");
+            captionStr += String.format("0x%02X", atdfRegister.getBaseOffset());
+            captionStr += ") (" + rwStr + " " + sfr.getWidth()+ ") " + atdfRegister.getCaption();
+            captionStr += " -------- */";
+
+            writer_.println(captionStr);
             outputNoAssemblyStart();
 
             writer_.println("typedef union {");
             writer_.println("  struct {");
-
-            int nextpos = 0;
-            int gap;
-            for(Bitfield bf : sfr.getBitfields()) {
-                int place = bf.getPlace().intValue();
-                int width = bf.getWidth().intValue();
-
-                // Do we have a gap we need to fill in our bitfield?
-                gap = place - nextpos;
-                if(gap > 0) {
-                    writer_.println("    " + type + "  :" + gap + ";");
-                }
-
-                String fieldstr = "    " + type + "  " + bf.getName() + ":" + width + ";";
-                while(fieldstr.length() < 36)
-                    fieldstr += ' ';
-
-                if(width > 1) {
-                    fieldstr += String.format("/* bit: %2d..%2d  %s */", place, place+width, bf.getDesc());
-                } else {
-                    fieldstr += String.format("/* bit:     %2d  %s */", place, bf.getDesc());                    
-                }
-
-                writer_.println(fieldstr);
-                nextpos = place + width;
+            for(String bitstr : bits) {
+                writer_.println(bitstr);
             }
-
-            // Fill unused bits at end if needed
-            gap = (int)sfr.getWidth() - nextpos;
-            if(gap > 0) {
-                writer_.println("    " + type + "  :" + gap + ";");
-            }
-
             writer_.println("  } bit;");
-            writer_.println("  " + type + " reg;");
-
-            String name = sfr.getName();
-            String peripheral = sfr.getPeripheralIDs().get(0);
-            if(name.startsWith(peripheral)) {
-                writer_.println("} " + name + "_Type;");
-            } else {
-                writer_.println("} " + peripheral + "_" + name + "_Type;");
+            if(hasVecs) {
+                writer_.println("  struct {");
+                for(String vecstr : vecs) {
+                    writer_.println(vecstr);
+                }
+                writer_.println("  } vec;");
             }
+            writer_.println("  " + type + " reg;");
+            writer_.println("} " + sfrName + "_Type;");
 
             outputNoAssemblyEnd();
+            writer_.println();
         }
     }
 

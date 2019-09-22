@@ -315,8 +315,8 @@ public class Utils {
 
 
     /* Strip off trailing decimal digits from the given string and return the result.  This is useful
-     * for getting the basename of a peripheral.  For example, "ADC1" would return "ADC" and "GMAC"
-     * would just return "GMAC".
+     * for getting the basename of a peripheral or register field.  For example, "ADC1" would return
+     * "ADC" and "GMAC" would just return "GMAC".
      */
     public static String getInstanceBasename(String instance) {
         String basename = "";
