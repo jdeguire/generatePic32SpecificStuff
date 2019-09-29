@@ -30,7 +30,9 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import com.microchip.crownking.edc.Bitfield;
+import com.microchip.crownking.edc.Option;
 import com.microchip.crownking.edc.SFR;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,6 +68,15 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         outputLicenseHeader(true);
 
         Map.Entry<String, ArrayList<SFR>> entry = peripheralSFRs_.entrySet().iterator().next();
+
+        String peripheralName = entry.getKey();
+        String peripheralId = atdfDoc.getPeripheralModuleId(peripheralName);
+        String peripheralMacro = peripheralName + "_" + peripheralId;
+        writer_.println();
+        writeStringMacro(writer_, peripheralMacro.toUpperCase(), "", "");
+        writePeripheralVersionMacro(writer_, peripheralName, atdfDoc);
+        writer_.println();
+
         String previousBasename = "";
         for(SFR sfr : entry.getValue()) {
             String sfrBasename = Utils.getInstanceBasename(sfr.getName());
@@ -120,7 +131,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         if(null != sfr) {
             ArrayList<String> bits = new ArrayList<>(32);
             ArrayList<String> vecs = new ArrayList<>(32);
-//            ArrayList<String> macros = new ArrayList<>(32);
+            ArrayList<String> macros = new ArrayList<>(32);
+
+            String sfrName = Utils.getInstanceBasename(sfr.getName());
+            String peripheralBasename = Utils.getInstanceBasename(sfr.getPeripheralIDs().get(0));
+            AtdfDoc.Register atdfRegister = atdfDoc.getPeripheralRegister(peripheralBasename, sfrName);
+
+            if(!sfrName.startsWith(peripheralBasename))
+                sfrName = peripheralBasename + "_" + sfrName;            
 
             String type = getTypeFromSfrWidth(sfr);
             int bfNextpos = 0;
@@ -156,10 +174,18 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                             vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
                         }
 
-                        vecs.add(vecstr);
+                        String macroBasename = sfrName + "_" + vecName;
+                        String posMacroName = macroBasename + "_Pos";
+                        String maskMacroName = macroBasename + "_Msk";
+                        String valueMacroName = macroBasename + "(value)";
+                        macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(vecPlace) + ")", sfrName + ": " + vecDesc));
+                        macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << vecWidth)-1, posMacroName), ""));
+                        macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));
+
+                        vecs.add(vecstr); 
                         vecName = "";
                         vecNextpos = vecPlace + vecWidth;
-                    }
+                   }
 
                     bits.add("    " + type + "  :" + bfGap + ";");
                 }
@@ -186,6 +212,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                             } else {
                                 vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
                             }
+
+                            String macroBasename = sfrName + "_" + vecName;
+                            String posMacroName = macroBasename + "_Pos";
+                            String maskMacroName = macroBasename + "_Msk";
+                            String valueMacroName = macroBasename + "(value)";
+                            macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(vecPlace) + ")", sfrName + ": " + vecDesc));
+                            macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << vecWidth)-1, posMacroName), ""));
+                            macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));
 
                             vecs.add(vecstr);
                             vecName = "";
@@ -214,6 +248,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                         vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
                     }
 
+                    String macroBasename = sfrName + "_" + vecName;
+                    String posMacroName = macroBasename + "_Pos";
+                    String maskMacroName = macroBasename + "_Msk";
+                    String valueMacroName = macroBasename + "(value)";
+                    macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(vecPlace) + ")", sfrName + ": " + vecDesc));
+                    macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << vecWidth)-1, posMacroName), ""));
+                    macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));
+
                     vecs.add(vecstr);
                     vecName = "";
                     vecNextpos = vecPlace + vecWidth;
@@ -228,6 +270,40 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                     bitstr += String.format("/* bit: %2d..%2d  %s */", bfPlace, bfPlace+bfWidth-1, bfDesc);
                 } else {
                     bitstr += String.format("/* bit:     %2d  %s */", bfPlace, bfDesc);                    
+                }
+
+                if(bfWidth > 1) {
+                    String macroBasename = sfrName + "_" + bfName;
+                    String posMacroName = macroBasename + "_Pos";
+                    String maskMacroName = macroBasename + "_Msk";
+                    String valueMacroName = macroBasename + "(value)";
+                    macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(bfPlace) + ")", sfrName + ": " + bfDesc));
+                    macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << bfWidth)-1, posMacroName), ""));
+                    macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));                    
+                } else {
+                    String macroName = sfrName + "_" + bfName;
+                    String posMacroName = macroName + "_Pos";
+                    macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(bfPlace) + ")", sfrName + ": " + bfDesc));
+                    macros.add(makeStringMacro(macroName, "(_U_(1) << " + posMacroName + ")", ""));
+                }
+
+                if(bf.hasOptions()) {
+                    List<Option> options = bf.getOptions();
+                    String optMacroBasename = sfrName + "_" + bfName + "_";
+
+                    // Create first set of macros containing option values.
+                    for(Option opt : options) {
+                        String valMacroName = optMacroBasename + opt.getName() + "_Val";
+                        macros.add(makeStringMacro("  " + valMacroName, String.format("_U_(0x%X)", opt.getValue()), opt.getDesc()));
+                    }
+
+                    // Now create second set which uses first set.
+                    for(Option opt : options) {
+                        String optMacroName = optMacroBasename + opt.getName();
+                        String valMacroName = optMacroBasename + opt.getName() + "_Val";
+                        String posMacroName = optMacroBasename + opt.getName() + "_Pos";
+                        macros.add(makeStringMacro(optMacroName, "(" + valMacroName + " << " + posMacroName + ")", ""));
+                    }
                 }
 
                 bits.add(bitstr);
@@ -250,6 +326,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                     vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
                 }
 
+                String macroBasename = sfrName + "_" + vecName;
+                String posMacroName = macroBasename + "_Pos";
+                String maskMacroName = macroBasename + "_Msk";
+                String valueMacroName = macroBasename + "(value)";
+                macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(vecPlace) + ")", sfrName + ": " + vecDesc));
+                macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << vecWidth)-1, posMacroName), ""));
+                macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));
+
                 vecs.add(vecstr);
                 vecNextpos = vecPlace + vecWidth;
             }
@@ -265,13 +349,6 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                 vecs.add("    " + type + "  :" + vecGap + ";");
             }
 
-            String sfrName = Utils.getInstanceBasename(sfr.getName());
-            String peripheralBasename = Utils.getInstanceBasename(sfr.getPeripheralIDs().get(0));
-            AtdfDoc.Register atdfRegister = atdfDoc.getPeripheralRegister(peripheralBasename, sfrName);
-
-            if(!sfrName.startsWith(peripheralBasename))
-                sfrName = peripheralBasename + "_" + sfrName;
-
             String rwStr;
             switch(atdfRegister.getRw()) {
                 case AtdfDoc.Register.REG_RW:
@@ -286,12 +363,13 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             }
 
             String captionStr = ("/* -------- " + sfrName + " : (" + peripheralBasename + " Offset: ");
-            captionStr += String.format("0x%02X", atdfRegister.getBaseOffset());
+            String offsetStr = String.format("0x%02X", atdfRegister.getBaseOffset());
+            captionStr += offsetStr;
             captionStr += ") (" + rwStr + " " + sfr.getWidth()+ ") " + atdfRegister.getCaption();
             captionStr += " -------- */";
 
             writer_.println(captionStr);
-            outputNoAssemblyStart();
+            writeNoAssemblyStart(writer_);
 
             writer_.println("typedef union {");
             writer_.println("  struct {");
@@ -309,17 +387,19 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             writer_.println("  " + type + " reg;");
             writer_.println("} " + sfrName + "_Type;");
 
-            outputNoAssemblyEnd();
+            writeNoAssemblyEnd(writer_);
+            writer_.println();
+
+            writeStringMacro(writer_, sfrName + "_OFFSET", "(" + offsetStr + ")", sfrName + " offset: " + atdfRegister.getCaption());
+            writeStringMacro(writer_, sfrName + "_RESETVALUE", String.format("_U_(0x%X)", atdfRegister.getInitValue()), sfrName + " reset value: " + atdfRegister.getCaption());
+            writeStringMacro(writer_, sfrName + "_MASK", String.format("_U_(0x%X)", sfr.getImpl()), sfrName + " mask");
+
+            writer_.println();
+            for(String macro : macros) {
+                writer_.println(macro);
+            }
             writer_.println();
         }
-    }
-
-    private void outputNoAssemblyStart() {
-        writer_.println("#if !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__))");
-    }
-
-    private void outputNoAssemblyEnd() {
-        writer_.println("#endif /* !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__)) */");
     }
 
     private String getTypeFromSfrWidth(SFR sfr) {
@@ -331,6 +411,65 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             return "uint16_t";
         } else {
             return "uint32_t";
+        }
+    }
+
+    private void writeNoAssemblyStart(PrintWriter writer) {
+        writer.println("#if !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__))");
+    }
+
+    private void writeNoAssemblyEnd(PrintWriter writer) {
+        writer.println("#endif /* !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__)) */");
+    }
+
+    private String makeStringMacro(String name, String value, String desc) {
+        String macro = "#define " + name;
+
+        if(null != value  &&  !value.isEmpty()) {
+            do {
+                macro += " ";
+            } while(macro.length() < 36);
+            
+            macro += value;
+
+            if(null != desc  &&  !desc.isEmpty()) {
+                do {
+                    macro += " ";
+                } while(macro.length() < 50);
+
+                macro += "/* " + desc + " */";
+            }
+        }
+
+        return macro;
+    }
+
+    private void writeStringMacro(PrintWriter writer, String name, String value, String desc) {
+        writer.println(makeStringMacro(name, value, desc));
+    }
+
+    private void writePeripheralVersionMacro(PrintWriter writer, String peripheral, AtdfDoc atdfDoc) {
+        String version = atdfDoc.getPeripheralModuleVersion(peripheral);
+
+        if(null == version) {
+            return;
+        }
+
+        String macroName = "REV_" + peripheral;
+
+        if(Character.isDigit(version.charAt(0))) {
+            // Version is probably in numeric form, eg. "1.0.2".
+            String[] vals = version.split("\\.");
+            long versionNum = 0;
+            
+            for(String v : vals) {
+                versionNum = (versionNum << 4) | (Long.parseLong(v));
+            }
+
+            writeStringMacro(writer, macroName, String.format("0x%X", versionNum), "");
+        } else {
+            // Version is probably in letter form, eg. "ZJ".
+            writeStringMacro(writer, macroName, version, "");
         }
     }
 }

@@ -431,9 +431,25 @@ public class AtdfDoc {
         return id;
     }
 
+    /* Get a string representing the version of the module.  Versions appear to come in two flavors:
+     * either a three-place decimal value (eg. "1.0.2") or a series of letters (eg. "B" or "ZJ").
+     * This will return null if the version for the given peripheral could not be found.
+     */
+    public String getPeripheralModuleVersion(String peripheral) {
+        Node moduleNode = getPeripheralModuleNode(peripheral);
+        String version = null;
+
+        if(null != moduleNode) {
+            version = Utils.getNodeAttribute(moduleNode, "version", null);
+        }
+
+        return version;
+    }
+
     /* Get a Register object for the given named register as part of the named peripheral.  The 
      * object will contain some information about the register, such as its size and its read/write
-     * access.  This will return null if the register could not be found.
+     * access.  This will return null if the register could not be found.  The ATDF doc uses only
+     * the basename of the register and so "SOMEREG0" and "SOMEREG1" will return equivalent objects.
      */
     public Register getPeripheralRegister(String peripheral, String register) {
         String peripheralBase = Utils.getInstanceBasename(peripheral);
