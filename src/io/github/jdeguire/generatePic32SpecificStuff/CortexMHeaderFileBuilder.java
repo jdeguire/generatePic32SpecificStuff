@@ -34,6 +34,7 @@ import com.microchip.crownking.edc.Option;
 import com.microchip.crownking.edc.SFR;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +46,7 @@ import org.w3c.dom.Node;
 public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
     
     private final LinkedHashMap<String, ArrayList<SFR>> peripheralSFRs_ = new LinkedHashMap<>(20);
+    private final HashSet<String> peripheralFiles_ = new HashSet<>(20);
 
     CortexMHeaderFileBuilder(String basepath) {
         super(basepath);
@@ -65,30 +67,73 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         peripheralSFRs_.clear();
         populateSFRs(target);
 
-        outputLicenseHeader(true);
-
-        Map.Entry<String, ArrayList<SFR>> entry = peripheralSFRs_.entrySet().iterator().next();
-
-        String peripheralName = entry.getKey();
-        String peripheralId = atdfDoc.getPeripheralModuleId(peripheralName);
-        String peripheralMacro = peripheralName + "_" + peripheralId;
-        writer_.println();
-        writeStringMacro(writer_, peripheralMacro.toUpperCase(), "", "");
-        writePeripheralVersionMacro(writer_, peripheralName, atdfDoc);
-        writer_.println();
-
-        String previousBasename = "";
-        for(SFR sfr : entry.getValue()) {
-            String sfrBasename = Utils.getInstanceBasename(sfr.getName());
-            if(!previousBasename.equals(sfrBasename)) {
-                previousBasename = sfrBasename;
-                outputSFRDefinition(sfr, atdfDoc);
-            }
-        }
+        outputLicenseHeader(writer_, true);
+        outputPeripheralDefinitionHeaders(atdfDoc);
 
         closeHeaderFile();
     }
 
+    /* Each peripheral has a header file filled with structs and macros describing its member SFRs
+     * and layout.  This will output said header files for this device, skipping over ones that have
+     * been already output from previous calls, and write the include directives to the main device 
+     * file needed to include these files.
+     */
+    private void outputPeripheralDefinitionHeaders(AtdfDoc atdfDoc) 
+                                    throws java.io.FileNotFoundException {
+        String previousFilename = "";
+
+        for(Map.Entry<String, ArrayList<SFR>> sfrEntry : peripheralSFRs_.entrySet()) {
+            String peripheralBasename = Utils.getInstanceBasename(sfrEntry.getKey());
+            String peripheralId = atdfDoc.getPeripheralModuleId(peripheralBasename);
+            String peripheralFilename = (peripheralBasename + "_" + peripheralId).toLowerCase();
+            String peripheralMacro = peripheralFilename.toUpperCase();
+            
+            // Did we already generate a file for this peripheral?
+            if(!peripheralFiles_.contains(peripheralFilename)) {
+                // Nope, so time to create one.
+                String filepath = basepath_ + "/component/" + peripheralFilename;
+
+                try(PrintWriter peripheralWriter = Utils.createUnixPrintWriter(filepath)) {
+                    // Output top-of-file stuff like license and include guards
+                    outputLicenseHeader(peripheralWriter, true);
+                    peripheralWriter.println();
+                    peripheralWriter.println("#ifndef _" + peripheralMacro + "_COMPONENT_");
+                    writeStringMacro(peripheralWriter, "_" + peripheralMacro + "_COMPONENT_", "", "");
+                    peripheralWriter.println();
+                    writeStringMacro(peripheralWriter, peripheralMacro, "", "");
+                    writePeripheralVersionMacro(peripheralWriter, peripheralBasename, atdfDoc);
+                    peripheralWriter.println();
+
+                    // Now output the SFR definitions, but without repeats.  That is, "SOMEREG0" and
+                    // "SOMEREG1" should have only one definition between them for "SOMEREG".
+                    String previousBasename = "";
+                    for(SFR sfr : sfrEntry.getValue()) {
+                        String sfrBasename = Utils.getInstanceBasename(sfr.getName());
+                        if(!previousBasename.equals(sfrBasename)) {
+                            previousBasename = sfrBasename;
+                            outputSFRDefinition(peripheralWriter, sfr, atdfDoc);
+                        }
+                    }
+
+// TODO:  We still need to output the final peripheral defintion struct.
+
+                    // End-of-file stuff
+                    peripheralWriter.println("#endif /* _" + peripheralMacro + "_COMPONENT_ */");
+                }
+            }
+
+            // We still may need the include directive even if we already wrote the file previously,
+            // so check for that separately.
+            if(!peripheralFilename.equals(previousFilename)) {
+                writer_.println("#include \"component/" + peripheralFilename + ".h\"");
+                previousFilename = peripheralFilename;
+            }
+        }
+    }
+
+    /* Populate our map of SFRs with the device's SFRs.  The map is organized by the name of the
+     * peripheral that owns the SFR.
+     */
     private void populateSFRs(TargetDevice target) {
 // TODO:  Do we even need this first part?  Could we just add peripherals as they appear?
         // The "edc:" prefix is not needed because we're going through the 'xPIC' object.
@@ -127,7 +172,11 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
-    private void outputSFRDefinition(SFR sfr, AtdfDoc atdfDoc) {
+    /* Output a C struct representing the layout of the given SFR and a bunch of C macros that can
+     * be used to access the fields within the SFR.  This will also output some descriptive text as
+     * given in the ATDF document associated with this device.
+     */
+    private void outputSFRDefinition(PrintWriter writer, SFR sfr, AtdfDoc atdfDoc) {
         if(null != sfr) {
             ArrayList<String> bits = new ArrayList<>(32);
             ArrayList<String> vecs = new ArrayList<>(32);
@@ -137,10 +186,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             String peripheralBasename = Utils.getInstanceBasename(sfr.getPeripheralIDs().get(0));
             AtdfDoc.Register atdfRegister = atdfDoc.getPeripheralRegister(peripheralBasename, sfrName);
 
-            if(!sfrName.startsWith(peripheralBasename))
-                sfrName = peripheralBasename + "_" + sfrName;            
+            if(atdfRegister == null) {
+                System.out.println("huh?");
+            }
 
-            String type = getTypeFromSfrWidth(sfr);
+            if(!sfrName.startsWith(peripheralBasename))
+                sfrName = peripheralBasename + "_" + sfrName;
+
+            String type = getC99TypeFromSfrWidth(sfr);
             int bfNextpos = 0;
             int bfGap;
             String vecName = "";
@@ -301,7 +354,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                     for(Option opt : options) {
                         String optMacroName = optMacroBasename + opt.getName();
                         String valMacroName = optMacroBasename + opt.getName() + "_Val";
-                        String posMacroName = optMacroBasename + opt.getName() + "_Pos";
+                        String posMacroName = optMacroBasename + "Pos";
                         macros.add(makeStringMacro(optMacroName, "(" + valMacroName + " << " + posMacroName + ")", ""));
                     }
                 }
@@ -368,42 +421,54 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             captionStr += ") (" + rwStr + " " + sfr.getWidth()+ ") " + atdfRegister.getCaption();
             captionStr += " -------- */";
 
-            writer_.println(captionStr);
-            writeNoAssemblyStart(writer_);
+            writer.println(captionStr);
+            writeNoAssemblyStart(writer);
 
-            writer_.println("typedef union {");
-            writer_.println("  struct {");
+            writer.println("typedef union {");
+            writer.println("  struct {");
             for(String bitstr : bits) {
-                writer_.println(bitstr);
+                writer.println(bitstr);
             }
-            writer_.println("  } bit;");
+            writer.println("  } bit;");
             if(hasVecs) {
-                writer_.println("  struct {");
+                writer.println("  struct {");
                 for(String vecstr : vecs) {
-                    writer_.println(vecstr);
+                    writer.println(vecstr);
                 }
-                writer_.println("  } vec;");
+                writer.println("  } vec;");
             }
-            writer_.println("  " + type + " reg;");
-            writer_.println("} " + sfrName + "_Type;");
+            writer.println("  " + type + " reg;");
+            writer.println("} " + sfrName + "_Type;");
 
-            writeNoAssemblyEnd(writer_);
-            writer_.println();
+            writeNoAssemblyEnd(writer);
+            writer.println();
 
-            writeStringMacro(writer_, sfrName + "_OFFSET", "(" + offsetStr + ")", sfrName + " offset: " + atdfRegister.getCaption());
-            writeStringMacro(writer_, sfrName + "_RESETVALUE", String.format("_U_(0x%X)", atdfRegister.getInitValue()), sfrName + " reset value: " + atdfRegister.getCaption());
-            writeStringMacro(writer_, sfrName + "_MASK", String.format("_U_(0x%X)", sfr.getImpl()), sfrName + " mask");
+            // The 'impl' is a mask of the SFR bits that are actually implemented.  If the 'impl'
+            // attribute is not present in the "edc:SFRDef" XML node representing the SFR, then
+            // assume that all bits are implemented.
+            long impl;
+            try {
+                impl = sfr.getImpl();
+            } catch(NumberFormatException nfe) {
+                impl = (1 << sfr.getWidth()) - 1;
+            }
 
-            writer_.println();
+            writeStringMacro(writer, sfrName + "_OFFSET", "(" + offsetStr + ")", sfrName + " offset: " + atdfRegister.getCaption());
+            writeStringMacro(writer, sfrName + "_RESETVALUE", String.format("_U_(0x%X)", atdfRegister.getInitValue()), sfrName + " reset value: " + atdfRegister.getCaption());
+            writeStringMacro(writer, sfrName + "_MASK", String.format("_U_(0x%X)", impl), sfrName + " mask");
+
+            writer.println();
             for(String macro : macros) {
-                writer_.println(macro);
+                writer.println(macro);
             }
-            writer_.println();
+            writer.println();
         }
     }
 
-    private String getTypeFromSfrWidth(SFR sfr) {
-        int regSize = (int)sfr.getWidth();
+    /* Return the C99 type to be used with the SFR based on its size.
+     */
+    private String getC99TypeFromSfrWidth(SFR sfr) {
+        long regSize = sfr.getWidth();
 
         if(regSize <= 8) {
             return "uint8_t";
@@ -414,6 +479,9 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
+    /* These next four are just convenience methods used to output idefs and endifs that block out
+     * sections of header file based on wether or not an assembler is running.
+     */
     private void writeNoAssemblyStart(PrintWriter writer) {
         writer.println("#if !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__))");
     }
@@ -422,6 +490,20 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         writer.println("#endif /* !(defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__)) */");
     }
 
+    private void writeAssemblyStart(PrintWriter writer) {
+        writer.println("#if (defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__))");
+    }
+
+    private void writeAssemblyEnd(PrintWriter writer) {
+        writer.println("#endif /* (defined(__ASSEMBLY__) || defined(__IAR_SYSTEMS_ASM__)) */");
+    }
+
+
+    /* Make a C macro of the form "#define <name>              <value>  / * <desc> * /"
+     *
+     * Note that value is padded out to 36 spaces minimum and that the spaces between the '/' and
+     * '*' surrounding the description are not present in the output.
+     */
     private String makeStringMacro(String name, String value, String desc) {
         String macro = "#define " + name;
 
@@ -444,10 +526,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         return macro;
     }
 
+    /* Like above, but also writes it using the given PrintWriter.
+     */
     private void writeStringMacro(PrintWriter writer, String name, String value, String desc) {
         writer.println(makeStringMacro(name, value, desc));
     }
 
+    /* Write a macro for the peripheral's vesrion number as taken from the given ATDF document.
+     */
     private void writePeripheralVersionMacro(PrintWriter writer, String peripheral, AtdfDoc atdfDoc) {
         String version = atdfDoc.getPeripheralModuleVersion(peripheral);
 

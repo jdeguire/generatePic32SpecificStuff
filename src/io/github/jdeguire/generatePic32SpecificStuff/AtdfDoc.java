@@ -406,7 +406,9 @@ public class AtdfDoc {
     }
 
     /* Get the base address of the registers for the given peripheral instance or 0 if the instance
-     * could not be found.
+     * could not be found.  The name of the peripheral would be as it appears in .PIC or .ATDF 
+     * files.  Peripherals with only one instance usually do not have a number ("USB" or "GMAC") and
+     * ones with multiple instances do ("ADC0" or "SERCOM4").
      */
     public long getPeripheralInstanceBaseAddress(String instance) {
         Node instanceNode = getPeripheralInstanceNode(instance);
@@ -418,7 +420,8 @@ public class AtdfDoc {
     /* Get a unique ID string for the given peripheral.  Two peripherals with the same name will have
      * different IDs if they have different implementations.  For example, the ADC on the SAME54 has
      * a different ID from the ADC on the SAMA5D27.  This will return null if the ID for the given
-     * peripheral could not be found.
+     * peripheral could not be found.  This needs only the basename of a peripheral, so "ADC0", 
+     * "ADC1", or just "ADC" will work and return the same ID.
      */
     public String getPeripheralModuleId(String peripheral) {
         Node moduleNode = getPeripheralModuleNode(peripheral);
@@ -433,7 +436,9 @@ public class AtdfDoc {
 
     /* Get a string representing the version of the module.  Versions appear to come in two flavors:
      * either a three-place decimal value (eg. "1.0.2") or a series of letters (eg. "B" or "ZJ").
-     * This will return null if the version for the given peripheral could not be found.
+     * This will return null if the version for the given peripheral could not be found.  This needs
+     * only the basename of a peripheral, so "ADC0", "ADC1", or just "ADC" will work and return the 
+     * same version.
      */
     public String getPeripheralModuleVersion(String peripheral) {
         Node moduleNode = getPeripheralModuleNode(peripheral);

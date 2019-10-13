@@ -43,7 +43,6 @@ import com.microchip.mplab.crownkingx.xMemoryPartition;
 import com.microchip.mplab.crownkingx.xPIC;
 import java.io.IOException;
 import javax.xml.parsers.ParserConfigurationException;
-import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
