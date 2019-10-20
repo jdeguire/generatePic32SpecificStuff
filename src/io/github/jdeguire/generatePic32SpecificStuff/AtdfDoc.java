@@ -41,7 +41,6 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import org.apache.commons.io.FileUtils;
 import org.w3c.dom.Document;
-import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
 
@@ -64,32 +63,6 @@ public class AtdfDoc {
         private final String caption_;
         
         Parameter(Node atdfNode) {
-           name_ = Utils.getNodeAttribute(atdfNode, "name", "");
-           value_ = Utils.getNodeAttribute(atdfNode, "value", "");
-           caption_ = Utils.getNodeAttribute(atdfNode, "caption", "");
-        }
-
-        /* Get the parameter name, which will be formatted like a C macro. */
-        public String getName()     { return name_; }
-
-        /* Get the parameter value. */
-        public String getValue()    { return value_; }
-
-        /* Get the parameter caption, which would be a C comment describing the parameter. */
-        public String getCaption()  { return caption_; }
-    }
-
-    /**
-     * This encapsulates the info from "property" XML nodes, which contain macro names and values
-     * that pertain to the device itself.  Property and Parameter XML nodes are pretty much the 
-     * same, but we'll have different classes in case that changes in the future.
-     */
-    public class Property {
-        private final String name_;
-        private final String value_;
-        private final String caption_;
-        
-        Property(Node atdfNode) {
            name_ = Utils.getNodeAttribute(atdfNode, "name", "");
            value_ = Utils.getNodeAttribute(atdfNode, "value", "");
            caption_ = Utils.getNodeAttribute(atdfNode, "caption", "");
@@ -141,37 +114,6 @@ public class AtdfDoc {
     }
 
     /**
-     * This encapsulates the info from the "memory-segment" XML nodes, which appear to contain info
-     * about the pins used by a particular peripheral instance.
-     */
-    public class MemSegment {
-        private final String name_;
-        private final long startAddr_;
-        private final long totalSize_;
-        private final long pageSize_;
-
-        MemSegment(Node atdfNode) {
-            name_ = Utils.getNodeAttribute(atdfNode, "name", "");
-            startAddr_ = Utils.getNodeAttributeAsLong(atdfNode, "start", 0);
-            totalSize_ = Utils.getNodeAttributeAsLong(atdfNode, "size", 0);
-            pageSize_ = Utils.getNodeAttributeAsLong(atdfNode, "pagesize", 0);
-        }
-
-        /* Get the name of the memory segment, which will be formatted like a C macro. */
-        public String getName()        { return name_; }
-
-        /* Get the starting address of the segment. */
-        public long getStartAddress()  { return startAddr_; }
-
-        /* Get the total size in bytes of the segment. */
-        public long getTotalSize()     { return totalSize_; }
-
-        /* Get the page size of the segment in bytes.  This applied only to flash segments and will 
-         * be 0 for other types of memory. */
-        public long getPageSize()      { return pageSize_; }
-    }
-
-    /**
      * This encapsulates the info from "register" XML nodes, which contain basic info about a 
      * peripheral register, such as its access type and offset.
      */
@@ -187,8 +129,9 @@ public class AtdfDoc {
         private final int count_;
         private final long init_;
         private final String caption_;
+        private final String group_;
 
-        Register(Node atdfNode) {
+        Register(Node atdfNode, String group) {
            name_ = Utils.getNodeAttribute(atdfNode, "name", "");
            offset_ = Utils.getNodeAttributeAsLong(atdfNode, "offset", 0);
            
@@ -207,8 +150,13 @@ public class AtdfDoc {
            count_ = Utils.getNodeAttributeAsInt(atdfNode, "count", 1);
            init_ = Utils.getNodeAttributeAsLong(atdfNode, "initval", 0);
            caption_ = Utils.getNodeAttribute(atdfNode, "caption", "");
+           group_ = group;
         }
 
+        Register(Node atdfNode) {
+            this(atdfNode, "");
+        }
+        
         /* Get the regiser name. */
         public String getName()        { return name_; }
 
@@ -229,13 +177,26 @@ public class AtdfDoc {
 
         /* Get the regiser caption, which would be a C comment describing the register. */
         public String getCaption()     { return caption_; }
+
+        /* Return the register group this is a member of or an empty string if it is a member of the
+         * default group.  This is used, for example, by the DMA controller to split up the main
+         * from the channel-specific registers.  For most registers, this will be empty becaus there
+         * is only one group and it is the same as the name of the owning peripheral.
+         */
+        public String getGroup()       { return group_; }
     }
 
 
     private static final HashMap<String, String> DOC_CACHE_ = new HashMap<>(100);
     private final Node deviceNode_;
     private final Node modulesNode_;
+    private final Node rootNode_;
+    private final String deviceName_;
+    private AtdfDevice atdfDevice_ = null;
 
+       private List<AtdfPeripheral> atdfPeripherals_ = null;
+
+ 
     /* Create a new AtdfDoc object by opening the appropriate ATDF file in the MPLAB X database.  If
      * the file cannot be found or if it does not appear to be a valid ATDF file, this will throw
      * an exception to indicate such.
@@ -251,7 +212,7 @@ public class AtdfDoc {
             devname = "AT" + devname;
 
         String atdfPath = DOC_CACHE_.get(devname);
-
+        
         // Based on example code from:
         // https://www.mkyong.com/java/how-to-read-xml-file-in-java-dom-parser/
         if(null != atdfPath) {
@@ -262,11 +223,13 @@ public class AtdfDoc {
             doc.getDocumentElement().normalize();
 
             // Get to the "<device>" node, which is under the "<devices>" node.
-            Element atdfElement = doc.getDocumentElement();
-            Node devicesNode = Utils.filterFirstChildNode((Node)atdfElement, "devices", null, null);
+            rootNode_ = (Node)doc.getDocumentElement();
+            Node devicesNode = Utils.filterFirstChildNode(rootNode_, "devices", null, null);
+// TODO:  We might be able to remove these nodes in the future.
             deviceNode_ = Utils.filterFirstChildNode(devicesNode, "device", "name", devname);
-            modulesNode_ = Utils.filterFirstChildNode((Node)atdfElement, "modules", null, null);
+            modulesNode_ = Utils.filterFirstChildNode(rootNode_, "modules", null, null);
 
+            // Use these as simple sanity checks to see that we have a valid ATDF file.
             if(null == deviceNode_) {
                 throw new SAXException("Device node not found for device " + devname +
                                         ".  Is " + atdfPath + " a valid ATDF file?");
@@ -277,92 +240,59 @@ public class AtdfDoc {
                                         ".  Is " + atdfPath + " a valid ATDF file?");
             }
 
+            deviceName_ = devname;
+            
         } else {
             throw new FileNotFoundException("Cannot find ATDF file for device " + devname);
         }
     }
 
 
-    /* Get a list of parameters for the device itself, which generally includes things like CPU
-     * revision and whether or not it has an FPU.
+    /* Return the name of the device represented by this AtdfDoc object.
      */
-    public List<Parameter> getDeviceParameters() {
-        ArrayList<Parameter> params = new ArrayList<>(16);
-
-        Node parametersNode = Utils.filterFirstChildNode(deviceNode_, "parameters", null, null);
-
-        if(null != parametersNode) {
-            List<Node> paramsList = Utils.filterAllChildNodes(parametersNode, "param", null, null);
-
-            for(Node paramNode : paramsList) {
-                params.add(new Parameter(paramNode));
-            }
-        }        
-
-        return params;
+    public String getName() {
+        return deviceName_;
     }
 
-    /* Get a list of signature/device ID values for the device.
+    /* Get an object that provides information about the device referenced in this AtdfDoc, such as
+     * its memory layout and electrical parameters.  This will throw an SAXException if the object
+     * could not be created as that would indicate an issue with the ATDF document itself.
      */
-    public List<Property> getDeviceSignatureProperties() {
-        ArrayList<Property> props = new ArrayList<>(8);
+    public AtdfDevice getDevice() throws SAXException {
+        if(null == atdfDevice_)
+            atdfDevice_ = new AtdfDevice(rootNode_);
 
-        Node propGroupsNode = Utils.filterFirstChildNode(deviceNode_, "property-groups", null, null);
-        Node signaturesGroupNode = Utils.filterFirstChildNode(propGroupsNode, "property-group", 
-                                                              "name", "SIGNATURES");
-
-        if(null != signaturesGroupNode) {
-            List<Node> propsList = Utils.filterAllChildNodes(signaturesGroupNode, "property", null, null);
-
-            for(Node propNode : propsList) {
-                props.add(new Property(propNode));
-            }
-        }        
-
-        return props;
+        return atdfDevice_;
     }
-
-    /* Get a list of electrical characteristic values for the device, such as clock speeds and flash
-     * wait states.
+ 
+    /* Get a list of all of the peripherals provided in this ATDF document.  This returns null if
+     * the peripherals cannot be read for some reason.
      */
-    public List<Property> getDeviceElectricalProperties() {
-        ArrayList<Property> props = new ArrayList<>(8);
-
-        Node propGroupsNode = Utils.filterFirstChildNode(deviceNode_, "property-groups", null, null);
-        Node electricalGroupNode = Utils.filterFirstChildNode(propGroupsNode, "property-group", 
-                                                              "name", "ELECTRICAL_CHARACTERISTICS");
-
-        if(null != electricalGroupNode) {
-            List<Node> propsList = Utils.filterAllChildNodes(electricalGroupNode, "property", null, null);
-
-            for(Node propNode : propsList) {
-                props.add(new Property(propNode));
-            }
-        }        
-
-        return props;
-    }
-
-    /* Get a list of the memory segments on the device.
-     */
-    public List<MemSegment> getDeviceMemorySegments() {
-        ArrayList<MemSegment> memories = new ArrayList<>(16);
-
-        Node addrSpacesNode = Utils.filterFirstChildNode(deviceNode_, "address-spaces", null, null);
-        Node baseSpaceNode = Utils.filterFirstChildNode(addrSpacesNode, "address-space", "id", "base");
-
-        if(null != baseSpaceNode) {
-            List<Node> memSegmentList = Utils.filterAllChildNodes(baseSpaceNode, "memory-segment", 
-                                                                  null, null);
-            
-            for(Node memSegmentNode : memSegmentList) {
-                memories.add(new MemSegment(memSegmentNode));
-            }
+    public List<AtdfPeripheral> getAllPeripherals() {
+        if(null == atdfPeripherals_) {
+            atdfPeripherals_ = AtdfPeripheral.getAllPeripherals(rootNode_);
         }
 
-        return memories;
+        return atdfPeripherals_;
     }
 
+    /* Get the peripheral object for the peripheral with the given name (case-sensitive).  The
+     * peripheral object represents all instances of the peripheral on the device and so this needs
+     * only the basename of the peripheral.  For example, "ADC", "ADC0", and "ADC1" would all return
+     * the same thing.
+     */
+    public AtdfPeripheral getPeripheral(String peripheralName) {
+        String basename = Utils.getInstanceBasename(peripheralName);
+
+        for(AtdfPeripheral p : getAllPeripherals()) {
+            if(basename.equals(p.getName()))
+                return p;
+        }
+
+        return null;
+    }
+ 
+    
     /* Get a list of parameters for the given named peripheral instance.  The name of the peripheral
      * would be as it appears in .PIC or .ATDF files.  Peripherals with only one instance usually do
      * not have a number ("USB" or "GMAC") and ones with multiple instances do ("ADC0" or "SERCOM4").
@@ -453,15 +383,15 @@ public class AtdfDoc {
 
     /* Get a Register object for the given named register as part of the named peripheral.  The 
      * object will contain some information about the register, such as its size and its read/write
-     * access.  This will return null if the register could not be found.  The ATDF doc uses only
-     * the basename of the register and so "SOMEREG0" and "SOMEREG1" will return equivalent objects.
+     * access.  The 'peripheral' input can be the basename of the peripheral instead of a specific 
+     * instance.  This will return null if the register could not be found.  If that happens, then
+     * try calling this again using the basename of the register (ie. without any trailing numbers).
      */
     public Register getPeripheralRegister(String peripheral, String register) {
         String peripheralBase = Utils.getInstanceBasename(peripheral);
-        String registerBase = Utils.getInstanceBasename(register);
         Node moduleNode = Utils.filterFirstChildNode(modulesNode_, "module", "name", peripheralBase);
         Node regGroupNode = Utils.filterFirstChildNode(moduleNode, "register-group", "name", peripheralBase);
-        Node registerNode = Utils.filterFirstChildNode(regGroupNode, "register", "name", registerBase);
+        Node registerNode = Utils.filterFirstChildNode(regGroupNode, "register", "name", register);
 
         if(null != registerNode) {
             return new Register(registerNode);
@@ -470,6 +400,23 @@ public class AtdfDoc {
         }
     }
 
+    /* Like above, but allows you to search in a particular register group instead of assuming the 
+     * default.  This is rarely used and so should be a fallback if the above cannot find the register.
+     * Groups appear to be used to organize registers into submodules.  For example, the DMA controller
+     * uses groups to separate channel-specific registers from the main DMA registers.
+    */
+    public Register getPeripheralRegisterInGroup(String peripheral, String group, String register) {
+        String peripheralBase = Utils.getInstanceBasename(peripheral);
+        Node moduleNode = Utils.filterFirstChildNode(modulesNode_, "module", "name", peripheralBase);
+        Node regGroupNode = Utils.filterFirstChildNode(moduleNode, "register-group", "name", group);
+        Node registerNode = Utils.filterFirstChildNode(regGroupNode, "register", "name", register);
+
+        if(null != registerNode) {
+            return new Register(registerNode, group);
+        } else {
+            return null;
+        }        
+    }
 
     /* These next three are convenience methods for getting often-used nodes.  The ATDF file 
      * contains a single <peripherals> node in the <device> node.  The <peripherals> node has many

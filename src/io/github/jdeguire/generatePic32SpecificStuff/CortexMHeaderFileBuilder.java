@@ -73,63 +73,6 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         closeHeaderFile();
     }
 
-    /* Each peripheral has a header file filled with structs and macros describing its member SFRs
-     * and layout.  This will output said header files for this device, skipping over ones that have
-     * been already output from previous calls, and write the include directives to the main device 
-     * file needed to include these files.
-     */
-    private void outputPeripheralDefinitionHeaders(AtdfDoc atdfDoc) 
-                                    throws java.io.FileNotFoundException {
-        String previousFilename = "";
-
-        for(Map.Entry<String, ArrayList<SFR>> sfrEntry : peripheralSFRs_.entrySet()) {
-            String peripheralBasename = Utils.getInstanceBasename(sfrEntry.getKey());
-            String peripheralId = atdfDoc.getPeripheralModuleId(peripheralBasename);
-            String peripheralFilename = (peripheralBasename + "_" + peripheralId).toLowerCase();
-            String peripheralMacro = peripheralFilename.toUpperCase();
-            
-            // Did we already generate a file for this peripheral?
-            if(!peripheralFiles_.contains(peripheralFilename)) {
-                // Nope, so time to create one.
-                String filepath = basepath_ + "/component/" + peripheralFilename;
-
-                try(PrintWriter peripheralWriter = Utils.createUnixPrintWriter(filepath)) {
-                    // Output top-of-file stuff like license and include guards
-                    outputLicenseHeader(peripheralWriter, true);
-                    peripheralWriter.println();
-                    peripheralWriter.println("#ifndef _" + peripheralMacro + "_COMPONENT_");
-                    writeStringMacro(peripheralWriter, "_" + peripheralMacro + "_COMPONENT_", "", "");
-                    peripheralWriter.println();
-                    writeStringMacro(peripheralWriter, peripheralMacro, "", "");
-                    writePeripheralVersionMacro(peripheralWriter, peripheralBasename, atdfDoc);
-                    peripheralWriter.println();
-
-                    // Now output the SFR definitions, but without repeats.  That is, "SOMEREG0" and
-                    // "SOMEREG1" should have only one definition between them for "SOMEREG".
-                    String previousBasename = "";
-                    for(SFR sfr : sfrEntry.getValue()) {
-                        String sfrBasename = Utils.getInstanceBasename(sfr.getName());
-                        if(!previousBasename.equals(sfrBasename)) {
-                            previousBasename = sfrBasename;
-                            outputSFRDefinition(peripheralWriter, sfr, atdfDoc);
-                        }
-                    }
-
-// TODO:  We still need to output the final peripheral defintion struct.
-
-                    // End-of-file stuff
-                    peripheralWriter.println("#endif /* _" + peripheralMacro + "_COMPONENT_ */");
-                }
-            }
-
-            // We still may need the include directive even if we already wrote the file previously,
-            // so check for that separately.
-            if(!peripheralFilename.equals(previousFilename)) {
-                writer_.println("#include \"component/" + peripheralFilename + ".h\"");
-                previousFilename = peripheralFilename;
-            }
-        }
-    }
 
     /* Populate our map of SFRs with the device's SFRs.  The map is organized by the name of the
      * peripheral that owns the SFR.
@@ -172,23 +115,89 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
+    /* Each peripheral has a header file filled with structs and macros describing its member SFRs
+     * and layout.  This will output said header files for this device, skipping over ones that have
+     * been already output from previous calls, and write the include directives to the main device 
+     * file needed to include these files.
+     */
+    private void outputPeripheralDefinitionHeaders(AtdfDoc atdfDoc) 
+                                    throws java.io.FileNotFoundException {
+        String previousFilename = "";
+        HashSet<String> atdfNames = new HashSet<>(20);
+
+        for(Map.Entry<String, ArrayList<SFR>> sfrEntry : peripheralSFRs_.entrySet()) {
+            String peripheralName = sfrEntry.getKey();
+            String peripheralBasename = Utils.getInstanceBasename(peripheralName);
+            String peripheralId = atdfDoc.getPeripheralModuleId(peripheralBasename);
+            String peripheralMacro = (peripheralBasename + "_" + peripheralId).toUpperCase();
+            String peripheralFilename = "/component/" + peripheralMacro.toLowerCase() + ".h";
+
+            // Did we already generate a file for this peripheral?
+            if(!peripheralFiles_.contains(peripheralFilename)) {
+                // Nope, so time to create one.
+                String filepath = basepath_ + peripheralFilename;
+
+                try(PrintWriter peripheralWriter = Utils.createUnixPrintWriter(filepath)) {
+                    // Output top-of-file stuff like license and include guards.
+                    outputLicenseHeader(peripheralWriter, true);
+                    peripheralWriter.println();
+                    peripheralWriter.println("#ifndef _" + peripheralMacro + "_COMPONENT_");
+                    peripheralWriter.println("#define _" + peripheralMacro + "_COMPONENT_");
+                    peripheralWriter.println();
+                    writeStringMacro(peripheralWriter, peripheralMacro, "", "");
+                    writePeripheralVersionMacro(peripheralWriter, peripheralBasename, atdfDoc);
+                    peripheralWriter.println();
+
+                    // Now output the SFR definitions, but without repeats.  We'll use the name as
+                    // given in the ATDF document to determine if we have repeat registers.
+                    atdfNames.clear();
+                    for(SFR sfr : sfrEntry.getValue()) {
+                        AtdfDoc.Register atdfReg = FindAtdfRegisterFromSfr(atdfDoc, peripheralName, sfr);
+
+                        if(null == atdfReg) {
+                            String sfrName = sfr.getName();
+                            String sfrBasename = Utils.getInstanceBasename(sfrName);
+                            System.out.println("wtf?" + sfrName + " " + sfrBasename);
+                        }
+
+                        // Now create our defintion if we haven't already done so.
+                        if(!atdfNames.contains(atdfReg.getName())) {
+                            atdfNames.add(atdfReg.getName());
+                            outputSFRDefinition(peripheralWriter, sfr, atdfReg);                            
+                        }
+                    }
+
+// TODO:  We still need to output the final peripheral defintion struct.
+
+                    // End-of-file stuff
+                    peripheralWriter.println();
+                    peripheralWriter.println("#endif /* _" + peripheralMacro + "_COMPONENT_ */");
+                }
+
+                peripheralFiles_.add(peripheralFilename);
+            }
+
+            // We still may need the include directive even if we already wrote the file previously,
+            // so check for that separately.
+            if(!peripheralFilename.equals(previousFilename)) {
+                writer_.println("#include \"" + peripheralFilename + "\"");
+                previousFilename = peripheralFilename;
+            }
+        }
+    }
+
     /* Output a C struct representing the layout of the given SFR and a bunch of C macros that can
      * be used to access the fields within the SFR.  This will also output some descriptive text as
      * given in the ATDF document associated with this device.
      */
-    private void outputSFRDefinition(PrintWriter writer, SFR sfr, AtdfDoc atdfDoc) {
+    private void outputSFRDefinition(PrintWriter writer, SFR sfr, AtdfDoc.Register atdfReg) {
         if(null != sfr) {
             ArrayList<String> bits = new ArrayList<>(32);
             ArrayList<String> vecs = new ArrayList<>(32);
             ArrayList<String> macros = new ArrayList<>(32);
 
-            String sfrName = Utils.getInstanceBasename(sfr.getName());
+            String sfrName = /*Utils.getInstanceBasename(sfr.getName())*/atdfReg.getName();
             String peripheralBasename = Utils.getInstanceBasename(sfr.getPeripheralIDs().get(0));
-            AtdfDoc.Register atdfRegister = atdfDoc.getPeripheralRegister(peripheralBasename, sfrName);
-
-            if(atdfRegister == null) {
-                System.out.println("huh?");
-            }
 
             if(!sfrName.startsWith(peripheralBasename))
                 sfrName = peripheralBasename + "_" + sfrName;
@@ -403,7 +412,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             }
 
             String rwStr;
-            switch(atdfRegister.getRw()) {
+            switch(atdfReg.getRw()) {
                 case AtdfDoc.Register.REG_RW:
                     rwStr = "R/W";
                     break;
@@ -416,9 +425,9 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             }
 
             String captionStr = ("/* -------- " + sfrName + " : (" + peripheralBasename + " Offset: ");
-            String offsetStr = String.format("0x%02X", atdfRegister.getBaseOffset());
+            String offsetStr = String.format("0x%02X", atdfReg.getBaseOffset());
             captionStr += offsetStr;
-            captionStr += ") (" + rwStr + " " + sfr.getWidth()+ ") " + atdfRegister.getCaption();
+            captionStr += ") (" + rwStr + " " + sfr.getWidth()+ ") " + atdfReg.getCaption();
             captionStr += " -------- */";
 
             writer.println(captionStr);
@@ -446,15 +455,16 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             // The 'impl' is a mask of the SFR bits that are actually implemented.  If the 'impl'
             // attribute is not present in the "edc:SFRDef" XML node representing the SFR, then
             // assume that all bits are implemented.
-            long impl;
+            long impl = sfr.getAsLongElse("impl", (1L << sfr.getWidth()) - 1);
+/*            long impl;
             try {
                 impl = sfr.getImpl();
             } catch(NumberFormatException nfe) {
                 impl = (1 << sfr.getWidth()) - 1;
             }
-
-            writeStringMacro(writer, sfrName + "_OFFSET", "(" + offsetStr + ")", sfrName + " offset: " + atdfRegister.getCaption());
-            writeStringMacro(writer, sfrName + "_RESETVALUE", String.format("_U_(0x%X)", atdfRegister.getInitValue()), sfrName + " reset value: " + atdfRegister.getCaption());
+*/
+            writeStringMacro(writer, sfrName + "_OFFSET", "(" + offsetStr + ")", sfrName + " offset: " + atdfReg.getCaption());
+            writeStringMacro(writer, sfrName + "_RESETVALUE", String.format("_U_(0x%X)", atdfReg.getInitValue()), sfrName + " reset value: " + atdfReg.getCaption());
             writeStringMacro(writer, sfrName + "_MASK", String.format("_U_(0x%X)", impl), sfrName + " mask");
 
             writer.println();
@@ -557,5 +567,48 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             // Version is probably in letter form, eg. "ZJ".
             writeStringMacro(writer, macroName, version, "");
         }
+    }
+
+    /* Attempt to find an ATDF Register corresponding to the given SFR from the MPLAB X API.  This
+     * will try using the full register name (ie. including instance number).  If that fails, it 
+     * will try using the register's basename (ie. without the instance number).  If that fails, it
+     * will try the full instance name, but will attempt to use the name to search in a non-default
+     * register group in the ATDF document.  Finally, this will try searching the non-default groups
+     * for the register's basename.  If all of that fails, this will return null.
+    */
+    private AtdfDoc.Register FindAtdfRegisterFromSfr(AtdfDoc atdfDoc, String peripheral, SFR sfr) {
+        AtdfDoc.Register atdfReg;
+        String sfrName = sfr.getName();
+
+        // Start with the full name, including instance.
+        atdfReg = atdfDoc.getPeripheralRegister(peripheral, sfrName);
+        if(null != atdfReg) {
+            return atdfReg;
+        }
+        
+        // That didn't work, so try the basename.
+        atdfReg = atdfDoc.getPeripheralRegister(peripheral, Utils.getInstanceBasename(sfrName));
+        if(null != atdfReg) {
+            return atdfReg;
+        }
+
+        // That didn't work either, so split the register name into a group name and register name.
+        String split[] = sfrName.split("\\d", 2);
+        if(split.length > 1  &&  !split[1].isEmpty()) {
+            atdfReg = atdfDoc.getPeripheralRegisterInGroup(peripheral, split[0], split[1]);
+            if(null != atdfReg) {
+                return atdfReg;
+            }
+
+            // Last chance, so try the basename with the group.
+            String basename = Utils.getInstanceBasename(split[1]);
+            atdfReg = atdfDoc.getPeripheralRegisterInGroup(peripheral, split[0], basename);
+            if(null != atdfReg) {
+                return atdfReg;
+            }
+        }
+
+        // We couldn't find the register after all that.
+        return null;
     }
 }

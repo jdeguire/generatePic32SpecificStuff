@@ -443,8 +443,8 @@ public class StuffGenerator {
 
         AtdfDoc atdfDoc = target.getAtdfDocument();
         if(null != atdfDoc) {
-            List<AtdfDoc.Parameter> params = atdfDoc.getDeviceParameters();
-            for(AtdfDoc.Parameter p : params) {
+            List<AtdfDevice.Parameter> params = atdfDoc.getDevice().getBasicParameters();
+            for(AtdfDevice.Parameter p : params) {
                 output.add(p.getName() + " = " + p.getValue() + "  ;  " + p.getCaption());
             }
         }
