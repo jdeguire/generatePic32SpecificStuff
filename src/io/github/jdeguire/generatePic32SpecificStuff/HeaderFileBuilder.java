@@ -43,7 +43,7 @@ public abstract class HeaderFileBuilder {
      * the given base path (which should be a directory).  Use getHeaderRelativePath() to
      * determine where a particular target's script will be located.
      */
-    HeaderFileBuilder(String basepath) {
+    public HeaderFileBuilder(String basepath) {
         basepath_ = basepath;
     }
 

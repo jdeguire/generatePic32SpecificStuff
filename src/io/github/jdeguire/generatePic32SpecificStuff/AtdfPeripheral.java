@@ -40,10 +40,10 @@ import org.xml.sax.SAXException;
  * instances and its unique ID.
  * 
  * Each peripheral is made of one or more instances, such as SPI0 and SPI1 being two instances of
- * the SPI peripheral.  This object will contain per-instance info about the peripherals.  Each
- * peripheral also has a unique ID that differentiates it from other peripherals.  For example, the
- * ADC peripheral on the SAMA5 has a different ID than the ADC on the SAME54 because they have
- * different implementations.
+ * the SPI peripheral.  This object will contain objects for the instances.  Each peripheral also
+ * has a unique ID that differentiates it from other peripherals.  For example, the ADC peripheral 
+ * on the SAMA5 has a different ID than the ADC on the SAME54 because they have different 
+ * implementations.
  */
 public class AtdfPeripheral {
     /* We need two Nodes to describe a peripheral for a given device:  one to describe its instances
@@ -51,6 +51,9 @@ public class AtdfPeripheral {
      */
     private final Node moduleInstancesNode_;
     private final Node moduleRegistersNode_;
+    private final ArrayList<AtdfInstance> instances_ = new ArrayList<>(8);
+    private final ArrayList<AtdfRegisterGroup> groups_ = new ArrayList<>(4);
+
 
     /* Create a new AtdfPeripheral for the peripheral of the given name by searching the ATDF 
      * document represented by the given Node for the needed info.  The Node must be the root 
@@ -60,10 +63,10 @@ public class AtdfPeripheral {
     public AtdfPeripheral(Node atdfRootNode, String periphName) throws SAXException {
         Node devicesNode = Utils.filterFirstChildNode(atdfRootNode, "devices", null, null);
         Node deviceNode = Utils.filterFirstChildNode(devicesNode, "device", null, null);
-        Node peripheralsNode = Utils.filterFirstChildNode(deviceNode, "peripherals", null, null);        
-        Node modulesNode = Utils.filterFirstChildNode(atdfRootNode, "modules", null, null);        
-
+        Node peripheralsNode = Utils.filterFirstChildNode(deviceNode, "peripherals", null, null);
         moduleInstancesNode_ = Utils.filterFirstChildNode(peripheralsNode, "module", "name", periphName);
+
+        Node modulesNode = Utils.filterFirstChildNode(atdfRootNode, "modules", null, null);
         moduleRegistersNode_ = Utils.filterFirstChildNode(modulesNode, "module", "name", periphName);
 
         if(null == moduleInstancesNode_  ||  null == moduleRegistersNode_) {
@@ -88,12 +91,86 @@ public class AtdfPeripheral {
         return Utils.getNodeAttribute(moduleInstancesNode_, "name", "");
     }
 
+    /* Get descriptive text for the peripheral.
+     */
+    public String getCaption() {
+        return Utils.getNodeAttribute(moduleRegistersNode_, "caption", "");
+    }
+
+    /* Get a unique ID string for this peripheral.  Two peripherals with the same name will have
+     * different IDs if they have different implementations.  For example, the ADC on the SAME54 has
+     * a different ID from the ADC on the SAMA5D27.  Returns an empty string if no ID is provided.
+     */
+    public String getModuleId(String peripheral) {
+        return Utils.getNodeAttribute(moduleInstancesNode_, "id", "");
+    }
+
+    /* Get a string representing the version of this peripheral.  Versions appear to come in two 
+     * flavors:  either a three-place decimal value (eg. "1.0.2") or a series of letters (eg. "B" or
+     * "ZJ").  Returns an empty string if no version is provided.
+     */
+    public String getModuleVersion(String peripheral) {
+        return Utils.getNodeAttribute(moduleInstancesNode_, "version", "");
+    }
+
+
+    /* Get a list of all of the instances for this peripheral.  This throws an SAXException if an
+     * instance could not be read from the ATDF docuemnt, which indicates a corrupted document.
+     */
+    public List<AtdfInstance> getAllInstances() throws SAXException {
+        if(instances_.isEmpty()) {
+            List<Node> instanceList = Utils.filterAllChildNodes(moduleInstancesNode_, "instance", null, null);
+
+            for(Node instNode : instanceList) {
+                instances_.add(new AtdfInstance(instNode));
+            }
+        }
+
+        return instances_;
+    }
+
+    /* Get a single instance as denoted by the index.  The order of instances is dependent on their
+     * order in the ATDF document, but are generally logical.  That is, calling this on an ADC with
+     * index 0 can be assumed to return an instance for "ADC0", index 1 returns an instance for 
+     * "ADC1", and so on.
+     *
+     * This can throw an SAXException because this calls getAllInstances() to find the instances if 
+     * they haven't yet been found.
+     */
+    public AtdfInstance getInstance(int index) throws SAXException {
+        return getAllInstances().get(index);
+    }
+
+    /* Get a list of all register groups for this peripheral.
+     */
+    public List<AtdfRegisterGroup> getAllRegisterGroups() {
+        if(groups_.isEmpty()) {
+            List<Node> groupList = Utils.filterAllChildNodes(moduleRegistersNode_, "register-group", null, null);
+
+            for(Node groupNode : groupList) {
+                groups_.add(new AtdfRegisterGroup(moduleRegistersNode_, groupNode));
+            }
+        }
+
+        return groups_;
+    }
+
+    /* Get a single register group as denoted by the index.
+     */
+    public AtdfRegisterGroup getRegisterGroup(int index) {
+        return getAllRegisterGroups().get(index);
+    }
 
     /* Search through the ATDF document representd by the given Node for all of the peripherals on
      * the device represented by the document and return a list of them.  This will return an empty
      * list if the Node does not represent a valid ATDF file.  The Node must be the root node of the
      * file.  This is handled in the AtdfDoc class, so use methods in there to get peripherals rather
      * than calling this directly.
+     *
+     * We do this using a static method instead of just having the AtdfDoc class walk the Nodes
+     * because here we need to find and match up two Nodes in two different locations in the file
+     * in order to properly represent a peripheral.  Using this static method should make this
+     * process a bit faster than trying to call the normal constructor over and over again.
      */
     public static List<AtdfPeripheral> getAllPeripherals(Node atdfRootNode) {
         ArrayList<AtdfPeripheral> peripherals = new ArrayList<>(20);

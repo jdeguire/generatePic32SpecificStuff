@@ -44,11 +44,11 @@ import org.w3c.dom.Node;
  * A subclass of the HeaderFileBuilder that handles ARM Cortex-M devices.
  */
 public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
-    
     private final LinkedHashMap<String, ArrayList<SFR>> peripheralSFRs_ = new LinkedHashMap<>(20);
     private final HashSet<String> peripheralFiles_ = new HashSet<>(20);
 
-    CortexMHeaderFileBuilder(String basepath) {
+
+    public CortexMHeaderFileBuilder(String basepath) {
         super(basepath);
     }
 

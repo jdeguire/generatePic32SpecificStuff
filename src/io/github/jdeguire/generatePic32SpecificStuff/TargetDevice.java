@@ -74,7 +74,7 @@ public class TargetDevice {
      * the device's family, so a lack of an exception does not necessarily mean that the device is 
      * fully supported.
      */
-    TargetDevice(String devname) throws com.microchip.crownking.Anomaly, 
+    public TargetDevice(String devname) throws com.microchip.crownking.Anomaly, 
 		org.xml.sax.SAXException,
 		java.io.IOException, 
 		javax.xml.parsers.ParserConfigurationException, 
@@ -111,7 +111,8 @@ public class TargetDevice {
         return pic_;
     }
 
-    /* Get the name of the device provided to the constructor of this class, but in all uppercase.
+    /* Get the name of the device this class represents.  It will be in uppercase and normalized
+     * such that PIC32 devices will start with "PIC32" and SAM devices will start with "ATSAM".
      */
     public String getDeviceName() {
         return name_;
@@ -448,7 +449,7 @@ public class TargetDevice {
     }
 
     /* Return the ATDF document relating to this target device or null if one could not be found.
-     * ATDF documents came from Atmel, so MIPS-based devices do not have them.
+     * ATDF documents came from Atmel, so MIPS-based devices may not have them.
      */
     public AtdfDoc getAtdfDocument() {
         if(null == atdfDoc_) {

@@ -46,7 +46,7 @@ public abstract class LinkerScriptBuilder {
      * the given base path (which should be a directory).  Use getLinkerScriptRelativePath() to
      * determine where a particular target's script will be located.
      */
-    LinkerScriptBuilder(String basepath) {
+    public LinkerScriptBuilder(String basepath) {
         regions_ = new ArrayList<>();
         basepath_ = basepath;
     }

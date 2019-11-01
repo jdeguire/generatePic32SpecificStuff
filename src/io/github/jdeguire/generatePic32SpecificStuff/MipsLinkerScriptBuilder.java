@@ -41,7 +41,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
     private static final long MIPS_RESET_PHYS_ADDR  = 0x1FC00000;
 
 
-    MipsLinkerScriptBuilder(String basepath) {
+    public MipsLinkerScriptBuilder(String basepath) {
         super(basepath);
     }
 

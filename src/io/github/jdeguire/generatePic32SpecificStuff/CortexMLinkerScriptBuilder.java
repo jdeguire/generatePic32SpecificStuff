@@ -36,7 +36,7 @@ import java.util.List;
  */
 public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
     
-    CortexMLinkerScriptBuilder(String basepath) {
+    public CortexMLinkerScriptBuilder(String basepath) {
         super(basepath);
     }
 

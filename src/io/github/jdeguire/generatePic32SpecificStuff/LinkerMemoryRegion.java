@@ -61,7 +61,7 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
     private Type type_;
 
     
-    LinkerMemoryRegion(String name, int access, long start, long end, Type type) {
+    public LinkerMemoryRegion(String name, int access, long start, long end, Type type) {
         name_ = name;
         access_ = access & 0x08;
         startAddr_ = start & 0xFFFFFFFF;
@@ -69,7 +69,7 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
         type_ = type;
     }
 
-    LinkerMemoryRegion(String name, int access, long start, long end) {
+    public LinkerMemoryRegion(String name, int access, long start, long end) {
         this(name, access, start, end, Type.UNSPECIFIED);
     }
 
@@ -79,7 +79,7 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
      * the function called to get the region.  For example, the type for "getCodeRegions()" would 
      * be CODE.
      */
-    LinkerMemoryRegion(Node regionNode, Type type) {
+    public LinkerMemoryRegion(Node regionNode, Type type) {
         this(Utils.getNodeAttribute(regionNode, "edc:regionid", ""),
              0,
              Utils.getNodeAttributeAsLong(regionNode, "edc:beginaddr", 0),
@@ -89,7 +89,7 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
 
     /* Copy constructor.
      */
-    LinkerMemoryRegion(LinkerMemoryRegion other) {
+    public LinkerMemoryRegion(LinkerMemoryRegion other) {
         name_ = other.name_;
         access_ = other.access_;
         startAddr_ = other.startAddr_;

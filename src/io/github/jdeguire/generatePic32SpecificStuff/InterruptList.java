@@ -89,7 +89,7 @@ public class InterruptList {
     private boolean usesVariableOffsets_ = false;
     private int lastVector_ = 0;
 
-    InterruptList(xPIC pic) {
+    public InterruptList(xPIC pic) {
         vectors_ = new ArrayList<>(32);
         requests_ = new ArrayList<>(32);
 

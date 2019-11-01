@@ -39,67 +39,10 @@ import org.xml.sax.SAXException;
  * a convenient abstraction around the "device" XML node in the file.
  */
 public class AtdfDevice {
-
-    /**
-     * This encapsulates the info from "parameter" and "property" XML nodes, which contain macro 
-     * names and values that pertain to the device itself or its peripheral instances.
-     */
-    public class Parameter {
-        private final String name_;
-        private final String value_;
-        private final String caption_;
-        
-        Parameter(Node atdfNode) {
-           name_ = Utils.getNodeAttribute(atdfNode, "name", "");
-           value_ = Utils.getNodeAttribute(atdfNode, "value", "");
-           caption_ = Utils.getNodeAttribute(atdfNode, "caption", "");
-        }
-
-        /* Get the parameter name, which will be formatted like a C macro. */
-        public String getName()     { return name_; }
-
-        /* Get the parameter value. */
-        public String getValue()    { return value_; }
-
-        /* Get the parameter caption, which would be a C comment describing the parameter. */
-        public String getCaption()  { return caption_; }
-    }    
-
-    /**
-     * This encapsulates the info from the "memory-segment" XML nodes, which contain info about how
-     * the address spaces on the device are used.
-     */
-    public class MemSegment {
-        private final String name_;
-        private final long startAddr_;
-        private final long totalSize_;
-        private final long pageSize_;
-
-        MemSegment(Node atdfNode) {
-            name_ = Utils.getNodeAttribute(atdfNode, "name", "");
-            startAddr_ = Utils.getNodeAttributeAsLong(atdfNode, "start", 0);
-            totalSize_ = Utils.getNodeAttributeAsLong(atdfNode, "size", 0);
-            pageSize_ = Utils.getNodeAttributeAsLong(atdfNode, "pagesize", 0);
-        }
-
-        /* Get the name of the memory segment, which will be formatted like a C macro. */
-        public String getName()        { return name_; }
-
-        /* Get the starting address of the segment. */
-        public long getStartAddress()  { return startAddr_; }
-
-        /* Get the total size in bytes of the segment. */
-        public long getTotalSize()     { return totalSize_; }
-
-        /* Get the page size of the segment in bytes.  This applies only to flash segments and will 
-         * be 0 for other types of memory. */
-        public long getPageSize()      { return pageSize_; }
-    }
-
-
     private final Node deviceNode_;
     private final String name_;
     
+
     /* Create a new AtdfDevice uing the given Node.  The Node must be the root element of
      * an ATDF document.  This is handled in the AtdfDoc class, so use methods in there to get an
      * AtdfDevice object instead of calling this directly.
@@ -126,14 +69,14 @@ public class AtdfDevice {
      * as calling TargetDevice.getCpuName() for this device.
      */
     public String getCpuName() {
-        return Utils.getNodeAttribute(deviceNode_, "architecture", "");
+        return Utils.getNodeAttribute(deviceNode_, "architecture", "").toLowerCase();
     }
 
     /* Get a list of parameters for the device, which generally includes things like CPU
      * revision and whether or not it has an FPU.
      */
-    public List<Parameter> getBasicParameters() {
-        ArrayList<Parameter> params = new ArrayList<>(16);
+    public List<AtdfValue> getBasicParameterValues() {
+        ArrayList<AtdfValue> params = new ArrayList<>(16);
 
         Node parametersNode = Utils.filterFirstChildNode(deviceNode_, "parameters", null, null);
 
@@ -141,7 +84,7 @@ public class AtdfDevice {
             List<Node> paramsList = Utils.filterAllChildNodes(parametersNode, "param", null, null);
 
             for(Node paramNode : paramsList) {
-                params.add(new Parameter(paramNode));
+                params.add(new AtdfValue(paramNode));
             }
         }        
 
@@ -150,8 +93,8 @@ public class AtdfDevice {
 
     /* Get a list of signature/device ID values for the device.
      */
-    public List<Parameter> getSignatureParameters() {
-        ArrayList<Parameter> props = new ArrayList<>(8);
+    public List<AtdfValue> getSignatureParameterValues() {
+        ArrayList<AtdfValue> props = new ArrayList<>(8);
 
         Node propGroupsNode = Utils.filterFirstChildNode(deviceNode_, "property-groups", null, null);
         Node signaturesGroupNode = Utils.filterFirstChildNode(propGroupsNode, "property-group", 
@@ -161,7 +104,7 @@ public class AtdfDevice {
             List<Node> propsList = Utils.filterAllChildNodes(signaturesGroupNode, "property", null, null);
 
             for(Node propNode : propsList) {
-                props.add(new Parameter(propNode));
+                props.add(new AtdfValue(propNode));
             }
         }        
 
@@ -171,8 +114,8 @@ public class AtdfDevice {
     /* Get a list of electrical characteristic values for the device, such as clock speeds and flash
      * wait states.
      */
-    public List<Parameter> getElectricalParameters() {
-        ArrayList<Parameter> props = new ArrayList<>(8);
+    public List<AtdfValue> getElectricalParameterValues() {
+        ArrayList<AtdfValue> props = new ArrayList<>(8);
 
         Node propGroupsNode = Utils.filterFirstChildNode(deviceNode_, "property-groups", null, null);
         Node electricalGroupNode = Utils.filterFirstChildNode(propGroupsNode, "property-group", 
@@ -182,17 +125,17 @@ public class AtdfDevice {
             List<Node> propsList = Utils.filterAllChildNodes(electricalGroupNode, "property", null, null);
 
             for(Node propNode : propsList) {
-                props.add(new Parameter(propNode));
+                props.add(new AtdfValue(propNode));
             }
-        }        
+        }
 
         return props;
     }
 
     /* Get a list of the memory segments on the device.
      */
-    public List<MemSegment> getMemorySegments() {
-        ArrayList<MemSegment> memories = new ArrayList<>(16);
+    public List<AtdfMemSegment> getMemorySegments() {
+        ArrayList<AtdfMemSegment> memories = new ArrayList<>(16);
 
         Node addrSpacesNode = Utils.filterFirstChildNode(deviceNode_, "address-spaces", null, null);
         Node baseSpaceNode = Utils.filterFirstChildNode(addrSpacesNode, "address-space", "id", "base");
@@ -202,7 +145,7 @@ public class AtdfDevice {
                                                                   null, null);
             
             for(Node memSegmentNode : memSegmentList) {
-                memories.add(new MemSegment(memSegmentNode));
+                memories.add(new AtdfMemSegment(memSegmentNode));
             }
         }
 
