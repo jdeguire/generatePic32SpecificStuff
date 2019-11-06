@@ -96,7 +96,6 @@ public class Utils {
      * string while adding newline ('\n') characters into it where needed to wrap the string to the
      * given width.
      */
-// TODO:  This should probably just return an array of lines
     public static String createWrappedString(String str, int width) {
         if(str.isEmpty()) {
             return "";
@@ -330,6 +329,26 @@ public class Utils {
         }
 
         return basename;
+    }
+
+    /* Pad the end of the string with spaces such that the string's length is at least 'minLength',
+     * is a multiple of 'multiple', and has at least 'multiple' spaces.  This is useful for making 
+     * "pretty" C macros and declarations.
+     */
+    public static void padStringWithSpaces(String str, int minLength, int multiple) {
+        int paddedLength = str.length();
+        if(paddedLength < minLength) {
+            paddedLength = minLength;
+        }
+
+        if(multiple > 1) {
+            // This should add at least 'multiple' spaces and at most '2*multiple-1' spaces.
+            paddedLength += ((paddedLength + multiple - 1) % multiple) + multiple;
+        }
+
+        while(str.length() < paddedLength) {
+            str += ' ';
+        }
     }
 
     /* Return today's date with the given date format.  See the Java docs for SimpleDateFormat for

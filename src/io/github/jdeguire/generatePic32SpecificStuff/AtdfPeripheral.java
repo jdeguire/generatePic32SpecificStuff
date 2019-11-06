@@ -101,7 +101,7 @@ public class AtdfPeripheral {
      * different IDs if they have different implementations.  For example, the ADC on the SAME54 has
      * a different ID from the ADC on the SAMA5D27.  Returns an empty string if no ID is provided.
      */
-    public String getModuleId(String peripheral) {
+    public String getModuleId() {
         return Utils.getNodeAttribute(moduleInstancesNode_, "id", "");
     }
 
@@ -109,7 +109,7 @@ public class AtdfPeripheral {
      * flavors:  either a three-place decimal value (eg. "1.0.2") or a series of letters (eg. "B" or
      * "ZJ").  Returns an empty string if no version is provided.
      */
-    public String getModuleVersion(String peripheral) {
+    public String getModuleVersion() {
         return Utils.getNodeAttribute(moduleInstancesNode_, "version", "");
     }
 

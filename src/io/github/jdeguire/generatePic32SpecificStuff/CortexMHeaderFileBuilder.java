@@ -29,22 +29,54 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
-import com.microchip.crownking.edc.Bitfield;
-import com.microchip.crownking.edc.Option;
-import com.microchip.crownking.edc.SFR;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
 /**
  * A subclass of the HeaderFileBuilder that handles ARM Cortex-M devices.
  */
 public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
-    private final LinkedHashMap<String, ArrayList<SFR>> peripheralSFRs_ = new LinkedHashMap<>(20);
+
+    /* This is here for convenience when we create custom fields that are "vectors" of adjacent fields
+     */
+    private class BlankBitfield extends AtdfBitfield {
+        public String name_;
+        public String owner_;
+        public String caption_;
+        public long mask_;
+
+        BlankBitfield(String name, String owner, String caption, long mask) {
+            super(null, null, null);
+            name_ = name;
+            owner_ = owner;
+            caption_ = caption;
+            mask_ = mask;
+        }
+
+        BlankBitfield() {
+            this("", "", "", 0);
+        }
+
+        @Override
+        public String getName() { return name_; }
+        
+        @Override
+        public String getOwningRegisterName() { return owner_; }
+
+        @Override
+        public String getCaption() { return caption_; }
+        
+        @Override
+        public long getMask() { return mask_; }
+        
+        @Override
+        public List<AtdfValue> getFieldValues() { return Collections.<AtdfValue>emptyList(); }
+    }
+
     private final HashSet<String> peripheralFiles_ = new HashSet<>(20);
 
 
@@ -64,72 +96,26 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
 
         createNewHeaderFile(target);
 
-        peripheralSFRs_.clear();
-        populateSFRs(target);
+        List<AtdfPeripheral> peripherals = atdfDoc.getAllPeripherals();
 
         outputLicenseHeader(writer_, true);
-        outputPeripheralDefinitionHeaders(atdfDoc);
+        outputPeripheralDefinitionHeaders(peripherals);
 
         closeHeaderFile();
     }
 
-
-    /* Populate our map of SFRs with the device's SFRs.  The map is organized by the name of the
-     * peripheral that owns the SFR.
-     */
-    private void populateSFRs(TargetDevice target) {
-// TODO:  Do we even need this first part?  Could we just add peripherals as they appear?
-        // The "edc:" prefix is not needed because we're going through the 'xPIC' object.
-        Node peripheralListNode = target.getPic().first("PeripheralList");
-
-        // The "edc:" prefix is needed here because we're going through the Node object.
-        List<Node> peripheralNodes = Utils.filterAllChildNodes(peripheralListNode, "edc:Peripheral", 
-                                                               "edc:cname", null);
-
-        // Initialize the map with the listed peripherals.
-        for(Node node : peripheralNodes) {
-            String peripheralName = Utils.getNodeAttribute(node, "edc:cname", null);
-            if(null != peripheralName)
-                peripheralSFRs_.put(peripheralName, new ArrayList<SFR>(10));
-        }
-
-        // Now, get all of the SFRs and put them with their member peripherals.
-        List<SFR> allSFRs = target.getSFRs();
-        for(SFR sfr : allSFRs) {
-            // Anything above this range is reserved for system functions and the ARM private 
-            // peripheral bus (NVIC, SysTic, etc.), which we can ignore.
-            if(target.getRegisterAddress(sfr) < 0xE0000000L) {
-                // This gets the member peripherals from the "ltx:memberofperipheral" XML attribute.
-                List<String> peripheralIDs = sfr.getPeripheralIDs();
-
-                if(!peripheralIDs.isEmpty()) {
-                    String peripheralId = peripheralIDs.get(0);
-                    ArrayList<SFR> peripheralList = peripheralSFRs_.get(peripheralId);
-
-// TODO:  Could we just add peripherals as they appear (ie. when this is null)?
-                    if(null != peripheralList) {
-                        peripheralList.add(sfr);
-                    }
-                }
-            }
-        }
-    }
 
     /* Each peripheral has a header file filled with structs and macros describing its member SFRs
      * and layout.  This will output said header files for this device, skipping over ones that have
      * been already output from previous calls, and write the include directives to the main device 
      * file needed to include these files.
      */
-    private void outputPeripheralDefinitionHeaders(AtdfDoc atdfDoc) 
+    private void outputPeripheralDefinitionHeaders(List<AtdfPeripheral> peripheralList) 
                                     throws java.io.FileNotFoundException {
-        String previousFilename = "";
-        HashSet<String> atdfNames = new HashSet<>(20);
-
-        for(Map.Entry<String, ArrayList<SFR>> sfrEntry : peripheralSFRs_.entrySet()) {
-            String peripheralName = sfrEntry.getKey();
-            String peripheralBasename = Utils.getInstanceBasename(peripheralName);
-            String peripheralId = atdfDoc.getPeripheralModuleId(peripheralBasename);
-            String peripheralMacro = (peripheralBasename + "_" + peripheralId).toUpperCase();
+        for(AtdfPeripheral peripheral : peripheralList) {
+            String peripheralName = peripheral.getName();
+            String peripheralId = peripheral.getModuleId();
+            String peripheralMacro = (peripheralName + "_" + peripheralId).toUpperCase();
             String peripheralFilename = "/component/" + peripheralMacro.toLowerCase() + ".h";
 
             // Did we already generate a file for this peripheral?
@@ -145,25 +131,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                     peripheralWriter.println("#define _" + peripheralMacro + "_COMPONENT_");
                     peripheralWriter.println();
                     writeStringMacro(peripheralWriter, peripheralMacro, "", "");
-                    writePeripheralVersionMacro(peripheralWriter, peripheralBasename, atdfDoc);
+                    writePeripheralVersionMacro(peripheralWriter, peripheral);
                     peripheralWriter.println();
 
-                    // Now output the SFR definitions, but without repeats.  We'll use the name as
-                    // given in the ATDF document to determine if we have repeat registers.
-                    atdfNames.clear();
-                    for(SFR sfr : sfrEntry.getValue()) {
-                        AtdfDoc.Register atdfReg = FindAtdfRegisterFromSfr(atdfDoc, peripheralName, sfr);
-
-                        if(null == atdfReg) {
-                            String sfrName = sfr.getName();
-                            String sfrBasename = Utils.getInstanceBasename(sfrName);
-                            System.out.println("wtf?" + sfrName + " " + sfrBasename);
-                        }
-
-                        // Now create our defintion if we haven't already done so.
-                        if(!atdfNames.contains(atdfReg.getName())) {
-                            atdfNames.add(atdfReg.getName());
-                            outputSFRDefinition(peripheralWriter, sfr, atdfReg);                            
+                    // Output definitions for each register in all of the groups.
+                    for(AtdfRegisterGroup registerGroup : peripheral.getAllRegisterGroups()) {
+                        for(AtdfRegister register : registerGroup.getAllMembers()) {
+                            if(!register.isGroupAlias())
+                                outputRegisterDefinition(peripheralWriter, register);
                         }
                     }
 
@@ -177,315 +152,198 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                 peripheralFiles_.add(peripheralFilename);
             }
 
-            // We still may need the include directive even if we already wrote the file previously,
-            // so check for that separately.
-            if(!peripheralFilename.equals(previousFilename)) {
-                writer_.println("#include \"" + peripheralFilename + "\"");
-                previousFilename = peripheralFilename;
-            }
+            // Include our new peripheral definition header in our main header file.
+            writer_.println("#include \"" + peripheralFilename + "\"");
         }
     }
 
-    /* Output a C struct representing the layout of the given SFR and a bunch of C macros that can
-     * be used to access the fields within the SFR.  This will also output some descriptive text as
+    /* Output a C struct representing the layout of the given register and a bunch of C macros that 
+     * can be used to access the fields within it.  This will also output some descriptive text as
      * given in the ATDF document associated with this device.
      */
-    private void outputSFRDefinition(PrintWriter writer, SFR sfr, AtdfDoc.Register atdfReg) {
-        if(null != sfr) {
-            ArrayList<String> bits = new ArrayList<>(32);
-            ArrayList<String> vecs = new ArrayList<>(32);
-            ArrayList<String> macros = new ArrayList<>(32);
+    private void outputRegisterDefinition(PrintWriter writer, AtdfRegister register) {
+        ArrayList<String> bits = new ArrayList<>(32);
+        ArrayList<String> vecs = new ArrayList<>(32);
+        ArrayList<String> macros = new ArrayList<>(32);
 
-            String sfrName = /*Utils.getInstanceBasename(sfr.getName())*/atdfReg.getName();
-            String peripheralBasename = Utils.getInstanceBasename(sfr.getPeripheralIDs().get(0));
+        String fullRegisterName = register.getName();
+        String peripheralName = register.getOwningPeripheralName();
 
-            if(!sfrName.startsWith(peripheralBasename))
-                sfrName = peripheralBasename + "_" + sfrName;
+        if(!fullRegisterName.startsWith(peripheralName))
+            fullRegisterName = peripheralName + "_" + fullRegisterName;
 
-            String type = getC99TypeFromSfrWidth(sfr);
-            int bfNextpos = 0;
-            int bfGap;
-            String vecName = "";
-            String vecDesc = "";
-            int vecPlace = 0;
-            int vecWidth = 0;
-            int vecNextpos = 0;
-            int vecGap;
-            boolean hasVecs = false;
-            for(Bitfield bf : sfr.getBitfields()) {
-                String bfName = bf.getName();
-                String bfDesc = bf.getDesc();
-                int bfPlace = bf.getPlace().intValue();
-                int bfWidth = bf.getWidth().intValue();
-
-                // Do we have a gap we need to fill in our bitfield?
-                bfGap = bfPlace - bfNextpos;
-                if(bfGap > 0) {
-                    if(!vecName.isEmpty()) {
-                        vecGap = vecPlace - vecNextpos;
-                        if(vecGap > 0)
-                            vecs.add("    " + type + "  :" + vecGap + ";");
-
-                        String vecstr = "    " + type + "  " + vecName + ":" + vecWidth + ";";
-                        while(vecstr.length() < 36)
-                            vecstr += ' ';
-
-                        if(vecWidth > 1) {
-                            vecstr += String.format("/* bit: %2d..%2d  %s */", vecPlace, vecPlace+vecWidth-1, vecDesc);
-                        } else {
-                            vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
-                        }
-
-                        String macroBasename = sfrName + "_" + vecName;
-                        String posMacroName = macroBasename + "_Pos";
-                        String maskMacroName = macroBasename + "_Msk";
-                        String valueMacroName = macroBasename + "(value)";
-                        macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(vecPlace) + ")", sfrName + ": " + vecDesc));
-                        macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << vecWidth)-1, posMacroName), ""));
-                        macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));
-
-                        vecs.add(vecstr); 
-                        vecName = "";
-                        vecNextpos = vecPlace + vecWidth;
-                   }
-
-                    bits.add("    " + type + "  :" + bfGap + ";");
-                }
-
-                // Check if we need to start a new vector or continue a vector from this bitfield.
-                String bfBasename = Utils.getInstanceBasename(bfName);
-                if(!bfBasename.equals(bfName)  &&  bfWidth == 1) {
-                    if(bfBasename.equals(vecName)) {
-                        // Continue a current vector.
-                        ++vecWidth;
-                    } else {
-                        // Start a new vector and output the old one.
-                        if(!vecName.isEmpty()) {
-                            vecGap = vecPlace - vecNextpos;
-                            if(vecGap > 0)
-                                vecs.add("    " + type + "  :" + vecGap + ";");
-
-                            String vecstr = "    " + type + "  " + vecName + ":" + vecWidth + ";";
-                            while(vecstr.length() < 36)
-                                vecstr += ' ';
-
-                            if(vecWidth > 1) {
-                                vecstr += String.format("/* bit: %2d..%2d  %s */", vecPlace, vecPlace+vecWidth-1, vecDesc);
-                            } else {
-                                vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
-                            }
-
-                            String macroBasename = sfrName + "_" + vecName;
-                            String posMacroName = macroBasename + "_Pos";
-                            String maskMacroName = macroBasename + "_Msk";
-                            String valueMacroName = macroBasename + "(value)";
-                            macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(vecPlace) + ")", sfrName + ": " + vecDesc));
-                            macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << vecWidth)-1, posMacroName), ""));
-                            macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));
-
-                            vecs.add(vecstr);
-                            vecName = "";
-                            vecNextpos = vecPlace + vecWidth;
-                        }
-
-                        vecName = bfBasename;
-                        vecDesc = bfDesc.replaceAll("\\d", "x");
-                        vecPlace = bfPlace;
-                        vecWidth = 1;
-                        hasVecs = true;
-                    }
-                } else if(!vecName.isEmpty()) {
-                    // Not part of a vector, so any existing one has ended.
-                    vecGap = vecPlace - vecNextpos;
+        String c99type = getC99TypeFromRegisterSize(register);
+        BlankBitfield vecfield = null;
+        int bfNextpos = 0;
+        int bfGap;
+        int vecNextpos = 0;
+        int vecGap;
+        boolean hasVecs = false;
+        for(AtdfBitfield bitfield : register.getAllBitfields()) {
+            // Do we have a gap we need to fill in our bitfield?
+            bfGap = bitfield.getLsb() - bfNextpos;
+            if(bfGap > 0) {
+                // If there's a gap, then end and write out the vector field if we have one.
+                if(null != vecfield) {
+                    vecGap = vecfield.getLsb() - vecNextpos;
                     if(vecGap > 0)
-                        vecs.add("    " + type + "  :" + vecGap + ";");
+                        vecs.add("    " + c99type + "  :" + vecGap + ";");
 
-                    String vecstr = "    " + type + "  " + vecName + ":" + vecWidth + ";";
-                    while(vecstr.length() < 36)
-                        vecstr += ' ';
+                    vecs.add(makeBitfieldDeclaration(vecfield, c99type));
+                    macros.addAll(makeBitfieldMacros(vecfield, peripheralName, true));
+                    vecNextpos = vecfield.getMsb()+1;
+                    vecfield = null;
+                }
 
-                    if(vecWidth > 1) {
-                        vecstr += String.format("/* bit: %2d..%2d  %s */", vecPlace, vecPlace+vecWidth-1, vecDesc);
-                    } else {
-                        vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
+                bits.add("    " + c99type + "  :" + bfGap + ";");
+            }
+
+            // Check if we need to start a new vector or continue a vector from this bitfield.
+            String bfBasename = Utils.getInstanceBasename(bitfield.getName());
+            if(!bfBasename.equals(bitfield.getName())  &&  bitfield.getBitWidth() == 1) {
+                if(null != vecfield  &&  bfBasename.equals(vecfield.getName())) {
+                    // Continue a current vector.
+                    vecfield.mask_ |= bitfield.getMask();
+                } else {
+                    // Start a new vector and output the old one.
+                    if(null != vecfield) {
+                        vecGap = vecfield.getLsb() - vecNextpos;
+                        if(vecGap > 0)
+                            vecs.add("    " + c99type + "  :" + vecGap + ";");
+
+                        vecs.add(makeBitfieldDeclaration(vecfield, c99type));
+                        macros.addAll(makeBitfieldMacros(vecfield, peripheralName, true));
+                        vecNextpos = vecfield.getMsb()+1;
                     }
 
-                    String macroBasename = sfrName + "_" + vecName;
-                    String posMacroName = macroBasename + "_Pos";
-                    String maskMacroName = macroBasename + "_Msk";
-                    String valueMacroName = macroBasename + "(value)";
-                    macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(vecPlace) + ")", sfrName + ": " + vecDesc));
-                    macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << vecWidth)-1, posMacroName), ""));
-                    macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));
-
-                    vecs.add(vecstr);
-                    vecName = "";
-                    vecNextpos = vecPlace + vecWidth;
+                    vecfield = new BlankBitfield(bfBasename,
+                                                 bitfield.getOwningRegisterName(),
+                                                 bitfield.getCaption().replaceAll("\\d", "x"),
+                                                 bitfield.getMask());
+                    hasVecs = true;
                 }
+            } else if(null != vecfield) {
+                // Not part of a vector, so any existing one has ended.
+                vecGap = vecfield.getLsb() - vecNextpos;
+                if(vecGap > 0)
+                    vecs.add("    " + c99type + "  :" + vecGap + ";");
 
+                vecs.add(makeBitfieldDeclaration(vecfield, c99type));
+                macros.addAll(makeBitfieldMacros(vecfield, peripheralName, true));
+                vecNextpos = vecfield.getMsb()+1;
+                vecfield = null;
+            }
 
-                String bitstr = "    " + type + "  " + bfName + ":" + bfWidth + ";";
-                while(bitstr.length() < 36)
-                    bitstr += ' ';
+            bits.add(makeBitfieldDeclaration(bitfield, c99type));
+            macros.addAll(makeBitfieldMacros(bitfield, peripheralName, bitfield.getBitWidth() > 1));
+            bfNextpos = bitfield.getMsb()+1;
 
-                if(bfWidth > 1) {
-                    bitstr += String.format("/* bit: %2d..%2d  %s */", bfPlace, bfPlace+bfWidth-1, bfDesc);
-                } else {
-                    bitstr += String.format("/* bit:     %2d  %s */", bfPlace, bfDesc);                    
-                }
-
-                if(bfWidth > 1) {
-                    String macroBasename = sfrName + "_" + bfName;
-                    String posMacroName = macroBasename + "_Pos";
-                    String maskMacroName = macroBasename + "_Msk";
-                    String valueMacroName = macroBasename + "(value)";
-                    macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(bfPlace) + ")", sfrName + ": " + bfDesc));
-                    macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << bfWidth)-1, posMacroName), ""));
-                    macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));                    
-                } else {
-                    String macroName = sfrName + "_" + bfName;
-                    String posMacroName = macroName + "_Pos";
-                    macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(bfPlace) + ")", sfrName + ": " + bfDesc));
-                    macros.add(makeStringMacro(macroName, "(_U_(1) << " + posMacroName + ")", ""));
-                }
-
-                if(bf.hasOptions()) {
-                    List<Option> options = bf.getOptions();
-                    String optMacroBasename = sfrName + "_" + bfName + "_";
+            // Some bitfields use C macros to indicate what the different values of the bitfield
+            // mean.  If this has those, then generate them here.
+            try {
+                List<AtdfValue> fieldValues = bitfield.getFieldValues();
+                if(!fieldValues.isEmpty()) {
+                    String valueMacroBasename = fullRegisterName + "_" + bitfield.getName() + "_";
 
                     // Create first set of macros containing option values.
-                    for(Option opt : options) {
-                        String valMacroName = optMacroBasename + opt.getName() + "_Val";
-                        macros.add(makeStringMacro("  " + valMacroName, String.format("_U_(0x%X)", opt.getValue()), opt.getDesc()));
+                    for(AtdfValue val : fieldValues) {
+                        String valueMacroName = valueMacroBasename + val.getName() + "_Val";
+                        String valueMacroValue = "_U_(" + val.getValue() + ")";
+                        String valueMacroCaption = val.getCaption();
+                        macros.add(makeStringMacro("  " + valueMacroName, valueMacroValue, valueMacroCaption));
                     }
 
                     // Now create second set which uses first set.
-                    for(Option opt : options) {
-                        String optMacroName = optMacroBasename + opt.getName();
-                        String valMacroName = optMacroBasename + opt.getName() + "_Val";
-                        String posMacroName = optMacroBasename + "Pos";
+                    for(AtdfValue val : fieldValues) {
+                        String optMacroName = valueMacroBasename + val.getName();
+                        String valMacroName = optMacroName + "_Val";
+                        String posMacroName = valueMacroBasename + "Pos";
                         macros.add(makeStringMacro(optMacroName, "(" + valMacroName + " << " + posMacroName + ")", ""));
                     }
                 }
-
-                bits.add(bitstr);
-                bfNextpos = bfPlace + bfWidth;
+            } catch(SAXException e) {
+                // Couldn't read values; do nothing for now,
             }
-
-            // Add last vector field if one is present.
-            if(!vecName.isEmpty()) {
-                vecGap = vecPlace - vecNextpos;
-                if(vecGap > 0)
-                    vecs.add("    " + type + "  :" + vecGap + ";");
-
-                String vecstr = "    " + type + "  " + vecName + ":" + vecWidth + ";";
-                while(vecstr.length() < 36)
-                    vecstr += ' ';
-
-                if(vecWidth > 1) {
-                    vecstr += String.format("/* bit: %2d..%2d  %s */", vecPlace, vecPlace+vecWidth-1, vecDesc);
-                } else {
-                    vecstr += String.format("/* bit:     %2d  %s */", vecPlace, vecDesc);
-                }
-
-                String macroBasename = sfrName + "_" + vecName;
-                String posMacroName = macroBasename + "_Pos";
-                String maskMacroName = macroBasename + "_Msk";
-                String valueMacroName = macroBasename + "(value)";
-                macros.add(makeStringMacro(posMacroName, "(" + Integer.toString(vecPlace) + ")", sfrName + ": " + vecDesc));
-                macros.add(makeStringMacro(maskMacroName, String.format("(_U_(0x%X) << %s)", (1L << vecWidth)-1, posMacroName), ""));
-                macros.add(makeStringMacro(valueMacroName, String.format("(%s & ((value) << %s))", maskMacroName, posMacroName), ""));
-
-                vecs.add(vecstr);
-                vecNextpos = vecPlace + vecWidth;
-            }
-
-            // Fill unused bits at end if needed.
-            bfGap = (int)sfr.getWidth() - bfNextpos;
-            if(bfGap > 0) {
-                bits.add("    " + type + "  :" + bfGap + ";");
-            }
-
-            vecGap = (int)sfr.getWidth() - vecNextpos;
-            if(vecGap > 0) {
-                vecs.add("    " + type + "  :" + vecGap + ";");
-            }
-
-            String rwStr;
-            switch(atdfReg.getRw()) {
-                case AtdfDoc.Register.REG_RW:
-                    rwStr = "R/W";
-                    break;
-                case AtdfDoc.Register.REG_READ:
-                    rwStr = "R";
-                    break;
-                default:
-                    rwStr = "W";
-                    break;
-            }
-
-            String captionStr = ("/* -------- " + sfrName + " : (" + peripheralBasename + " Offset: ");
-            String offsetStr = String.format("0x%02X", atdfReg.getBaseOffset());
-            captionStr += offsetStr;
-            captionStr += ") (" + rwStr + " " + sfr.getWidth()+ ") " + atdfReg.getCaption();
-            captionStr += " -------- */";
-
-            writer.println(captionStr);
-            writeNoAssemblyStart(writer);
-
-            writer.println("typedef union {");
-            writer.println("  struct {");
-            for(String bitstr : bits) {
-                writer.println(bitstr);
-            }
-            writer.println("  } bit;");
-            if(hasVecs) {
-                writer.println("  struct {");
-                for(String vecstr : vecs) {
-                    writer.println(vecstr);
-                }
-                writer.println("  } vec;");
-            }
-            writer.println("  " + type + " reg;");
-            writer.println("} " + sfrName + "_Type;");
-
-            writeNoAssemblyEnd(writer);
-            writer.println();
-
-            // The 'impl' is a mask of the SFR bits that are actually implemented.  If the 'impl'
-            // attribute is not present in the "edc:SFRDef" XML node representing the SFR, then
-            // assume that all bits are implemented.
-            long impl = sfr.getAsLongElse("impl", (1L << sfr.getWidth()) - 1);
-/*            long impl;
-            try {
-                impl = sfr.getImpl();
-            } catch(NumberFormatException nfe) {
-                impl = (1 << sfr.getWidth()) - 1;
-            }
-*/
-            writeStringMacro(writer, sfrName + "_OFFSET", "(" + offsetStr + ")", sfrName + " offset: " + atdfReg.getCaption());
-            writeStringMacro(writer, sfrName + "_RESETVALUE", String.format("_U_(0x%X)", atdfReg.getInitValue()), sfrName + " reset value: " + atdfReg.getCaption());
-            writeStringMacro(writer, sfrName + "_MASK", String.format("_U_(0x%X)", impl), sfrName + " mask");
-
-            writer.println();
-            for(String macro : macros) {
-                writer.println(macro);
-            }
-            writer.println();
         }
+
+        // Add last vector field if one is present.
+        if(null != vecfield) {
+            vecGap = vecfield.getLsb() - vecNextpos;
+            if(vecGap > 0)
+                vecs.add("    " + c99type + "  :" + vecGap + ";");
+
+            vecs.add(makeBitfieldDeclaration(vecfield, c99type));
+            macros.addAll(makeBitfieldMacros(vecfield, peripheralName, true));
+            vecNextpos = vecfield.getMsb()+1;
+        }
+
+        int bitwidth = register.getSizeInBytes() * 8;
+
+        // Fill unused bits at end if needed.
+        bfGap = bitwidth - bfNextpos;
+        if(bfGap > 0) {
+            bits.add("    " + c99type + "  :" + bfGap + ";");
+        }
+
+        vecGap = bitwidth - vecNextpos;
+        if(vecGap > 0) {
+            vecs.add("    " + c99type + "  :" + vecGap + ";");
+        }
+
+
+        // Now it's time to start writing stuff out.
+        //
+        String captionStr = ("/* -------- " + fullRegisterName + " : (" + peripheralName + " Offset: ");
+        String offsetStr = String.format("0x%02X", register.getBaseOffset());
+        captionStr += offsetStr;
+        captionStr += ") (" + register.getRwAsString() + " " + bitwidth + ") " + register.getCaption();
+        captionStr += " -------- */";
+
+        writer.println(captionStr);
+        writeNoAssemblyStart(writer);
+
+        writer.println("typedef union {");
+        writer.println("  struct {");
+        for(String bitstr : bits) {
+            writer.println(bitstr);
+        }
+        writer.println("  } bit;");
+        if(hasVecs) {
+            writer.println("  struct {");
+            for(String vecstr : vecs) {
+                writer.println(vecstr);
+            }
+            writer.println("  } vec;");
+        }
+        writer.println("  " + c99type + " reg;");
+        writer.println("} " + fullRegisterName + "_Type;");
+
+        writeNoAssemblyEnd(writer);
+        writer.println();
+
+        writeStringMacro(writer, fullRegisterName + "_OFFSET", "(" + offsetStr + ")", fullRegisterName + " offset");
+        writeStringMacro(writer, fullRegisterName + "_RESETVALUE", String.format("_U_(0x%X)", register.getInitValue()), fullRegisterName + " reset value");
+        writeStringMacro(writer, fullRegisterName + "_MASK", String.format("_U_(0x%X)", register.getMask()), fullRegisterName + " mask");
+
+        writer.println();
+        for(String macro : macros) {
+            writer.println(macro);
+        }
+        writer.println();
     }
 
     /* Return the C99 type to be used with the SFR based on its size.
      */
-    private String getC99TypeFromSfrWidth(SFR sfr) {
-        long regSize = sfr.getWidth();
+    private String getC99TypeFromRegisterSize(AtdfRegister reg) {
+        int regSize = reg.getSizeInBytes();
 
-        if(regSize <= 8) {
-            return "uint8_t";
-        } else if(regSize <= 16) {
-            return "uint16_t";
-        } else {
-            return "uint32_t";
+        switch(regSize) {
+            case 1:
+                return "uint8_t";
+            case 2:
+                return "uint16_t";
+            default:
+                return "uint32_t";
         }
     }
 
@@ -518,17 +376,11 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         String macro = "#define " + name;
 
         if(null != value  &&  !value.isEmpty()) {
-            do {
-                macro += " ";
-            } while(macro.length() < 36);
-            
+            Utils.padStringWithSpaces(macro, 36, 4);            
             macro += value;
 
             if(null != desc  &&  !desc.isEmpty()) {
-                do {
-                    macro += " ";
-                } while(macro.length() < 50);
-
+                Utils.padStringWithSpaces(macro, 48, 4);            
                 macro += "/* " + desc + " */";
             }
         }
@@ -544,14 +396,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
 
     /* Write a macro for the peripheral's vesrion number as taken from the given ATDF document.
      */
-    private void writePeripheralVersionMacro(PrintWriter writer, String peripheral, AtdfDoc atdfDoc) {
-        String version = atdfDoc.getPeripheralModuleVersion(peripheral);
+    private void writePeripheralVersionMacro(PrintWriter writer, AtdfPeripheral peripheral) {
+        String version = peripheral.getModuleVersion();
 
-        if(null == version) {
+        if(version.isEmpty()) {
             return;
         }
 
-        String macroName = "REV_" + peripheral;
+        String macroName = "REV_" + peripheral.getName();
 
         if(Character.isDigit(version.charAt(0))) {
             // Version is probably in numeric form, eg. "1.0.2".
@@ -569,46 +421,63 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
-    /* Attempt to find an ATDF Register corresponding to the given SFR from the MPLAB X API.  This
-     * will try using the full register name (ie. including instance number).  If that fails, it 
-     * will try using the register's basename (ie. without the instance number).  If that fails, it
-     * will try the full instance name, but will attempt to use the name to search in a non-default
-     * register group in the ATDF document.  Finally, this will try searching the non-default groups
-     * for the register's basename.  If all of that fails, this will return null.
-    */
-    private AtdfDoc.Register FindAtdfRegisterFromSfr(AtdfDoc atdfDoc, String peripheral, SFR sfr) {
-        AtdfDoc.Register atdfReg;
-        String sfrName = sfr.getName();
+    /* Make a bitfield declaration that would be used as part of a C struct.
+     */
+    private String makeBitfieldDeclaration(AtdfBitfield bitfield, String c99type) {
+        String fieldName = bitfield.getName();
+        String fieldCaption = bitfield.getCaption();
+        int fieldWidth = bitfield.getBitWidth();
+        int fieldStart = bitfield.getLsb();
+        int fieldEnd = bitfield.getMsb();
 
-        // Start with the full name, including instance.
-        atdfReg = atdfDoc.getPeripheralRegister(peripheral, sfrName);
-        if(null != atdfReg) {
-            return atdfReg;
-        }
-        
-        // That didn't work, so try the basename.
-        atdfReg = atdfDoc.getPeripheralRegister(peripheral, Utils.getInstanceBasename(sfrName));
-        if(null != atdfReg) {
-            return atdfReg;
+        String fieldDecl = "    " + c99type + "  " + fieldName + ":" + fieldWidth + ";";
+        Utils.padStringWithSpaces(fieldDecl, 36, 4);
+
+        if(fieldWidth > 1) {
+            fieldDecl += String.format("/* bit: %2d..%2d  %s */", fieldStart, fieldEnd, fieldCaption);
+        } else {
+            fieldDecl += String.format("/* bit:     %2d  %s */", fieldStart, fieldCaption);
         }
 
-        // That didn't work either, so split the register name into a group name and register name.
-        String split[] = sfrName.split("\\d", 2);
-        if(split.length > 1  &&  !split[1].isEmpty()) {
-            atdfReg = atdfDoc.getPeripheralRegisterInGroup(peripheral, split[0], split[1]);
-            if(null != atdfReg) {
-                return atdfReg;
-            }
+        return fieldDecl;
+    }
 
-            // Last chance, so try the basename with the group.
-            String basename = Utils.getInstanceBasename(split[1]);
-            atdfReg = atdfDoc.getPeripheralRegisterInGroup(peripheral, split[0], basename);
-            if(null != atdfReg) {
-                return atdfReg;
-            }
+    /* Create and return a list of C macros that are used to access the given bitfield.  This can 
+     * generate two sets of macros depending on the state of 'extendedMacros'.  The normal set
+     * contains just a position macro and a mask macro.  Extended macros also contain an additional
+     * function-like macro to set the value.
+     */
+    private List<String> makeBitfieldMacros(AtdfBitfield bitfield, String peripheralName, boolean extendedMacros) {
+        ArrayList<String> macroList = new ArrayList<>(3);
+        String fullRegisterName = bitfield.getOwningRegisterName();
+
+        if(!fullRegisterName.startsWith(peripheralName))
+            fullRegisterName = peripheralName + "_" + fullRegisterName;
+ 
+        String qualifiedName = fullRegisterName + "<" + bitfield.getName() + ">";
+        String baseMacroName = fullRegisterName + "_" + bitfield.getName();
+        String posMacroName = baseMacroName + "_Pos";
+
+        macroList.add(makeStringMacro(posMacroName,
+                                      "(" + bitfield.getLsb() + ")",
+                                      qualifiedName + ": " + bitfield.getCaption()));
+
+        if(extendedMacros) {
+            String maskMacroName = baseMacroName + "_Msk";
+            String valueMacroName = baseMacroName + "(value)";
+
+            macroList.add(makeStringMacro(maskMacroName,
+                                          String.format("_U_(0x%X)", bitfield.getMask()),
+                                          ""));
+            macroList.add(makeStringMacro(valueMacroName,
+                                          String.format("(%s & ((value) << %s))", maskMacroName, posMacroName),
+                                          ""));
+        } else {
+            macroList.add(makeStringMacro(baseMacroName,
+                                          String.format("_U_(0x%X)", bitfield.getMask()),
+                                          ""));
         }
 
-        // We couldn't find the register after all that.
-        return null;
+        return macroList;
     }
 }
