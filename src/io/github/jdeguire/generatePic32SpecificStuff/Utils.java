@@ -335,7 +335,7 @@ public class Utils {
      * is a multiple of 'multiple', and has at least 'multiple' spaces.  This is useful for making 
      * "pretty" C macros and declarations.
      */
-    public static void padStringWithSpaces(String str, int minLength, int multiple) {
+    public static String padStringWithSpaces(String str, int minLength, int multiple) {
         int paddedLength = str.length();
         if(paddedLength < minLength) {
             paddedLength = minLength;
@@ -343,11 +343,21 @@ public class Utils {
 
         if(multiple > 1) {
             // This should add at least 'multiple' spaces and at most '2*multiple-1' spaces.
-            paddedLength += ((paddedLength + multiple - 1) % multiple) + multiple;
+            if(0 != (paddedLength % multiple)) {
+                paddedLength += (multiple - (paddedLength % multiple));
+            }
+            if((paddedLength - str.length()) < multiple) {
+                paddedLength += multiple;
+            }
         }
 
-        while(str.length() < paddedLength) {
-            str += ' ';
+        if(paddedLength > str.length()) {
+            char[] spaces = new char[paddedLength - str.length()];
+            Arrays.fill(spaces, ' ');
+            String spacesStr = new String(spaces);
+            return str + spacesStr;
+        } else {
+            return str;
         }
     }
 

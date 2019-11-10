@@ -118,6 +118,12 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             String peripheralMacro = (peripheralName + "_" + peripheralId).toUpperCase();
             String peripheralFilename = "/component/" + peripheralMacro.toLowerCase() + ".h";
 
+            // ARM peripherals (like NVIC, ETM, etc.) do not have IDs, so use this to figure out
+            // which peripherals are ARM ones and do not add those.
+            if(peripheralId.isEmpty()) {
+                continue;
+            }
+
             // Did we already generate a file for this peripheral?
             if(!peripheralFiles_.contains(peripheralFilename)) {
                 // Nope, so time to create one.
@@ -142,7 +148,10 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                         }
                     }
 
-// TODO:  We still need to output the final peripheral defintion struct.
+                    // Now output definitions for the groups themselves
+                    for(AtdfRegisterGroup registerGroup : peripheral.getAllRegisterGroups()) {
+                        outputGroupDefinition(peripheralWriter, registerGroup);
+                    }
 
                     // End-of-file stuff
                     peripheralWriter.println();
@@ -166,24 +175,45 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         ArrayList<String> vecs = new ArrayList<>(32);
         ArrayList<String> macros = new ArrayList<>(32);
 
-        String fullRegisterName = register.getName();
         String peripheralName = register.getOwningPeripheralName();
-
-        if(!fullRegisterName.startsWith(peripheralName))
-            fullRegisterName = peripheralName + "_" + fullRegisterName;
-
+        String fullRegisterName = peripheralName + "_" + register.getName();
         String c99type = getC99TypeFromRegisterSize(register);
         BlankBitfield vecfield = null;
+
         int bfNextpos = 0;
         int bfGap;
         int vecNextpos = 0;
         int vecGap;
         boolean hasVecs = false;
         for(AtdfBitfield bitfield : register.getAllBitfields()) {
+            boolean endCurrentVecfield = true;
+            boolean startNewVecfield = false;
+
             // Do we have a gap we need to fill in our bitfield?
             bfGap = bitfield.getLsb() - bfNextpos;
             if(bfGap > 0) {
-                // If there's a gap, then end and write out the vector field if we have one.
+                // End the current vecfield if there's a gap.
+                bits.add("    " + c99type + "  :" + bfGap + ";");
+            }
+
+            // Check if we need to start a new vector field or continue a vector from this bitfield.
+            // We need a vector field if this bitfield has a width of 1 and has a number at the end
+            // of its name (basename != bitfield name).
+            String bfBasename = Utils.getInstanceBasename(bitfield.getName());
+            boolean bfHasNumberedName = !bfBasename.equals(bitfield.getName());
+            if(bfHasNumberedName  &&  bitfield.getBitWidth() == 1) {
+                if(0 == bfGap  &&  null != vecfield  &&  bfBasename.equals(vecfield.getName())) {
+                    // Continue a current vector.
+                    endCurrentVecfield = false;
+                    vecfield.mask_ |= bitfield.getMask();
+                } else {
+                    // Start a new vector and output the old one.
+                    startNewVecfield = true;
+                }
+            }
+
+            // Do we need to write out our current vector field and possible create a new one?
+            if(endCurrentVecfield) {
                 if(null != vecfield) {
                     vecGap = vecfield.getLsb() - vecNextpos;
                     if(vecGap > 0)
@@ -192,48 +222,20 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                     vecs.add(makeBitfieldDeclaration(vecfield, c99type));
                     macros.addAll(makeBitfieldMacros(vecfield, peripheralName, true));
                     vecNextpos = vecfield.getMsb()+1;
-                    vecfield = null;
                 }
-
-                bits.add("    " + c99type + "  :" + bfGap + ";");
-            }
-
-            // Check if we need to start a new vector or continue a vector from this bitfield.
-            String bfBasename = Utils.getInstanceBasename(bitfield.getName());
-            if(!bfBasename.equals(bitfield.getName())  &&  bitfield.getBitWidth() == 1) {
-                if(null != vecfield  &&  bfBasename.equals(vecfield.getName())) {
-                    // Continue a current vector.
-                    vecfield.mask_ |= bitfield.getMask();
-                } else {
-                    // Start a new vector and output the old one.
-                    if(null != vecfield) {
-                        vecGap = vecfield.getLsb() - vecNextpos;
-                        if(vecGap > 0)
-                            vecs.add("    " + c99type + "  :" + vecGap + ";");
-
-                        vecs.add(makeBitfieldDeclaration(vecfield, c99type));
-                        macros.addAll(makeBitfieldMacros(vecfield, peripheralName, true));
-                        vecNextpos = vecfield.getMsb()+1;
-                    }
-
+                
+                if(startNewVecfield) {
                     vecfield = new BlankBitfield(bfBasename,
                                                  bitfield.getOwningRegisterName(),
                                                  bitfield.getCaption().replaceAll("\\d", "x"),
                                                  bitfield.getMask());
                     hasVecs = true;
+                } else {
+                    vecfield = null;
                 }
-            } else if(null != vecfield) {
-                // Not part of a vector, so any existing one has ended.
-                vecGap = vecfield.getLsb() - vecNextpos;
-                if(vecGap > 0)
-                    vecs.add("    " + c99type + "  :" + vecGap + ";");
-
-                vecs.add(makeBitfieldDeclaration(vecfield, c99type));
-                macros.addAll(makeBitfieldMacros(vecfield, peripheralName, true));
-                vecNextpos = vecfield.getMsb()+1;
-                vecfield = null;
             }
 
+            // Output bitfield info.
             bits.add(makeBitfieldDeclaration(bitfield, c99type));
             macros.addAll(makeBitfieldMacros(bitfield, peripheralName, bitfield.getBitWidth() > 1));
             bfNextpos = bitfield.getMsb()+1;
@@ -316,20 +318,96 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             writer.println("  } vec;");
         }
         writer.println("  " + c99type + " reg;");
-        writer.println("} " + fullRegisterName + "_Type;");
+        writer.println("} " + register.getTypeName());
 
         writeNoAssemblyEnd(writer);
         writer.println();
 
-        writeStringMacro(writer, fullRegisterName + "_OFFSET", "(" + offsetStr + ")", fullRegisterName + " offset");
-        writeStringMacro(writer, fullRegisterName + "_RESETVALUE", String.format("_U_(0x%X)", register.getInitValue()), fullRegisterName + " reset value");
-        writeStringMacro(writer, fullRegisterName + "_MASK", String.format("_U_(0x%X)", register.getMask()), fullRegisterName + " mask");
+        writeStringMacro(writer, 
+                         fullRegisterName + "_OFFSET",
+                         "(" + offsetStr + ")",
+                         fullRegisterName + " offset");
+        writeStringMacro(writer, 
+                         fullRegisterName + "_RESETVALUE",
+                         String.format("_U_(0x%X)", register.getInitValue()),
+                         fullRegisterName + " reset value");
+        writeStringMacro(writer,
+                         fullRegisterName + "_MASK",
+                         String.format("_U_(0x%X)", register.getMask()),
+                         fullRegisterName + " mask");
 
         writer.println();
         for(String macro : macros) {
             writer.println(macro);
         }
         writer.println();
+    }
+
+    /* Output a C struct representing the layout of the given register group.
+     */
+    private void outputGroupDefinition(PrintWriter writer, AtdfRegisterGroup group) {
+        long regNextOffset = 0;
+        long regGapNumber = 1;
+
+        writeNoAssemblyStart(writer);
+        writer.println("typedef struct {");
+
+        for(AtdfRegister reg : group.getAllMembers()) {
+            long regGap = reg.getBaseOffset() - regNextOffset;
+
+            if(regGap > 0) {
+                String gapStr = "       RoReg8";
+                gapStr = Utils.padStringWithSpaces(gapStr, 32, 4);
+                gapStr += "Reserved" + regGapNumber + "[" + regGap + "];";
+
+                writer.println(gapStr);
+                ++regGapNumber;
+                regNextOffset = reg.getBaseOffset();
+            }
+
+            String regStr = "  " + getIOMacroFromRegisterAccess(reg) + " " + reg.getTypeName();
+            regStr = Utils.padStringWithSpaces(regStr, 32, 4);
+
+            regStr += reg.getName();
+            int count = reg.getNumRegisters();
+            if(count > 1) {
+                regStr += "[" + count + "]";
+            }
+            regStr += ";";
+            regStr = Utils.padStringWithSpaces(regStr, 48, 4);
+
+            regStr += "/* Offset ";
+            regStr += String.format("0x%02X", reg.getBaseOffset());
+            regStr += ": (" + reg.getRwAsString() + " " + (8*reg.getSizeInBytes())+ ") ";
+            regStr += reg.getCaption() + " */";
+
+            writer.println(regStr);
+            regNextOffset += count * reg.getSizeInBytes();
+        }
+
+        int alignment = group.getAlignment();
+        if(alignment > 0) {
+            writer.println("} " + group.getTypeName());
+            writer.println("#ifdef __GNUC__");
+            writer.println("  __attribute__((aligned(" + alignment + ")))");
+            writer.println("#endif");
+            writer.println(";");
+        } else {
+            writer.println("} " + group.getTypeName() + ";");
+        }
+
+        writeNoAssemblyEnd(writer);
+        writer.println();
+
+        String section = group.getMemorySection();
+        if(!section.isEmpty()) {
+            writer.println("#ifdef __GNUC__");
+            writer.println("#  define SECTION_DMAC_DESCRIPTOR    __attribute__ ((section(\"." + section + "\")))");
+            writer.println("#elif defined(__ICCARM__)");
+            writer.println("#  define SECTION_DMAC_DESCRIPTOR    @\"." + section + "\"");
+            writer.println("#endif");
+            writer.println();
+        }
     }
 
     /* Return the C99 type to be used with the SFR based on its size.
@@ -344,6 +422,23 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
                 return "uint16_t";
             default:
                 return "uint32_t";
+        }
+    }
+
+    /* Return a C macro to indicate the access permission of a register.  This returns one of the
+     * macros defined by Arm's CMSIS headers for this purpose ("__I " for read-only, "__O " for
+     * write-only, or "__IO" for both).
+     */
+    private String getIOMacroFromRegisterAccess(AtdfRegister reg) {
+        int rw = reg.getRwAsInt();
+
+        switch(rw) {
+            case AtdfRegister.REG_READ:
+                return "__I ";
+            case AtdfRegister.REG_WRITE:
+                return "__O ";
+            default:
+                return "__IO";
         }
     }
 
@@ -376,11 +471,11 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         String macro = "#define " + name;
 
         if(null != value  &&  !value.isEmpty()) {
-            Utils.padStringWithSpaces(macro, 36, 4);            
+            macro = Utils.padStringWithSpaces(macro, 36, 4);            
             macro += value;
 
             if(null != desc  &&  !desc.isEmpty()) {
-                Utils.padStringWithSpaces(macro, 48, 4);            
+                macro = Utils.padStringWithSpaces(macro, 48, 4);            
                 macro += "/* " + desc + " */";
             }
         }
@@ -431,7 +526,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         int fieldEnd = bitfield.getMsb();
 
         String fieldDecl = "    " + c99type + "  " + fieldName + ":" + fieldWidth + ";";
-        Utils.padStringWithSpaces(fieldDecl, 36, 4);
+        fieldDecl = Utils.padStringWithSpaces(fieldDecl, 36, 4);
 
         if(fieldWidth > 1) {
             fieldDecl += String.format("/* bit: %2d..%2d  %s */", fieldStart, fieldEnd, fieldCaption);

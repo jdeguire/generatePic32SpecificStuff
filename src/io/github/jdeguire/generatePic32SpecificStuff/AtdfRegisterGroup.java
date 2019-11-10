@@ -55,10 +55,28 @@ public class AtdfRegisterGroup {
         groupNode_ = groupNode;
     }
 
-    /* Get the name of this group.
+    /* Get the group name.  Some names in the ATDF document will have the owning peripheral at
+     * the start like "OWNER_GROUP".  This function will remove that prefix and return "Group", with
+     * the first letter upper-case and the rest lower-case.
      */
     public String getName() {
-        return Utils.getNodeAttribute(groupNode_, "name", "");
+        String name = Utils.getNodeAttribute(groupNode_, "name", "");
+        String owner = getOwningPeripheralName();
+
+        if(name.startsWith(owner)) {
+            name = name.substring(owner.length());
+
+            // In case the name in the ATDF doc was something like "OWNER_REGISTER".
+            if(name.startsWith("_")) {
+                name = name.substring(1);
+            }
+        }
+
+        if(name.length() > 1) {
+            return name.substring(0, 1).toUpperCase() + name.substring(1).toLowerCase();
+        } else {
+            return name.toUpperCase();
+        }
     }
 
     /* Get the name of the peripheral that owns this group.
@@ -67,10 +85,25 @@ public class AtdfRegisterGroup {
         return Utils.getNodeAttribute(moduleNode_, "name", "");        
     }
 
+    /* Return a string to be used as the typename of a C struct representing this group.  The name
+     * will be formatted as the ownining peripheral name followed by this group name, both with only
+     * the first letters capitalized.  For example, a group called "GROUP" owned by "OWNER" will be 
+     * returned as "OwnerGroup".  If the owner and group name are the same, then this will just 
+     * return the group name.
+     */
+    public String getTypeName() {
+        String name = getName();
+        String owner = getOwningPeripheralName();
+
+        owner = owner.substring(0, 1).toUpperCase() + owner.substring(1).toLowerCase();
+
+        return owner + name;
+    }
+
     /* Get descriptive text for the peripheral.
      */
     public String getCaption() {
-        return Utils.getNodeAttribute(groupNode_, "name", "");
+        return Utils.getNodeAttribute(groupNode_, "caption", "");
     }
 
     /* Get the alignment of this group, which indicates the byte boundary upon which the group must
@@ -83,6 +116,14 @@ public class AtdfRegisterGroup {
             alignment = 0;
 
         return alignment;
+    }
+
+    /* Get the memory section of this register group that could be used in GCC "section" attributes.
+     * This will return an empty string if this group does not have a special section (which will
+     * be most of them).
+     */
+    public String getMemorySection() {
+        return Utils.getNodeAttribute(groupNode_, "section", "");
     }
 
     /* Get the size in bytes of this group, which may indicate that padding bytes are needed at the 

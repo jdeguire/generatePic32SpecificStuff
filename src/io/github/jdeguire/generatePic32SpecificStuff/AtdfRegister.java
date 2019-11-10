@@ -62,16 +62,51 @@ public class AtdfRegister {
     }
 
 
-    /* Get the regiser name.
+    /* Get the regiser name.  Some names in the ATDF document will have the owning peripheral at
+     * the start like "OWNER_REGISTER".  This function will remove that prefix and return either
+     * "Register" if this is a group alias or "REGISTER" otherwise.
      */
     public String getName() {
-        return Utils.getNodeAttribute(regNode_, "name", "");  
+        String name = Utils.getNodeAttribute(regNode_, "name", "");
+        String owner = getOwningPeripheralName();
+
+        if(name.startsWith(owner)) {
+            name = name.substring(owner.length());
+
+            // In case the name in the ATDF doc was something like "OWNER_REGISTER".
+            if(name.startsWith("_")) {
+                name = name.substring(1);
+            }
+        }
+
+        if(isGroupAlias()  &&  name.length() > 1) {
+            return name.substring(0, 1).toUpperCase() + name.substring(1).toLowerCase();
+        } else {
+            return name.toUpperCase();
+        }
     }
 
     /* Get the name of the peripheral that owns this register.
      */
     public String getOwningPeripheralName() {
         return Utils.getNodeAttribute(moduleNode_, "name", "");        
+    }
+
+    /* Return a string to be used as the typename of a C struct representing this register.
+     * If this is a group alias, the name will be returned as "OwnerGroup" normally or as "Group" 
+     * if the group and owner names are the same.
+     * If this is not a group alias, then the name returns will be "OWNER_REGISTER_Type".
+     */
+    public String getTypeName() {
+        String name = getName();
+        String owner = getOwningPeripheralName();
+
+        if(isGroupAlias()) {
+            owner = owner.substring(0, 1).toUpperCase() + owner.substring(1).toLowerCase();
+            return owner + name;
+        } else {
+            return owner.toUpperCase() + "_" + name + "_Type";
+        }
     }
 
     /* Get descriptive text for this register.

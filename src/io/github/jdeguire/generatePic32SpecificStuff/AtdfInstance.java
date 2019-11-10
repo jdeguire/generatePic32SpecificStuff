@@ -49,6 +49,7 @@ public class AtdfInstance {
     private final Node parametersNode_;
     private final ArrayList<AtdfSignal> signals_ = new ArrayList<>(20);
     private final ArrayList<AtdfValue> parameters_ = new ArrayList<>(20);
+    private int instanceId_ = -1;
 
     /* Create a new AtdfInstance based on the given node from an ATDF document.  The Node needs to
      * be for an "instance" XML node.  This is handled in the AtdfPeripheral class, so use methods
@@ -82,6 +83,19 @@ public class AtdfInstance {
         return Utils.getNodeAttributeAsLong(regGroupNode_, "offset", 0);
     }
 
+    /* Get a device-specific ID for this instance or a value less than zero if one could not be found.
+     */
+    public int getInstanceId() {
+        if(instanceId_ < 0) {
+            Node instanceNode = Utils.filterFirstChildNode(parametersNode_, "param", "name", "INSTANCE_ID");
+            if(null != instanceNode) {
+                instanceId_ = Utils.getNodeAttributeAsInt(instanceNode, "value", -1);
+            }
+        }
+
+        return instanceId_;
+    }
+
     /* Get a list of parameter values for this peripheral instance that give peripheral-specific 
      * info.
      */
@@ -90,7 +104,12 @@ public class AtdfInstance {
             List<Node> paramsList = Utils.filterAllChildNodes(parametersNode_, "param", null, null);
 
             for(Node paramNode : paramsList) {
-                parameters_.add(new AtdfValue(paramNode));
+                // This instance ID is treated differently in Atmel headers, so we'll handle that here.
+                if(Utils.getNodeAttribute(paramNode, "name", "").equals("INSTANCE_ID")) {
+                    instanceId_ = Utils.getNodeAttributeAsInt(paramNode, "value", -1);
+                } else {
+                    parameters_.add(new AtdfValue(paramNode)); 
+                }
             }
         }
 
