@@ -449,7 +449,8 @@ public class TargetDevice {
     }
 
     /* Return the ATDF document relating to this target device or null if one could not be found.
-     * ATDF documents came from Atmel, so MIPS-based devices may not have them.
+     * ATDF documents came from Atmel, so not all MIPS-based devices have them (as of this writing
+     * on 14 Nov 2019).
      */
     public AtdfDoc getAtdfDocument() {
         if(null == atdfDoc_) {

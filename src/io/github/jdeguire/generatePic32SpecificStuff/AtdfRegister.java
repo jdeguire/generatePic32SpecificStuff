@@ -62,12 +62,19 @@ public class AtdfRegister {
     }
 
 
-    /* Get the regiser name.  Some names in the ATDF document will have the owning peripheral at
-     * the start like "OWNER_REGISTER".  This function will remove that prefix and return either
-     * "Register" if this is a group alias or "REGISTER" otherwise.
+    /* Get the register name as it appears in the ATDF document.
      */
-    public String getName() {
-        String name = Utils.getNodeAttribute(regNode_, "name", "");
+     public String getName() {
+         return Utils.getNodeAttribute(regNode_, "name", "");
+     }
+
+    /* Get the regiser name formatted for use as a C variable.  Some names in the ATDF document will
+     * have the owning peripheral at the start like "OWNER_REGISTER".  This function will remove 
+     * that prefix and return either "Register" (first letter only capitalized) if this is a group 
+     * alias or "REGISTER" (all caps) otherwise.
+     */
+    public String getCName() {
+        String name = getName();
         String owner = getOwningPeripheralName();
 
         if(name.startsWith(owner)) {
@@ -86,19 +93,13 @@ public class AtdfRegister {
         }
     }
 
-    /* Get the name of the peripheral that owns this register.
-     */
-    public String getOwningPeripheralName() {
-        return Utils.getNodeAttribute(moduleNode_, "name", "");        
-    }
-
     /* Return a string to be used as the typename of a C struct representing this register.
      * If this is a group alias, the name will be returned as "OwnerGroup" normally or as "Group" 
      * if the group and owner names are the same.
      * If this is not a group alias, then the name returns will be "OWNER_REGISTER_Type".
      */
     public String getTypeName() {
-        String name = getName();
+        String name = getCName();
         String owner = getOwningPeripheralName();
 
         if(isGroupAlias()) {
@@ -107,6 +108,12 @@ public class AtdfRegister {
         } else {
             return owner.toUpperCase() + "_" + name + "_Type";
         }
+    }
+
+    /* Get the name of the peripheral that owns this register.
+     */
+    public String getOwningPeripheralName() {
+        return Utils.getNodeAttribute(moduleNode_, "name", "");        
     }
 
     /* Get descriptive text for this register.

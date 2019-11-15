@@ -55,12 +55,18 @@ public class AtdfRegisterGroup {
         groupNode_ = groupNode;
     }
 
-    /* Get the group name.  Some names in the ATDF document will have the owning peripheral at
-     * the start like "OWNER_GROUP".  This function will remove that prefix and return "Group", with
-     * the first letter upper-case and the rest lower-case.
+    /* Get the group name as it appears in the ATDF document.
      */
     public String getName() {
-        String name = Utils.getNodeAttribute(groupNode_, "name", "");
+        return Utils.getNodeAttribute(groupNode_, "name", "");
+    }
+
+    /* Get the group name formatted for use as a C variable.  Some names in the ATDF document will 
+     * have the owning peripheral at the start like "OWNER_GROUP".  This function will remove that 
+     * prefix and return "Group", with the first letter upper-case and the rest lower-case.
+     */
+    public String getCName() {
+        String name = getName();
         String owner = getOwningPeripheralName();
 
         if(name.startsWith(owner)) {
@@ -92,7 +98,7 @@ public class AtdfRegisterGroup {
      * return the group name.
      */
     public String getTypeName() {
-        String name = getName();
+        String name = getCName();
         String owner = getOwningPeripheralName();
 
         owner = owner.substring(0, 1).toUpperCase() + owner.substring(1).toLowerCase();
@@ -163,7 +169,7 @@ public class AtdfRegisterGroup {
      */
     public AtdfRegister getMember(String name) {
         for(AtdfRegister reg : getAllMembers()) {
-            if(name.equals(reg.getName()))
+            if(name.equals(reg.getCName()))
                 return reg;
         }
 
