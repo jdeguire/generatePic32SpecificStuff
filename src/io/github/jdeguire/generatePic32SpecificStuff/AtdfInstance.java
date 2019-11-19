@@ -61,9 +61,17 @@ public class AtdfInstance {
         signalsNode_ = Utils.filterFirstChildNode(atdfInstanceNode, "signals", null, null);
         parametersNode_ = Utils.filterFirstChildNode(atdfInstanceNode, "parameters", null, null);
 
-        if(null == regGroupNode_  ||  null == signalsNode_  ||  null == parametersNode_) {
-            throw new SAXException("XML nodes not found when creating an AtdfInstace.  " +
-                                   "The given Node needs to refer to a valid ATDF instance.");
+        /* Not all peripherals have signals or parameters, so we can't check for those.  We look for
+         * the "base" or "root" register group node that is the same name as the peripheral because
+         * that gives us the true base address of the instance.  However, there may be peripherals
+         * that do not have a useful single base address (ex: FUSES) or that do not have a public 
+         * interface (ex: PUKCC), so we'll throw on that and let the caller decide what to do.
+         */
+        if(null == regGroupNode_) {
+            throw new SAXException("Register node not found when creating an AtdfInstance.  " +
+                                   "Either the given node is not a valid ATDF instance or this " +
+                                   "is an odd peripheral instance (ex: FUSES or PUKCC) that does " +
+                                   "not have a useful register node.");
         }
     }
 
@@ -97,10 +105,10 @@ public class AtdfInstance {
     }
 
     /* Get a list of parameter values for this peripheral instance that give peripheral-specific 
-     * info.
+     * info.  This returns an empty list if this instance has no parameters.
      */
     public List<AtdfValue> getParameterValues() {
-        if(parameters_.isEmpty()) {
+        if(null != parametersNode_  &&  parameters_.isEmpty()) {
             List<Node> paramsList = Utils.filterAllChildNodes(parametersNode_, "param", null, null);
 
             for(Node paramNode : paramsList) {
@@ -117,10 +125,11 @@ public class AtdfInstance {
     }
 
     /* Get a list of signals for this peripheral instance.  Signals provide info about the pins on 
-     * the device this instance can use.
+     * the device this instance can use.  This returns an empty string if this instance has no
+     * external signals.
      */
     public List<AtdfSignal> getSignals() {
-        if(signals_.isEmpty()) {
+        if(null != signalsNode_  &&  signals_.isEmpty()) {
             List<Node> sigList = Utils.filterAllChildNodes(signalsNode_, "signal", null, null);
 
             for(Node sigNode : sigList) {

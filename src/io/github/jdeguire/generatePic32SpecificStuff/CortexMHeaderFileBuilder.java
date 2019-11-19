@@ -93,11 +93,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
     }
 
     @Override
-    public void generate(TargetDevice target) throws java.io.FileNotFoundException {
+    public void generate(TargetDevice target) 
+                                    throws java.io.FileNotFoundException, SAXException {
         String basename = target.getDeviceName();
         AtdfDoc atdfDoc;
         try {
             atdfDoc = new AtdfDoc(basename);
+        } catch(SAXException ex) {
+            throw ex;
         } catch(Exception ex) {
             throw new java.io.FileNotFoundException(ex.getMessage());
         }
@@ -108,6 +111,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
 
         outputLicenseHeader(writer_, true);
         outputPeripheralDefinitionHeaders(peripherals);
+        outputPeripheralInstancesHeader(target, peripherals);
 
         closeHeaderFile();
     }
@@ -119,16 +123,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
      * file needed to include these files.
      */
     private void outputPeripheralDefinitionHeaders(List<AtdfPeripheral> peripheralList) 
-                                    throws java.io.FileNotFoundException {
+                                    throws java.io.FileNotFoundException, SAXException {
         for(AtdfPeripheral peripheral : peripheralList) {
             String peripheralName = peripheral.getName();
             String peripheralId = peripheral.getModuleId();
             String peripheralMacro = (peripheralName + "_" + peripheralId).toUpperCase();
             String peripheralFilename = "component/" + peripheralMacro.toLowerCase() + ".h";
 
-            // ARM peripherals (like NVIC, ETM, etc.) do not have IDs, so use this to figure out
-            // which peripherals are ARM ones and do not add those.
-            if(peripheralId.isEmpty()) {
+            if(isArmInternalPeripheral(peripheral)) {
                 continue;
             }
 
@@ -172,13 +174,16 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
             // Include our new peripheral definition header in our main header file.
             writer_.println("#include \"" + peripheralFilename + "\"");
         }
+
+        writer_.println();
     }
 
     /* Output a C struct representing the layout of the given register and a bunch of C macros that 
      * can be used to access the fields within it.  This will also output some descriptive text as
      * given in the ATDF document associated with this device.
      */
-    private void outputRegisterDefinition(PrintWriter writer, AtdfRegister register) {
+    private void outputRegisterDefinition(PrintWriter writer, AtdfRegister register) 
+                                            throws SAXException {
         ArrayList<AtdfBitfield> bitfieldList = new ArrayList<>(32);
         ArrayList<AtdfBitfield> vecfieldList = new ArrayList<>(32);
 
@@ -348,31 +353,26 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
 
                 // Some bitfields use C macros to indicate what the different values of the bitfield
                 // mean.  If this has those, then generate them here.
-                try {
-                    List<AtdfValue> fieldValues = bitfield.getFieldValues();
-                    if(!fieldValues.isEmpty()) {
-                        String valueMacroBasename = fullRegisterName + "_" + bitfield.getName() + "_";
+                List<AtdfValue> fieldValues = bitfield.getFieldValues();
+                if(!fieldValues.isEmpty()) {
+                    String valueMacroBasename = fullRegisterName + "_" + bitfield.getName() + "_";
 
-                        // Create first set of macros containing option values.
-                        for(AtdfValue val : fieldValues) {
-                            String valueMacroName = valueMacroBasename + val.getName() + "_Val";
-                            String valueMacroValue = "_U_(" + val.getValue() + ")";
-                            String valueMacroCaption = val.getCaption();
-                            writeStringMacro(writer, "  " + valueMacroName, valueMacroValue, valueMacroCaption);
-                        }
-
-                        // Now create second set which uses first set.
-                        for(AtdfValue val : fieldValues) {
-                            String optMacroName = valueMacroBasename + val.getName();
-                            String valMacroName = optMacroName + "_Val";
-                            String posMacroName = valueMacroBasename + "Pos";
-                            writeStringMacro(writer, optMacroName, "(" + valMacroName + " << " + posMacroName + ")", "");
-                        }
+                    // Create first set of macros containing option values.
+                    for(AtdfValue val : fieldValues) {
+                        String valueMacroName = valueMacroBasename + val.getName() + "_Val";
+                        String valueMacroValue = "_U_(" + val.getValue() + ")";
+                        String valueMacroCaption = val.getCaption();
+                        writeStringMacro(writer, "  " + valueMacroName, valueMacroValue, valueMacroCaption);
                     }
-                } catch(SAXException e) {
-                    // Couldn't read values; do nothing for now,
-                }
 
+                    // Now create second set which uses first set.
+                    for(AtdfValue val : fieldValues) {
+                        String optMacroName = valueMacroBasename + val.getName();
+                        String valMacroName = optMacroName + "_Val";
+                        String posMacroName = valueMacroBasename + "Pos";
+                        writeStringMacro(writer, optMacroName, "(" + valMacroName + " << " + posMacroName + ")", "");
+                    }
+                }
             }
         }
 
@@ -469,6 +469,144 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
+    /* Output a header file that contains information on all of the peripheral instances on the 
+     * device, such as some basic instance-specific macros and register addresses.
+     */
+    private void outputPeripheralInstancesHeader(TargetDevice target, List<AtdfPeripheral> peripheralList) 
+                                    throws java.io.FileNotFoundException {
+        // Output top-of-file stuff like license and include guards.
+        String deviceName = getDeviceNameForHeader(target);
+        String instancesMacro = "_" + deviceName.toUpperCase() + "_INSTANCES_";
+        String instancesFilename = "instances/" + deviceName + ".h";
+        String filepath = basepath_ + "/" + instancesFilename;
+
+        try(PrintWriter instancesWriter = Utils.createUnixPrintWriter(filepath)) {
+            outputLicenseHeader(instancesWriter, true);
+            instancesWriter.println();
+            instancesWriter.println("#ifndef " + instancesMacro);
+            instancesWriter.println("#define " + instancesMacro);
+            instancesWriter.println();
+
+            for(AtdfPeripheral peripheral : peripheralList) {
+                if(isArmInternalPeripheral(peripheral)) {
+                    continue;
+                }
+
+                try {
+                    for(AtdfInstance instance : peripheral.getAllInstances()) {
+                        instancesWriter.println();
+                        outputPeripheralInstanceRegisterMacros(instancesWriter, peripheral, instance);
+                        instancesWriter.println();
+                        outputPeripheralInstanceParameterMacros(instancesWriter, instance);
+                        instancesWriter.println();
+                    }
+                } catch(SAXException ex) {
+                    // Do nothing because this just might be an odd peripheral (see the constructor
+                    // of AtdfInstance).
+                }
+            }
+
+            // End-of-file stuff
+            instancesWriter.println();
+            instancesWriter.println("#endif /* " + instancesMacro + "*/");
+        }
+
+        // Include our new instances header in our main header file.
+        writer_.println("#include \"" + instancesFilename + "\"");
+        writer_.println();
+
+    }
+
+    /* Output macros representing all of the registers belonging to the given peripheral and whose
+     * addresses are relative to the given instance.  The macros will be named for the instance, 
+     * which in most cases is either the peripheral name or the name plus an instance number.
+     */
+    private void outputPeripheralInstanceRegisterMacros(PrintWriter writer, AtdfPeripheral peripheral,
+                                                        AtdfInstance instance) {
+        // The "base group" has the same name as the peripheral.
+        AtdfRegisterGroup baseGroup = peripheral.getRegisterGroupByName(peripheral.getName());
+
+        if(null == baseGroup)
+            return;
+
+        writer.print("/* ========== ");
+        writer.print("Register definition for " + instance.getName() + " peripheral instance");
+        writer.println(" ========== */");
+        writeAssemblyStart(writer);
+        outputRegisterGroupMacros(writer, baseGroup, 1, 0, peripheral, instance, true);
+        writer.println("#else");
+        outputRegisterGroupMacros(writer, baseGroup, 1, 0, peripheral, instance, false);
+        writeAssemblyEnd(writer);
+    }
+
+    /* Output register macros for all registers belonging to the given group.  This will be
+     * recursively called for groups that contain subgroups.  If 'isAssembler' is True, this will
+     * output simpler macros that do not include a type.
+     */
+    private void outputRegisterGroupMacros(PrintWriter writer, AtdfRegisterGroup group, int numGroups,
+                                           long groupOffset, AtdfPeripheral peripheral, AtdfInstance instance, 
+                                           boolean isAssembler) {
+        for(int g = 0; g < numGroups; ++g) {
+            for(AtdfRegister register : group.getAllMembers()) {
+                long regOffset = register.getBaseOffset();
+                int numRegs = register.getNumRegisters();
+
+                if(register.isGroupAlias()) {
+                    AtdfRegisterGroup subgroup = peripheral.getRegisterGroupByName(register.getName());
+                    if(null != subgroup) {
+                        outputRegisterGroupMacros(writer, subgroup, numRegs, regOffset, peripheral,
+                                                  instance, isAssembler);
+                    }
+                } else {
+                    long baseAddr = instance.getBaseAddress();
+                    int regSize = register.getSizeInBytes();
+                    int groupSize = group.getSizeInBytes();
+
+                    for(int i = 0; i < numRegs; ++i) {
+                        String name = "REG_" + instance.getName() + "_" + register.getCName();
+                        if(numGroups > 1) {
+                            name += g;
+                        }
+                        if(numRegs > 1)
+                        {
+                            // If register is a member of a group array and register array, then just
+                            // output register 0 to match what Atmel was doing.
+                            if(1 == numGroups) {
+                                name += i;
+                            } else if(i > 0) {
+                                break;
+                            }
+                        }
+
+                        long fullAddr = baseAddr + groupOffset + regOffset + (i * regSize) + (g * groupSize);
+                        String addrStr;
+                        if(isAssembler) {
+                            addrStr = String.format("(0x%08X)", fullAddr);
+                        } else {
+                            String typeStr = getAtmelRegTypeFromRegister(register);
+                            addrStr = String.format("(*(%-7s*)0x%08XUL)", typeStr, fullAddr);
+                        }
+
+                        writeStringMacro(writer, name, addrStr, register.getCaption());
+                    }
+                }
+            }
+        }
+    }
+
+    /* Output macros providing peripheral-specific information about the given instance.
+     */
+    private void outputPeripheralInstanceParameterMacros(PrintWriter writer, AtdfInstance instance) {
+        writer.print("/* ========== ");
+        writer.print("Instance parameters for " + instance.getName());
+        writer.println(" ========== */");
+
+        for(AtdfValue value : instance.getParameterValues()) {
+            String name = instance.getName() + "_" + value.getName();
+            writeStringMacro(writer, name, value.getValue(), value.getCaption());
+        }
+    }
+
     /* Return the C99 type to be used with the SFR based on its size.
      */
     private String getC99TypeFromRegisterSize(AtdfRegister reg) {
@@ -490,18 +628,48 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
      * represents a group alias.
      */
     private String getIOMacroFromRegisterAccess(AtdfRegister reg) {
-        int rw = reg.getRwAsInt();
-
         if(reg.isGroupAlias()) {
             return "    ";
         } else {
-            switch(rw) {
+            switch(reg.getRwAsInt()) {
                 case AtdfRegister.REG_READ:
                     return "__I ";
                 case AtdfRegister.REG_WRITE:
                     return "__O ";
                 default:
                     return "__IO";
+            }
+        }
+    }
+
+    /* Return an Atmel-specific type, such as RwReg8 or RoReg16, based on the size and accessibility
+     * of the register.  Returns an empty string if the given register is a group alias.
+     */
+    private String getAtmelRegTypeFromRegister(AtdfRegister reg) {
+        if(reg.isGroupAlias()){
+            return "";
+        } else {
+            String typeStr;
+
+            switch(reg.getRwAsInt()) {
+                case AtdfRegister.REG_READ:
+                    typeStr = "RoReg";
+                    break;
+                case AtdfRegister.REG_WRITE:
+                    typeStr = "WoReg";
+                    break;
+                default:
+                    typeStr = "RwReg";
+                    break;
+            }
+
+            switch(reg.getSizeInBytes()) {
+                case 1:
+                    return typeStr + "8";
+                case 2:
+                    return typeStr + "16";
+                default:
+                    return typeStr;    // 32-bit regs do not have a suffix
             }
         }
     }
@@ -553,7 +721,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         writer.println(makeStringMacro(name, value, desc));
     }
 
-    /* Write a macro for the peripheral's vesrion number as taken from the given ATDF document.
+    /* Write a macro for the peripheral's version number as taken from the given ATDF document.
      */
     private void writePeripheralVersionMacro(PrintWriter writer, AtdfPeripheral peripheral) {
         String version = peripheral.getModuleVersion();
@@ -655,5 +823,14 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
 
         return result;
+    }
+
+    /* We don't want to generate header files and macros for Arm peripherals (like NVIC, ETM, etc.)
+     * because those are already handled by the Arm CMSIS headers.  This will return True if the
+     * given periphral is an Arm one instead of an Atmel one.
+     */
+    private boolean isArmInternalPeripheral(AtdfPeripheral peripheral) {
+        // Arm peripherals do not have a module ID, so use this for now.
+        return peripheral.getModuleId().isEmpty();
     }
 }

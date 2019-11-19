@@ -123,7 +123,7 @@ public class AtdfRegister {
     }
 
     /* Get number of bytes from which this register is offset from the base peripheral instance
-     * address.
+     * address or register group address.
      */
     public long getBaseOffset() {
         return Utils.getNodeAttributeAsLong(regNode_, "offset", 0);
@@ -168,7 +168,8 @@ public class AtdfRegister {
     }
 
     /* Get the number of registers that match this definition.  If this is greater than 1, then this
-     * register represents an array of registers of the same format.
+     * register represents an array of registers of the same format.  If this is a group alias, then
+     * this represents an array of groups of the same format.
      */
     public int getNumRegisters() {
         return Utils.getNodeAttributeAsInt(regNode_, "count", 1);

@@ -115,7 +115,9 @@ public class AtdfPeripheral {
 
 
     /* Get a list of all of the instances for this peripheral.  This throws an SAXException if an
-     * instance could not be read from the ATDF docuemnt, which indicates a corrupted document.
+     * instance could not be read from the ATDF docuemnt, which indicates a corrupted document or
+     * an odd peripheral (the FUSES peripheral is like this because it has no "base" or "root" 
+     * register group that starts the peripherals address space).
      */
     public List<AtdfInstance> getAllInstances() throws SAXException {
         if(instances_.isEmpty()) {
@@ -157,8 +159,21 @@ public class AtdfPeripheral {
 
     /* Get a single register group as denoted by the index.
      */
-    public AtdfRegisterGroup getRegisterGroup(int index) {
+    public AtdfRegisterGroup getRegisterGroupByIndex(int index) {
         return getAllRegisterGroups().get(index);
+    }
+
+    /* Get a group by name or null if the group is not found.  This uses the name as found in the 
+     * ATDF document, which is what is returned by AtdfRegisterGroup::getName().
+     */
+    public AtdfRegisterGroup getRegisterGroupByName(String name) {
+        for(AtdfRegisterGroup group : getAllRegisterGroups()) {
+            if(name.equals(group.getName())) {
+                return group;
+            }
+        }
+
+        return null;
     }
 
     /* Search through the ATDF document representd by the given Node for all of the peripherals on

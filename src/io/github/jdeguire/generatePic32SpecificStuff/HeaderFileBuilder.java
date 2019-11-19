@@ -30,6 +30,7 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.io.PrintWriter;
+import org.xml.sax.SAXException;
 
 /**
  * This is a base class for building device-specific header files that contain register definitions,
@@ -50,33 +51,35 @@ public abstract class HeaderFileBuilder {
     /* Generate a linker script for the given device, using its name for the subdirectory and the
      * name of the script itself.
      */
-    abstract public void generate(TargetDevice target) throws java.io.FileNotFoundException;
+    abstract public void generate(TargetDevice target) 
+                         throws java.io.FileNotFoundException, SAXException;
 
-    /* Return the path to the header file, including the linker script file itself, used in the
-     * generate() method.  The returned path is relative to the base path given in the constructor 
-     * for this class.
+    /* Return the device name formatted for use as a header name.
      */
-    public String getHeaderRelativePath(TargetDevice target) {
+    public String getDeviceNameForHeader(TargetDevice target) {
         String devicename = target.getDeviceName().toLowerCase();
-        String pathname;
 
         if(target.isMips32()) {
             if(devicename.startsWith("pic32")) {
                 devicename = devicename.substring(3);
             }
 
-            pathname = "p" + devicename + ".h";
-        } else {
-            if(devicename.startsWith("atsam")) {
-                devicename = devicename.substring(2);
-            }
-
-            pathname = devicename + ".h";
+            devicename = "p" + devicename;
+        } else if(devicename.startsWith("atsam")) {
+            devicename = devicename.substring(2);
         }
 
-        return pathname;
+        return devicename;
     }
-    
+
+    /* Return the path to the header file, including the linker script file itself, used in the
+     * generate() method.  The returned path is relative to the base path given in the constructor 
+     * for this class.
+     */
+    public String getHeaderRelativePath(TargetDevice target) {
+        return getDeviceNameForHeader(target) + ".h";
+    }
+
     /* Create a new header file based on the target, updating the local PrintWriter with the 
      * new one.  This creates a version of the PrintWriter that always uses Unix line separators ('\n').
      */
