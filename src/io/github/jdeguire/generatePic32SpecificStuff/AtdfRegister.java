@@ -49,7 +49,7 @@ public class AtdfRegister {
     private final Node moduleNode_;
     private final Node regNode_;
     private final ArrayList<AtdfBitfield> bitfields_ = new ArrayList<>(32);
-
+    private String modeName_ = null;
 
     /* Create a new AtdfRegister based on the given nodes from an ATDF document.  The 'moduleNode' 
      * is a Node that refers to the "module" XML node that contains the desired register indicated
@@ -86,8 +86,8 @@ public class AtdfRegister {
             }
         }
 
-        if(isGroupAlias()  &&  name.length() > 1) {
-            return name.substring(0, 1).toUpperCase() + name.substring(1).toLowerCase();
+        if(isGroupAlias()) {
+            return Utils.makeOnlyFirstLetterUpperCase(name);
         } else {
             return name.toUpperCase();
         }
@@ -96,17 +96,24 @@ public class AtdfRegister {
     /* Return a string to be used as the typename of a C struct representing this register.
      * If this is a group alias, the name will be returned as "OwnerGroup" normally or as "Group" 
      * if the group and owner names are the same.
-     * If this is not a group alias, then the name returns will be "OWNER_REGISTER_Type".
+     * If this is not a group alias, then the name returns will be "OWNER_REGISTER_Type" if this
+     * register does not apply to a particular mode or "OWNER_MODE_REGISTER_Type" if it does.
      */
     public String getTypeName() {
         String name = getCName();
         String owner = getOwningPeripheralName();
 
         if(isGroupAlias()) {
-            owner = owner.substring(0, 1).toUpperCase() + owner.substring(1).toLowerCase();
+            owner = Utils.makeOnlyFirstLetterUpperCase(owner);
             return owner + name;
         } else {
-            return owner.toUpperCase() + "_" + name + "_Type";
+            String mode = getMode();
+
+            if(mode.isEmpty()) {
+                return owner.toUpperCase() + "_" + name + "_Type";
+            } else {
+                return owner.toUpperCase() + "_" + mode.toUpperCase() + "_" + name + "_Type";                
+            }
         }
     }
 
@@ -115,6 +122,26 @@ public class AtdfRegister {
     public String getOwningPeripheralName() {
         return Utils.getNodeAttribute(moduleNode_, "name", "");        
     }
+
+    /* Return the name of the mode under which this register operates or an empty string if no mode
+     * is available (in which case this register would operate under all peripheral modes).  Some
+     * peripherals can have multiple operating modes, such as the SERCOM peripheral being able to 
+     * act like a SPI, I2C, or UART peripheral.
+     */
+    public String getMode() {
+        if(null == modeName_) {
+            modeName_ = Utils.getNodeAttribute(regNode_, "modes", "");
+        }
+
+        return modeName_;
+    }
+
+    /* Set the name of the register mode.
+     */
+    public void setMode(String mode) {
+        modeName_ = mode;
+    }
+
 
     /* Get descriptive text for this register.
      */
@@ -201,6 +228,25 @@ public class AtdfRegister {
         return regNode_.getNodeName().equals("register-group");
     }
 
+    /* Get all of the modes used by the member bitfields.  Modes allow a register to act differently
+     * and even have a different layout based on the operating mode of its owning peripheral.  The
+     * default mode name for bitfields is "DEFAULT" and so this list will always contain that.
+     */
+    public List<String> getBitfieldModes() {
+        ArrayList<String> modes = new ArrayList<>(5);
+        List<Node> modeNodes = Utils.filterAllChildNodes(regNode_, "mode", null, null);
+        
+        if(!modeNodes.isEmpty()) {
+            for(Node node : modeNodes) {
+                modes.add(Utils.getNodeAttribute(node, "name", ""));
+            }
+        } else {
+            // We'll always have a default mode.
+            modes.add("DEFAULT");
+        }
+
+        return modes;
+    }
 
     /* Get a list of all of the instances for this peripheral.
      */
@@ -216,6 +262,23 @@ public class AtdfRegister {
         return bitfields_;
     }
 
+    /* Get a list of all bitfields that are applicable with the given mode.  Returns an empty list
+     * if the given mode name is not applicable to any bitfields.
+     */
+    public List<AtdfBitfield> getBitfieldsByMode(String mode) {
+        ArrayList<AtdfBitfield> fields = new ArrayList<>(8);
+
+        for(AtdfBitfield bf : getAllBitfields()) {
+            for(String bfModeName : bf.getModes()) {
+                if(bfModeName.equals(mode)) {
+                    fields.add(bf);
+                }
+            }
+        }
+        
+        return fields;
+    }
+
     /* Get a single bitfield by name or null if a bitfield by that name canot be found.
      */
     public AtdfBitfield getBitfield(String name) {
@@ -225,5 +288,30 @@ public class AtdfRegister {
         }
 
         return null;
+    }
+
+    /* Return True if this register is equal to the other--that is, they have the same name and
+     * bitfields.
+     */
+    public boolean equals(AtdfRegister other) {
+        boolean equal = false;
+
+        if(getName().equals(other.getName())) {
+            List<AtdfBitfield> ourBitfields = getAllBitfields();
+            List<AtdfBitfield> theirBitfields = other.getAllBitfields();
+
+            if(ourBitfields.size() == theirBitfields.size()) {
+                equal = true;
+
+                for(int i = 0; i < ourBitfields.size(); ++i) {
+                    if(!ourBitfields.get(i).equals(theirBitfields.get(i))) {
+                        equal = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return equal;
     }
 }

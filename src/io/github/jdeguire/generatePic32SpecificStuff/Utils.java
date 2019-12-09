@@ -361,6 +361,16 @@ public class Utils {
         }
     }
 
+    /* Make only the first letter of the given string upper case and everything else lower case.
+     */
+    public static String makeOnlyFirstLetterUpperCase(String str) {
+         if(str.length() > 1) {
+            return str.substring(0, 1).toUpperCase() + str.substring(1).toLowerCase();
+        } else {
+            return str.toUpperCase();
+        }      
+    }
+
     /* Return today's date with the given date format.  See the Java docs for SimpleDateFormat for
      * what the format string should contain.  Note that the format string is case-sensive ("m" is 
      * for minutes and "M" is for months, for example) and that the number of successive letters may

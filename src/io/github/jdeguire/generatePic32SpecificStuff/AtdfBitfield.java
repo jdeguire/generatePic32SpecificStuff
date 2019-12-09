@@ -30,6 +30,7 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
@@ -70,7 +71,25 @@ public class AtdfBitfield {
         return Utils.getNodeAttribute(regNode_, "name", "");        
     }
 
-    /* Get descriptive text for this register.
+    /* Get a list of modes to which this bitfield applies.  Some registers can operate differently
+     * under different circumstances and that may affect the bitfield available in the register.
+     * The default mode name is "DEFAULT", so this list will always have that.
+     */
+    public List<String> getModes() {
+        List<String> modes = new ArrayList<>(3);
+        String modesString = Utils.getNodeAttribute(bfNode_, "modes", "");
+
+        if(!modesString.isEmpty()) {
+            Collections.addAll(modes, modesString.split(" "));
+        } else {
+            // We'll always have a default mode.
+            modes.add("DEFAULT");
+        }
+
+        return modes;
+    }
+
+    /* Get descriptive text for this bitfield.
      */
     public String getCaption() {
         return Utils.getNodeAttribute(bfNode_, "caption", "");
@@ -135,5 +154,11 @@ public class AtdfBitfield {
         }
 
         return values_;
+    }
+
+    /* Return True if this bitfield equals another--that is, if both have the same name and mask.
+     */
+    public boolean equals(AtdfBitfield other) {
+        return (getName().equals(other.getName())  &&  getMask() == other.getMask());
     }
 }

@@ -30,6 +30,8 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -43,8 +45,8 @@ import org.w3c.dom.NodeList;
 public class AtdfRegisterGroup {
     private final Node moduleNode_;
     private final Node groupNode_;
-    private final ArrayList<AtdfRegister> members_ = new ArrayList<>(10);
-
+    private final HashMap<String, ArrayList<AtdfRegister>> members_ = new HashMap<>(10);
+    
     /* Create a new AtdfRegisterGroup based on the given nodes from an ATDF document.  The 
      * 'moduleNode' is a Node that refers to the "module" XML node that contains the desired group
      * indicated by 'groupNode'.  This is handled in the AtdfPeripheral class, so use methods in
@@ -78,11 +80,7 @@ public class AtdfRegisterGroup {
             }
         }
 
-        if(name.length() > 1) {
-            return name.substring(0, 1).toUpperCase() + name.substring(1).toLowerCase();
-        } else {
-            return name.toUpperCase();
-        }
+        return Utils.makeOnlyFirstLetterUpperCase(name);
     }
 
     /* Get the name of the peripheral that owns this group.
@@ -96,14 +94,27 @@ public class AtdfRegisterGroup {
      * the first letters capitalized.  For example, a group called "GROUP" owned by "OWNER" will be 
      * returned as "OwnerGroup".  If the owner and group name are the same, then this will just 
      * return the group name.
+     *
+     * If 'mode' is not null and not empty, the name returned will instead be "OwnerModeGroup".
      */
-    public String getTypeName() {
+    public String getTypeName(String mode) {
         String name = getCName();
         String owner = getOwningPeripheralName();
 
-        owner = owner.substring(0, 1).toUpperCase() + owner.substring(1).toLowerCase();
+        owner = Utils.makeOnlyFirstLetterUpperCase(owner);
 
-        return owner + name;
+        if(null != mode  &&  !mode.isEmpty()) {
+            mode = Utils.makeOnlyFirstLetterUpperCase(mode);
+            return owner + mode + name;
+        } else {
+            return owner + name;            
+        }
+    }
+
+    /* Equivalent to getTypeName("").
+     */
+    public String getTypeName() {
+        return getTypeName("");
     }
 
     /* Get descriptive text for the peripheral.
@@ -145,34 +156,195 @@ public class AtdfRegisterGroup {
         return size;
     }
 
-    /* Get a list of all of the members of this group.  Use AtdfRegister::isGroupAlias() to check
-     * if the member is a normal register (false) or an alias for a subgroup of this group (true).
+    /* Return the names of the modes the members of this register group use.  A mode is basically a
+     * variant that allows registers to take on a different role.  For example, the SERCOM peripheral
+     * has modes for SPI, I2C, and USART because the SERCOM peripheral can act as all three and how
+     * the registers works depends on the protocol in use.  The default mode name is "DEFAULT".
+     */
+    public List<String> getMemberModes() {
+        if(members_.isEmpty()) {
+            populateMemberMap();
+        }
+
+        return new ArrayList<>(members_.keySet());
+    }
+
+    /* Return the registers that are a part of the given mode or an empty List if the given mode 
+     * name does not exist.
+     */
+    public List<AtdfRegister> getMembersByMode(String modeName) {
+        if(members_.isEmpty()) {
+            populateMemberMap();
+        }
+
+        if(members_.containsKey(modeName)) {
+            return members_.get(modeName);
+        } else {
+            return Collections.<AtdfRegister>emptyList();
+        }
+    }
+
+    /* Get a list of all of the members of this group across all modes.  Use 
+     * AtdfRegister::isGroupAlias() to check if the member is a normal register (false) or an alias 
+     * for a subgroup of this group (true).
      */
     public List<AtdfRegister> getAllMembers() {
         if(members_.isEmpty()) {
-            NodeList children = groupNode_.getChildNodes();
+            populateMemberMap();
+        }
 
-            for(int i = 0; i < children.getLength(); ++i) {
-                Node child = children.item(i);
-                String name = child.getNodeName();
+        ArrayList<AtdfRegister> allMembers = new ArrayList<>(32);
 
-                if(name.equals("register")  ||  name.equals("register-group")) {
-                    members_.add(new AtdfRegister(moduleNode_, child));
+        for(ArrayList<AtdfRegister> modeMembers : members_.values()) {
+            allMembers.addAll(modeMembers);
+        }
+
+        return allMembers;
+    }
+
+
+    /* Populate our member map such that the keys are the modes of the registers and the values are
+     * lists of the registers that are applicable in that mode.  A mode refers to the operating mode
+     * of the peripheral.  A good example of this is the SERCOM peripheral, which has SPI, I2C, and
+     * USART modes.
+     */
+    private void populateMemberMap() {
+        NodeList children = groupNode_.getChildNodes();
+        List<String> possibleModes = getPossibleMemberModes(children);
+        List<ArrayList<AtdfRegister>> possibleRegisters = 
+                    getPossibleMemberRegistersByMode(possibleModes, children);
+
+        /* The original Atmel headers appear to coalesce modes that had the same registers, so we
+         * need to do the same by comparing all of the registers in each mode and making a single
+         * mode from multiple equivalent modes.
+         */
+        if(possibleModes.size() > 1) {
+            for(int i = 0; i < possibleModes.size(); ++i) {
+                for(int j = possibleModes.size()-1; j > i; --j) {
+                    // Walk backwards so we can remove elements without having to worry about 
+                    // invalidating our iteration.
+
+                    if(areRegistersEqual(possibleRegisters.get(i), possibleRegisters.get(j))) {
+                        // Modes are equal because their registers are equal, so remove the duplicate
+                        // unless they don't share any part of their name.
+                        String prefix = getCommonPrefix(possibleModes.get(i), possibleModes.get(j));
+
+                        if(!prefix.isEmpty()) {
+                            possibleModes.set(i, prefix);
+                            possibleModes.remove(j);
+                            possibleRegisters.remove(j);
+                        }
+                    }
+                }
+
+                // Update the mode name for the remaining register set.
+                for(AtdfRegister reg : possibleRegisters.get(i)) {
+                    reg.setMode(possibleModes.get(i));
                 }
             }
         }
 
-        return members_;
+        for(int i = 0; i < possibleModes.size(); ++i) {
+            members_.put(possibleModes.get(i), possibleRegisters.get(i));
+        }
     }
 
-    /* Get a single member of the group by name or null if a member by that name canot be found.
+    /* Search through the NodeList for special nodes that indicate the modes for the member 
+     * registers and return a list of the mode names.
      */
-    public AtdfRegister getMember(String name) {
-        for(AtdfRegister reg : getAllMembers()) {
-            if(name.equals(reg.getCName()))
-                return reg;
+    private List<String> getPossibleMemberModes(NodeList memberNodes) {
+        ArrayList<String> modes = new ArrayList<>(5);
+
+        // We'll always have the default mode.
+        modes.add("DEFAULT");
+
+        for(int i = 0; i < memberNodes.getLength(); ++i) {
+            Node member = memberNodes.item(i);
+            String name = member.getNodeName();
+
+            if(name.equals("mode")) {
+                String modeName = Utils.getNodeAttribute(member, "name", "");
+
+                if(!modeName.isEmpty()) {
+                    modes.add(modeName);
+                }
+            }
         }
 
-        return null;
+        return modes;
+    }
+
+    /* Search through the NodeList for registers and use them to build a series of arrays in which
+     * each array contains the registers for a particular mode as given by 'modeList'.
+     */
+    private List<ArrayList<AtdfRegister>> getPossibleMemberRegistersByMode(List<String> modeList,
+                                                                           NodeList memberNodes) {
+        ArrayList<ArrayList<AtdfRegister>> registers = new ArrayList<>(modeList.size());
+
+        for(int i = 0; i < modeList.size(); ++i) {
+            registers.add(new ArrayList<AtdfRegister>(8));
+        }
+
+        for(int i = 0; i < memberNodes.getLength(); ++i) {
+            Node member = memberNodes.item(i);
+            String name = member.getNodeName();
+
+            if(name.equals("register")  ||  name.equals("register-group")) {
+                String modeName = Utils.getNodeAttribute(member, "modes", "DEFAULT");
+
+                int j = 0;
+                for(String match : modeList) {
+                    if(match.equals(modeName)) {
+                        registers.get(j).add(new AtdfRegister(moduleNode_, member));
+                        break;
+                    }
+
+                    ++j;
+                }
+            }
+        }
+
+        return registers;
+    }
+
+    /* Return True if the two lists of registers are equal--that is, the lists are the same size and
+     * each corresponding register in the two lists are equal.
+     */
+    private boolean areRegistersEqual(List<AtdfRegister> list1, List<AtdfRegister> list2) {
+        boolean equal = true;
+        
+        if(list1.size() == list2.size()) {
+
+            for(int i = 0; i < list1.size(); ++i) {
+                AtdfRegister reg1 = list1.get(i);
+                AtdfRegister reg2 = list2.get(i);
+
+                if(!reg1.equals(reg2)) {
+                    equal = false;
+                    break;
+                }
+            }
+        } else {
+            equal = false;
+        }
+
+        return equal;
+    }
+
+    /* Return a String containing starting portion of the given two strings that are equivalent.
+     * The result will be empty if the strings do not share a common prefix.  This will remove a
+     * trailing underscore from the prefix if one is present.
+     */
+    private String getCommonPrefix(String str1, String str2) {
+        int i = 0;
+        while(str1.charAt(i) == str2.charAt(i)) {
+            ++i;
+        }
+
+        if(i > 0  &&  '_' == str1.charAt(i-1)) {
+            --i;
+        }
+
+        return str1.substring(0, i);
     }
 }
