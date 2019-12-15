@@ -68,55 +68,6 @@ public class AtdfRegister {
          return Utils.getNodeAttribute(regNode_, "name", "");
      }
 
-    /* Get the regiser name formatted for use as a C variable.  Some names in the ATDF document will
-     * have the owning peripheral at the start like "OWNER_REGISTER".  This function will remove 
-     * that prefix and return either "Register" (first letter only capitalized) if this is a group 
-     * alias or "REGISTER" (all caps) otherwise.
-     */
-    public String getCName() {
-        String name = getName();
-        String owner = getOwningPeripheralName();
-
-        if(name.startsWith(owner)) {
-            name = name.substring(owner.length());
-
-            // In case the name in the ATDF doc was something like "OWNER_REGISTER".
-            if(name.startsWith("_")) {
-                name = name.substring(1);
-            }
-        }
-
-        if(isGroupAlias()) {
-            return Utils.makeOnlyFirstLetterUpperCase(name);
-        } else {
-            return name.toUpperCase();
-        }
-    }
-
-    /* Return a string to be used as the typename of a C struct representing this register.
-     * If this is a group alias, the name will be returned as "OwnerGroup" normally or as "Group" 
-     * if the group and owner names are the same.
-     * If this is not a group alias, then the name returns will be "OWNER_REGISTER_Type" if this
-     * register does not apply to a particular mode or "OWNER_MODE_REGISTER_Type" if it does.
-     */
-    public String getTypeName() {
-        String name = getCName();
-        String owner = getOwningPeripheralName();
-
-        if(isGroupAlias()) {
-            owner = Utils.makeOnlyFirstLetterUpperCase(owner);
-            return owner + name;
-        } else {
-            String mode = getMode();
-
-            if(mode.isEmpty()) {
-                return owner.toUpperCase() + "_" + name + "_Type";
-            } else {
-                return owner.toUpperCase() + "_" + mode.toUpperCase() + "_" + name + "_Type";                
-            }
-        }
-    }
-
     /* Get the name of the peripheral that owns this register.
      */
     public String getOwningPeripheralName() {

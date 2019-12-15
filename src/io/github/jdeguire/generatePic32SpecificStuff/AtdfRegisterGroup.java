@@ -63,58 +63,10 @@ public class AtdfRegisterGroup {
         return Utils.getNodeAttribute(groupNode_, "name", "");
     }
 
-    /* Get the group name formatted for use as a C variable.  Some names in the ATDF document will 
-     * have the owning peripheral at the start like "OWNER_GROUP".  This function will remove that 
-     * prefix and return "Group", with the first letter upper-case and the rest lower-case.
-     */
-    public String getCName() {
-        String name = getName();
-        String owner = getOwningPeripheralName();
-
-        if(name.startsWith(owner)) {
-            name = name.substring(owner.length());
-
-            // In case the name in the ATDF doc was something like "OWNER_REGISTER".
-            if(name.startsWith("_")) {
-                name = name.substring(1);
-            }
-        }
-
-        return Utils.makeOnlyFirstLetterUpperCase(name);
-    }
-
     /* Get the name of the peripheral that owns this group.
      */
     public String getOwningPeripheralName() {
         return Utils.getNodeAttribute(moduleNode_, "name", "");        
-    }
-
-    /* Return a string to be used as the typename of a C struct representing this group.  The name
-     * will be formatted as the ownining peripheral name followed by this group name, both with only
-     * the first letters capitalized.  For example, a group called "GROUP" owned by "OWNER" will be 
-     * returned as "OwnerGroup".  If the owner and group name are the same, then this will just 
-     * return the group name.
-     *
-     * If 'mode' is not null and not empty, the name returned will instead be "OwnerModeGroup".
-     */
-    public String getTypeName(String mode) {
-        String name = getCName();
-        String owner = getOwningPeripheralName();
-
-        owner = Utils.makeOnlyFirstLetterUpperCase(owner);
-
-        if(null != mode  &&  !mode.isEmpty()) {
-            mode = Utils.makeOnlyFirstLetterUpperCase(mode);
-            return owner + mode + name;
-        } else {
-            return owner + name;            
-        }
-    }
-
-    /* Equivalent to getTypeName("").
-     */
-    public String getTypeName() {
-        return getTypeName("");
     }
 
     /* Get descriptive text for the peripheral.
