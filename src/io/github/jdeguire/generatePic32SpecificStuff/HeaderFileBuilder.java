@@ -106,6 +106,7 @@ public abstract class HeaderFileBuilder {
                          (useApache ? Utils.apacheLicenseString() : Utils.microchipLicenseString()));
 
         Utils.writeMultilineCComment(writer, 0, header);
+        writer.println();
     }
 
 }

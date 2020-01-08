@@ -115,12 +115,228 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         createNewHeaderFile(target);
 
         List<AtdfPeripheral> peripherals = atdfDoc.getAllPeripherals();
+        AtdfDevice device = atdfDoc.getDevice();
+        List<AtdfValue> basicDeviceParams = device.getBasicParameterValues();
 
         outputLicenseHeader(writer_, true);
+        outputIncludeGuardStart(getDeviceNameForHeader(target));
+        outputExternCStart();
+        outputPreamble();
+        outputInterruptDefinitions(target);
+        outputBasicCpuParameters(target.getCpuName(), basicDeviceParams);
+        outputCmsisDeclarations(target.getCpuName());
         outputPeripheralDefinitionHeaders(peripherals);
         outputPeripheralInstancesHeader(target, peripherals);
+        outputPeripheralModuleIdMacros(peripherals);
+        outputBaseAddressMacros(peripherals);
+        outputMemoryMapMacros(atdfDoc.getDevice());
+        outputDeviceSignatureMacros(device);
+        outputElectricalParameterMacros(device);
+        outputExternCEnd();
+        outputIncludeGuardEnd(getDeviceNameForHeader(target));
 
         closeHeaderFile();
+    }
+
+
+    /* Output the opening "#ifndef...#define" sequence of an include guard for this header file.
+     */
+    private void outputIncludeGuardStart(String devname) {
+        writer_.println("#ifndef _INCLUDE_" + devname.toUpperCase() + "_H_");
+        writer_.println("#define _INCLUDE_" + devname.toUpperCase() + "_H_");
+        writer_.println();
+    }
+
+    /* Output the closing "#endif" of an include guard for this header file.
+     */
+    private void outputIncludeGuardEnd(String devname) {
+        writer_.println("#endif  /* _INCLUDE_" + devname.toUpperCase() + "_H_ */");
+    }
+
+    /* Output the opening sequence of macros for C linkage.
+     */
+    private void outputExternCStart() {
+        writer_.println("#ifdef __cplusplus");
+        writer_.println("extern \"C\" {");
+        writer_.println("#endif");
+        writer_.println();
+    }
+
+    /* Output the closing sequence of macros for C linkage.
+     */
+    private void outputExternCEnd() {
+        writer_.println("#ifdef __cplusplus");
+        writer_.println("} /* extern \"C\" */");
+        writer_.println("#endif");
+        writer_.println();
+    }
+
+    /* Output the start of the file that includes some typedefs and macro definitions used by the 
+     * rest of the file and the files it includes.
+     */
+    private void outputPreamble() {
+        writeNoAssemblyStart(writer_);
+        writer_.println("#include <stdint.h>");
+        writer_.println("typedef volatile const uint32_t RoReg;   /* Read only 32-bit register */");
+        writer_.println("typedef volatile const uint16_t RoReg16; /* Read only 16-bit register */");
+        writer_.println("typedef volatile const uint8_t  RoReg8;  /* Read only  8-bit register */");
+        writer_.println("typedef volatile       uint32_t WoReg;   /* Write only 32-bit register */");
+        writer_.println("typedef volatile       uint16_t WoReg16; /* Write only 16-bit register */");
+        writer_.println("typedef volatile       uint8_t  WoReg8;  /* Write only  8-bit register */");
+        writer_.println("typedef volatile       uint32_t RwReg;   /* Read-Write 32-bit register */");
+        writer_.println("typedef volatile       uint16_t RwReg16; /* Read-Write 16-bit register */");
+        writer_.println("typedef volatile       uint8_t  RwReg8;  /* Read-Write  8-bit register */");
+        writeNoAssemblyEnd(writer_);
+        writer_.println();
+        writer_.println("#if !defined(SKIP_INTEGER_LITERALS)");
+        writer_.println("#if defined(_U_) || defined(_L_) || defined(_UL_)");
+        writer_.println("  #error \"Integer Literals macros already defined elsewhere\"");
+        writer_.println("#endif");
+        writer_.println();
+        writeNoAssemblyStart(writer_);
+        writer_.println("/* Macros that deal with adding suffixes to integer literal constants for C/C++ */");
+        writer_.println("#define _U_(x)         x ## U            /* C code: Unsigned integer literal constant value */");
+        writer_.println("#define _L_(x)         x ## L            /* C code: Long integer literal constant value */");
+        writer_.println("#define _UL_(x)        x ## UL           /* C code: Unsigned Long integer literal constant value */");
+        writer_.println("#else /* Assembler */");
+        writer_.println("#define _U_(x)         x                 /* Assembler: Unsigned integer literal constant value */");
+        writer_.println("#define _L_(x)         x                 /* Assembler: Long integer literal constant value */");
+        writer_.println("#define _UL_(x)        x                 /* Assembler: Unsigned Long integer literal constant value */");
+        writeNoAssemblyEnd(writer_);
+        writer_.println("#endif /* SKIP_INTEGER_LITERALS */");
+        writer_.println();
+    }
+
+
+    /* Output all of the structures needed to define all of the interrupt vectors in the main header
+     * file.  These are an enumeration of interrupts, the interrupt vector table typedef, and the
+     * declarations for the handler functions().
+     */
+    private void outputInterruptDefinitions(TargetDevice target) {
+        InterruptList interruptList = new InterruptList(target.getPic());
+
+        writeHeaderSectionHeading(writer_, "Interrupt Vector Definitions");
+        writeNoAssemblyStart(writer_);
+        outputInterruptEnum(interruptList);
+        outputInterruptVectorTableTypedef(interruptList);
+        outputInterruptHandlerDeclarations(interruptList);
+        writeNoAssemblyEnd(writer_);
+        writer_.println();
+    }
+
+    /* Output a C enum whose values correspond to the interrupt requests on the device.  This will
+     * output to the main header file using this object's writer.
+     */
+    private void outputInterruptEnum(InterruptList interruptList) {
+        writer_.println("typedef enum IRQn");
+        writer_.println("{");
+
+        for(InterruptList.Interrupt vector : interruptList.getInterruptVectors()) {
+            String irqString = "  " + vector.getName() + "_IRQn";
+            irqString = Utils.padStringWithSpaces(irqString, 32, 4);
+            irqString += " = " + vector.getIntNumber() + ",";
+            irqString = Utils.padStringWithSpaces(irqString, 40, 4);
+            irqString += "/* " + vector.getDescription();
+
+            if(!vector.getOwningPeripheral().isEmpty()) {
+                irqString += " (" + vector.getOwningPeripheral() + ") */";
+            } else {
+                irqString += " */";
+            }
+
+            writer_.println(irqString);
+        }
+
+        writer_.println();
+        writer_.println("  PERIPH_COUNT_IRQn              = " + (interruptList.getLastVectorNumber()+1));
+        writer_.println("} IRQn_Type;");
+        writer_.println();
+    }
+
+    /* Output the typedef of the interrupt vector table, which is a struct of void pointers.  Note
+     * that this is just the typedef and the table is actually defined in the C startup file for this
+     * device.  This will output to the main header file using this object's writer.
+     */
+    private void outputInterruptVectorTableTypedef(InterruptList interruptList) {
+        writer_.println("typedef struct _DeviceVectors");
+        writer_.println("{");
+        writer_.println("  void *pvStack;                            /* Initial stack pointer */");
+        writer_.println();
+
+        int nextVectorNumber = 99999;
+
+        for(InterruptList.Interrupt vector : interruptList.getInterruptVectors()) {
+            int vectorNumber = vector.getIntNumber();
+
+            while(vectorNumber > nextVectorNumber) {
+                // Fill in any gaps we come across.
+                if(nextVectorNumber < 0) {
+                    writer_.println("  void *pvReservedM" + (-1 * nextVectorNumber) + ";");
+                } else {
+                    writer_.println("  void *pvReserved" + nextVectorNumber + ";");
+                }
+
+                ++nextVectorNumber;
+            }
+
+            String vectorString = "  void *pfn" + vector.getName() + "_Handler;";
+            String descString = String.format("/* %3d %s */", vector.getIntNumber(), vector.getDescription());
+
+            writer_.println(Utils.padStringWithSpaces(vectorString, 44, 4) + descString);
+
+            nextVectorNumber = vectorNumber + 1;
+        }
+
+        writer_.println("} DeviceVectors;");
+        writer_.println();
+    }
+
+    /* Output one function declarations for each interrupt handler.  The default handlers would be
+     * defined in the C startup file for this device and the user's firmware would override these
+     * to handler interrupts.  This will output to the main header file using this object's writer.
+     */
+    private void outputInterruptHandlerDeclarations(InterruptList interruptList) {
+        for(InterruptList.Interrupt vector : interruptList.getInterruptVectors()) {
+            writer_.println("void " + vector.getName() + "_Handler(void);");
+        }
+
+        writer_.println();
+    }
+
+
+    private void outputBasicCpuParameters(String cpuName, List<AtdfValue> paramList) {
+        cpuName = Utils.makeOnlyFirstLetterUpperCase(cpuName);
+
+        writeHeaderSectionHeading(writer_, "Basic config parameters for " + cpuName);
+
+        for(AtdfValue param : paramList) {
+            writeStringMacro(writer_, param.getName(), param.getValue(), param.getCaption());
+        }
+
+        writer_.println();
+    }
+
+
+    /* CMSIS is Arm's common interface and function API for all Cortex-based microcontrollers.  This
+     * will write out declarations to the main header file related to CMSIS.
+    */
+    private void outputCmsisDeclarations(String cpuName) {
+        writeHeaderSectionHeading(writer_, "CMSIS Includes and declarations");
+
+        // Split a CPU name to get the correct CMSIS header to include.  For example, a 
+        // Cortex-M0Plus CPU needs to include the to "core_cm0plus.h" header.
+        String headerName = "core_c" + cpuName.split("-", 2)[1].toLowerCase() + ".h";
+        writer_.println("#include <" + headerName + ">");
+
+        // The original Atmel files included a separate header that was arbitrarily based on some 
+        // device series.  There was hardly anything in there and they all seem to be the same, so 
+        // we'll just include the contents here for simplicity.
+        writer_.println("#if !defined DONT_USE_CMSIS_INIT");
+        writer_.println("extern uint32_t SystemCoreClock;   /* System (Core) Clock Frequency */");
+        writer_.println("void SystemInit(void);");
+        writer_.println("void SystemCoreClockUpdate(void);");
+        writer_.println("#endif /* DONT_USE_CMSIS_INIT */");
+        writer_.println();
     }
 
 
@@ -131,6 +347,8 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
      */
     private void outputPeripheralDefinitionHeaders(List<AtdfPeripheral> peripheralList) 
                                     throws java.io.FileNotFoundException, SAXException {
+        writeHeaderSectionHeading(writer_, "Device-specific Peripheral Definitions");
+
         for(AtdfPeripheral peripheral : peripheralList) {
             String peripheralName = peripheral.getName();
             String peripheralId = peripheral.getModuleId();
@@ -516,18 +734,21 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
+
     /* Output a header file that contains information on all of the peripheral instances on the 
      * device, such as some basic instance-specific macros and register addresses.
      */
     private void outputPeripheralInstancesHeader(TargetDevice target, List<AtdfPeripheral> peripheralList) 
                                     throws java.io.FileNotFoundException {
-        // Output top-of-file stuff like license and include guards.
+        writeHeaderSectionHeading(writer_, "Device-specific Peripheral Instance Definitions");
+
         String deviceName = getDeviceNameForHeader(target);
         String instancesMacro = "_" + deviceName.toUpperCase() + "_INSTANCES_";
         String instancesFilename = "instances/" + deviceName + ".h";
         String filepath = basepath_ + "/" + instancesFilename;
 
         try(PrintWriter instancesWriter = Utils.createUnixPrintWriter(filepath)) {
+            // Output top-of-file stuff like license and include guards.
             outputLicenseHeader(instancesWriter, true);
             instancesWriter.println();
             instancesWriter.println("#ifndef " + instancesMacro);
@@ -661,6 +882,209 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
+
+    /* Output macros that provide module ID values for the peripherals on the device.  These are
+     * used usually for a power control module on the device to enable and disable the peripheral.
+     */
+    private void outputPeripheralModuleIdMacros(List<AtdfPeripheral> peripheralList) {
+        writeHeaderSectionHeading(writer_, "Peripheral ID Macros");
+        int maxId = -1000;
+
+        for(AtdfPeripheral peripheral : peripheralList){
+            if(isArmInternalPeripheral(peripheral)) {
+                continue;
+            }
+
+            try {
+                for(AtdfInstance instance : peripheral.getAllInstances()) {
+                    int id = instance.getInstanceId();
+
+                    if(id >= 0) {
+                        writeStringMacro(writer_, "ID_" + instance.getName(), Integer.toString(id), null);
+
+                        if(id > maxId)
+                            maxId = id;
+                    }
+                }
+            } catch(SAXException ex) {
+                // Do nothing for now because some peripherals do not have a publicly-documented
+                // instance (crypto peripherals are like this, for example).
+            }
+        }
+
+        writeStringMacro(writer_, "ID_PERIPH_COUNT", Integer.toString(maxId+1), null);
+        writer_.println();
+    }
+
+
+    /* Output macros to provide the base address of peripherals along with information on the
+     * instances of each peripheral.
+     */
+    private void outputBaseAddressMacros(List<AtdfPeripheral> peripheralList){
+        writeHeaderSectionHeading(writer_, "Peripheral Base Address Macros");
+
+        writeAssemblyStart(writer_);
+        outputBaseAddressMacrosForAssembly(peripheralList);
+        writer_.println("#else /* !__ASSEMBLER__ */");
+        outputBaseAddressMacrosForC(peripheralList);
+        writeAssemblyEnd(writer_);
+        writer_.println();
+    }
+
+    /* Output base address macros that could be used in assembly code.
+     */
+    private void outputBaseAddressMacrosForAssembly(List<AtdfPeripheral> peripheralList){
+        for(AtdfPeripheral peripheral : peripheralList) {
+            if(isArmInternalPeripheral(peripheral)) {
+                continue;
+            }
+
+            try {
+                // For assembly, each instance just has its own macro for its base address.
+                for(AtdfInstance instance : peripheral.getAllInstances()) {
+                    writeStringMacro(writer_, 
+                                     instance.getName(), 
+                                     "(0x" + Long.toHexString(instance.getBaseAddress()).toUpperCase() + ")",
+                                     instance.getName() + " Base Address");
+                }
+            } catch(SAXException ex) {
+                // Do nothing for now because some peripherals (like crypto) have no useful instance
+                // info.
+            }
+        }
+    }
+
+    /* Output base address macros that could be used in C.  This also output macros that mimic an
+     * initializer list or array of all of the instances of a each peripheral.
+     */
+    private void outputBaseAddressMacrosForC(List<AtdfPeripheral> peripheralList){
+        for(AtdfPeripheral peripheral : peripheralList) {
+            if(isArmInternalPeripheral(peripheral)) {
+                continue;
+            }
+
+            try {
+                List<AtdfInstance> instanceList = peripheral.getAllInstances();
+                String peripheralTypename = Utils.makeOnlyFirstLetterUpperCase(peripheral.getName());
+                peripheralTypename = String.format("(%-12s*)", peripheralTypename);
+
+                // For C, start with outputting macros for each instance...
+                for(AtdfInstance instance : instanceList) {
+                    String addrString = "0x" + Long.toHexString(instance.getBaseAddress()).toUpperCase();
+                    String valString = "(" + peripheralTypename + addrString + "UL)";
+
+                    writeStringMacro(writer_,
+                                     instance.getName(),
+                                     valString,
+                                     instance.getName() + " Base Address");
+                }
+
+                // ...then output a macro for the number of instances...
+                writeStringMacro(writer_,
+                                 peripheral.getName() + "_INST_NUM",
+                                 Integer.toString(instanceList.size()),
+                                 "Number of instances for " + peripheral.getName());
+
+                // ...finally, output a macro that puts all instances into an initializer list.
+                String instancesStr = "{ ";
+                boolean first = true;
+                for(AtdfInstance instance : instanceList) {
+                    if(!first)
+                        instancesStr += ", ";
+
+                    instancesStr += instance.getName();
+                    first = false;
+                }
+                instancesStr += " };";
+                writeStringMacro(writer_,
+                                 peripheral.getName() + "_INSTS",
+                                 instancesStr,
+                                 peripheral.getName() + " Instances List");
+                writer_.println();
+            } catch(SAXException ex) {
+                // Do nothing for now because some peripherals (like crypto) have no useful instance
+                // info.
+            }
+        }
+    }
+
+
+    /* Write out macros that provide information on how the memory map is laid out on the device,
+     * such as page size and the location of different memory spaces/
+     */
+    private void outputMemoryMapMacros(AtdfDevice device) {
+        writeHeaderSectionHeading(writer_, "Memory Segment Macros");
+
+        List<AtdfMemSegment> memSegmentList = device.getMemorySegments();
+        for(AtdfMemSegment memSegment : memSegmentList) {
+            String name = memSegment.getName();
+            long startAddr = memSegment.getStartAddress();
+            long pageSize = memSegment.getPageSize();
+            long totalSize = memSegment.getTotalSize();
+
+            writeStringMacro(writer_,
+                             name + "_ADDR", 
+                             "_UL_(0x" + Long.toHexString(startAddr) + ")",
+                             name + " base address");
+            writeStringMacro(writer_,
+                             name + "_SIZE",
+                             "_UL_(0x" + Long.toHexString(totalSize) + ")",
+                             name + " size");
+
+            if(pageSize > 0) {
+                writeStringMacro(writer_,
+                                 name + "_PAGE_SIZE",
+                                 Long.toString(pageSize),
+                                 name + " page size");
+                writeStringMacro(writer_,
+                                 name + "_NB_OF_PAGES",
+                                 Long.toString(totalSize / pageSize),
+                                 name + " number of pages");
+            }
+
+            writer_.println();
+        }
+    }
+
+
+    /* Output macros for chip ID info if they are available for the given device.
+     */
+    private void outputDeviceSignatureMacros(AtdfDevice device) {
+        writeHeaderSectionHeading(writer_, "Device Signature Macros");
+
+        List<AtdfValue> sigList = device.getSignatureParameterValues();
+
+        if(sigList.size() > 0) {
+            for(AtdfValue sig : sigList) {
+                writeStringMacro(writer_, sig.getName(), "_UL_(" + sig.getValue() + ")", sig.getCaption());
+            }
+        } else {
+            writer_.println("/* <No signature macros provided for this device.> */");
+        }
+
+        writer_.println();
+    }
+
+
+    /* Output macros for electrical characteristics if they are available for the given device.
+     */
+    private void outputElectricalParameterMacros(AtdfDevice device) {
+        writeHeaderSectionHeading(writer_, "Device Electrical Parameter Macros");
+
+        List<AtdfValue> paramList = device.getElectricalParameterValues();
+
+        if(paramList.size() > 0) {
+            for(AtdfValue param : paramList) {
+                writeStringMacro(writer_, param.getName(), "_UL_(" + param.getValue() + ")", param.getCaption());
+            }
+        } else {
+            writer_.println("/* <No electrical parameter macros provided for this device.> */");
+        }
+
+        writer_.println();
+    }
+
+
     /* Return the C99 type to be used with the SFR based on its size.
      */
     private String getC99TypeFromRegisterSize(AtdfRegister reg) {
@@ -732,19 +1156,19 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
      * sections of header file based on wether or not an assembler is running.
      */
     private void writeNoAssemblyStart(PrintWriter writer) {
-        writer.println("#ifndef __ASSEMBLY__");
+        writer.println("#ifndef __ASSEMBLER__");
     }
 
     private void writeNoAssemblyEnd(PrintWriter writer) {
-        writer.println("#endif /* ifndef __ASSEMBLY__ */");
+        writer.println("#endif /* ifndef __ASSEMBLER__ */");
     }
 
     private void writeAssemblyStart(PrintWriter writer) {
-        writer.println("#ifdef __ASSEMBLY__");
+        writer.println("#ifdef __ASSEMBLER__");
     }
 
     private void writeAssemblyEnd(PrintWriter writer) {
-        writer.println("#endif /* ifdef __ASSEMBLY__ */");
+        writer.println("#endif /* ifdef __ASSEMBLER__ */");
     }
 
 
@@ -886,15 +1310,32 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
      * given periphral is an Arm one instead of an Atmel one.
      */
     private boolean isArmInternalPeripheral(AtdfPeripheral peripheral) {
-        // Arm peripherals do not have a module ID, so use this for now.
-        return peripheral.getModuleId().isEmpty();
+        // Arm peripherals are located at address 0xE0000000 and above.
+        boolean isArmPeripheral = true;
+
+        try {
+            isArmPeripheral = (peripheral.getInstance(0).getBaseAddress() >= 0xE0000000L);
+        } catch(SAXException ex) {
+            // Do nothing for now...
+        }
+
+        return isArmPeripheral;
     }
 
     /* Return True if the given mode name refers to the default mode, which is the mode that every
      * register or bitfield can have.
-    */
+     */
     private boolean isModeNameDefault(String modeName) {
         return null == modeName  ||  modeName.isEmpty()  ||  modeName.equals("DEFAULT");
+    }
+
+    /* Write a comment that could be used to call out a new portion of the header file as a section
+     * of particular importance on its own, such as a section for interrupt or a memory map.
+     */
+    private void writeHeaderSectionHeading(PrintWriter writer, String heading) {
+        writer.println("/******");
+        writer.println(" * " + heading);
+        writer.println(" */");
     }
 
 

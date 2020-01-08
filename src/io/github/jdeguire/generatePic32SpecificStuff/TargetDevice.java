@@ -232,7 +232,7 @@ public class TargetDevice {
         else
             return pic_.getArchitecture().toLowerCase();
     }
-    
+
     /* Return True if this is a MIPS32 device.
      */
     public boolean isMips32() {
