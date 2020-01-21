@@ -217,23 +217,28 @@ public final class MainWindowTopComponent extends TopComponent {
                        "ATSAME54P20A".equalsIgnoreCase(device.getName()) ||
                        "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
                        "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
+                        long startTime = System.currentTimeMillis();
 //                        List<String> nodeNames = gen.makeNodeMap(device);
 //                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
 //                        List<String> nodeNames = gen.getMemorySpaces(device);
 //                        List<String> nodeNames = gen.getConfigRegAddresses(device);
 //                        List<String> nodeNames = gen.getAtdfInfo(device);
-                        List<String> nodeNames = gen.getHeaderFileStuff(device);
-//                        gen.generate(device);
+//                        List<String> nodeNames = gen.getHeaderFileStuff(device);
+                        gen.generate(device);
+                        long genTime = System.currentTimeMillis() - startTime;
 
-                        publish("----------" + System.lineSeparator() + device.getName());
+                        publish("----------");
+                        publish(device.getName());
+                        publish(genTime + "ms");
                         
-                        if(nodeNames.isEmpty()) {
+/*                        if(nodeNames.isEmpty()) {
                             publish("Nothing here");
                         }
                         else {
                             for(String name : nodeNames)
                                 publish(name);
                         }
+*/
                     }
                 }
             } catch(Exception ex) {

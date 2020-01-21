@@ -60,6 +60,7 @@ public class StuffGenerator {
 
     private final String outputDirBase_;
     CortexMLinkerScriptBuilder cortexmLinkerBuilder_;
+    CortexMHeaderFileBuilder cortexmHeaderBuilder_;
     MipsLinkerScriptBuilder mipsLinkerBuilder_;
     
     /**
@@ -73,6 +74,8 @@ public class StuffGenerator {
         outputDirBase_ = outputDir;
 
         cortexmLinkerBuilder_ = new CortexMLinkerScriptBuilder(outputDirBase_ + "/cortex-m/lib/proc");
+        cortexmHeaderBuilder_ = new CortexMHeaderFileBuilder(outputDirBase_ + "/cortex-m/include/proc");
+
         mipsLinkerBuilder_ = new MipsLinkerScriptBuilder(outputDirBase_ + "/mips32/lib/proc");
     }
 
@@ -122,6 +125,7 @@ public class StuffGenerator {
             // TODO:  We'll need to target Cortex-A devices in the future.
             if(!target.supportsArmIsa()) {
                 cortexmLinkerBuilder_.generate(target);
+                cortexmHeaderBuilder_.generate(target);
             }
         } else {
             mipsLinkerBuilder_.generate(target);
