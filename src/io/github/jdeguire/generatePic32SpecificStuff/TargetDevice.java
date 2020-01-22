@@ -68,7 +68,7 @@ public class TargetDevice {
     final private String name_;
 	private ArrayList<String> instructionSets_;
     private AtdfDoc atdfDoc_ = null;
-    
+
     /* Create a new TargetDevice based on the given name.  Throws an exception if the given name is
      * not recognized by this class.  Note that this class parses the name just enough to determine
      * the device's family, so a lack of an exception does not necessarily mean that the device is 
@@ -445,7 +445,7 @@ public class TargetDevice {
      */
     public long getRegisterAddress(Register reg) {
         long addr = reg.getAsLongElse("_addr", Long.valueOf(0));
-        return addr & 0xFFFFFFFF;
+        return addr & 0xFFFFFFFFL;
     }
 
     /* Return the ATDF document relating to this target device or null if one could not be found.

@@ -1152,53 +1152,6 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
-    /* These next four are just convenience methods used to output idefs and endifs that block out
-     * sections of header file based on wether or not an assembler is running.
-     */
-    private void writeNoAssemblyStart(PrintWriter writer) {
-        writer.println("#ifndef __ASSEMBLER__");
-    }
-
-    private void writeNoAssemblyEnd(PrintWriter writer) {
-        writer.println("#endif /* ifndef __ASSEMBLER__ */");
-    }
-
-    private void writeAssemblyStart(PrintWriter writer) {
-        writer.println("#ifdef __ASSEMBLER__");
-    }
-
-    private void writeAssemblyEnd(PrintWriter writer) {
-        writer.println("#endif /* ifdef __ASSEMBLER__ */");
-    }
-
-
-    /* Make a C macro of the form "#define <name>              <value>  / * <desc> * /"
-     *
-     * Note that value is padded out to 36 spaces minimum and that the spaces between the '/' and
-     * '*' surrounding the description are not present in the output.
-     */
-    private String makeStringMacro(String name, String value, String desc) {
-        String macro = "#define " + name;
-
-        if(null != value  &&  !value.isEmpty()) {
-            macro = Utils.padStringWithSpaces(macro, 36, 4);            
-            macro += value;
-
-            if(null != desc  &&  !desc.isEmpty()) {
-                macro = Utils.padStringWithSpaces(macro, 48, 4);            
-                macro += "/* " + desc + " */";
-            }
-        }
-
-        return macro;
-    }
-
-    /* Like above, but also writes it using the given PrintWriter.
-     */
-    private void writeStringMacro(PrintWriter writer, String name, String value, String desc) {
-        writer.println(makeStringMacro(name, value, desc));
-    }
-
     /* Write a macro for the peripheral's version number as taken from the given ATDF document.
      */
     private void writePeripheralVersionMacro(PrintWriter writer, AtdfPeripheral peripheral) {

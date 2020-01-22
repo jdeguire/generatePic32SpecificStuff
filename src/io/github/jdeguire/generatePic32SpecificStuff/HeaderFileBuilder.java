@@ -109,4 +109,50 @@ public abstract class HeaderFileBuilder {
         writer.println();
     }
 
+
+    /* These next four are just convenience methods used to output idefs and endifs that block out
+     * sections of header file based on wether or not an assembler is running.
+     */
+    protected void writeNoAssemblyStart(PrintWriter writer) {
+        writer.println("#ifndef __ASSEMBLER__");
+    }
+
+    protected void writeNoAssemblyEnd(PrintWriter writer) {
+        writer.println("#endif /* ifndef __ASSEMBLER__ */");
+    }
+
+    protected void writeAssemblyStart(PrintWriter writer) {
+        writer.println("#ifdef __ASSEMBLER__");
+    }
+
+    protected void writeAssemblyEnd(PrintWriter writer) {
+        writer.println("#endif /* ifdef __ASSEMBLER__ */");
+    }
+
+    /* Make a C macro of the form "#define <name>              <value>  / * <desc> * /"
+     *
+     * Note that value is padded out to 36 spaces minimum and that the spaces between the '/' and
+     * '*' surrounding the description are not present in the output.
+     */
+    protected String makeStringMacro(String name, String value, String desc) {
+        String macro = "#define " + name;
+
+        if(null != value  &&  !value.isEmpty()) {
+            macro = Utils.padStringWithSpaces(macro, 36, 4);            
+            macro += value;
+
+            if(null != desc  &&  !desc.isEmpty()) {
+                macro = Utils.padStringWithSpaces(macro, 48, 4);            
+                macro += "/* " + desc + " */";
+            }
+        }
+
+        return macro;
+    }
+
+    /* Like above, but also writes it using the given PrintWriter.
+     */
+    protected void writeStringMacro(PrintWriter writer, String name, String value, String desc) {
+        writer.println(makeStringMacro(name, value, desc));
+    }
 }

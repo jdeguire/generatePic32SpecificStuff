@@ -62,7 +62,8 @@ public class StuffGenerator {
     CortexMLinkerScriptBuilder cortexmLinkerBuilder_;
     CortexMHeaderFileBuilder cortexmHeaderBuilder_;
     MipsLinkerScriptBuilder mipsLinkerBuilder_;
-    
+    MipsHeaderFileBuilder mipsHeaderBuilder_;
+
     /**
      * Constructor for the Stuff Generator.
      * 
@@ -77,6 +78,7 @@ public class StuffGenerator {
         cortexmHeaderBuilder_ = new CortexMHeaderFileBuilder(outputDirBase_ + "/cortex-m/include/proc");
 
         mipsLinkerBuilder_ = new MipsLinkerScriptBuilder(outputDirBase_ + "/mips32/lib/proc");
+        mipsHeaderBuilder_ = new MipsHeaderFileBuilder(outputDirBase_ + "/mips32/include/proc");
     }
 
     
@@ -129,6 +131,7 @@ public class StuffGenerator {
             }
         } else {
             mipsLinkerBuilder_.generate(target);
+            mipsHeaderBuilder_.generate(target);
         }
     }
 }
