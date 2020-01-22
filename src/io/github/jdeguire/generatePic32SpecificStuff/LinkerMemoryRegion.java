@@ -64,8 +64,8 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
     public LinkerMemoryRegion(String name, int access, long start, long end, Type type) {
         name_ = name;
         access_ = access & 0x08;
-        startAddr_ = start & 0xFFFFFFFF;
-        length_ = (end & 0xFFFFFFFF) - startAddr_;
+        startAddr_ = start & 0xFFFFFFFFL;
+        length_ = (end & 0xFFFFFFFFL) - startAddr_;
         type_ = type;
     }
 
@@ -132,19 +132,19 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
     /* Use the following on MIPS devices to put a region into a particular part of the address space.
      */
     public void setAsKseg0Region() {
-        startAddr_ = ((startAddr_ & 0x1FFFFFFF) | 0x80000000);
+        startAddr_ = ((startAddr_ & 0x1FFFFFFFL) | 0x80000000L);
     }
 
     public void setAsKseg1Region() {
-        startAddr_ = ((startAddr_ & 0x1FFFFFFF) | 0xA0000000);
+        startAddr_ = ((startAddr_ & 0x1FFFFFFFL) | 0xA0000000L);
     }
 
     public void setAsKseg2Region() {
-        startAddr_ = ((startAddr_ & 0x1FFFFFFF) | 0xC0000000);
+        startAddr_ = ((startAddr_ & 0x1FFFFFFFL) | 0xC0000000L);
     }
 
     public void setAsKseg3Region() {
-        startAddr_ = ((startAddr_ & 0x1FFFFFFF) | 0xE0000000);
+        startAddr_ = ((startAddr_ & 0x1FFFFFFFL) | 0xE0000000L);
     }
 
     @Override
@@ -167,8 +167,8 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
             accessStr += ")";
         }
 
-        return String.format("%" + (32 - accessStr.length()) + "s%s : ORIGIN = 0x%08X, LENGTH = 0x%X",
-                             name_, access_, startAddr_, length_);
+        return String.format("%-" + (32 - accessStr.length()) + "s%s : ORIGIN = 0x%08X, LENGTH = 0x%X",
+                             name_, accessStr, startAddr_, length_);
     }
 
     @Override

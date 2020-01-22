@@ -102,30 +102,30 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
 
         if(lmr.getLength() <= (3 * 1024)) {
             // PIC32MM and small PIC32MX
-            addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0x9FC00490, 0x9FC00BF0));
-            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC00490, 0x9FC00490));
-            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
+            addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0x9FC00490L, 0x9FC00BF0L));
+            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC00490L, 0x9FC00490L));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000L, 0xBFC00490L));
         } else if(lmr.getLength() <= (12 * 1024)) {
             // Large PIC32MX
-            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC00490, 0x9FC00E00));
-            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
-            addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0xBFC02000, 0xBFC00FF0));
+            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC00490L, 0x9FC00E00L));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000L, 0xBFC00490L));
+            addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0xBFC02000L, 0xBFC02FF0L));
         } else if(lmr.getLength() <= (20 * 1024)) {
             // PIC32MK
             // The gap just before 0x9FC004B0 is present in the XC32 scripts, so we'll
             // keep it here for now.  The same goes for the empty kseg0_boot_mem region.
-            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC004B0, 0x9FC004B0));
-            addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0x9FC20490, 0x9FC23FB0));
-            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
-            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem_4B0", 0, 0xBFC004B0, 0xBFC03FB0));
+            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC004B0L, 0x9FC004B0L));
+            addMemoryRegion(new LinkerMemoryRegion("debug_exec_mem", 0, 0x9FC20490L, 0x9FC23FB0L));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000L, 0xBFC00490L));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem_4B0", 0, 0xBFC004B0L, 0xBFC03FB0L));
         } else {
             // PIC32MZ
             // The gap just before 0x9FC004B0 is present in the XC32 scripts, so we'll
             // keep it here for now.  The same goes for the empty kseg0_boot_mem region.
             // The PIC32MZ does not need to reserve flash for the debugger.
-            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC004B0, 0x9FC004B0));
-            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000, 0xBFC00490));
-            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem_4B0", 0, 0xBFC004B0, 0xBFC0FF00));
+            addMemoryRegion(new LinkerMemoryRegion("kseg0_boot_mem", 0, 0x9FC004B0L, 0x9FC004B0L));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem", 0, 0xBFC00000L, 0xBFC00490L));
+            addMemoryRegion(new LinkerMemoryRegion("kseg1_boot_mem_4B0", 0, 0xBFC004B0L, 0xBFC0FF00L));
         }
    }
     
@@ -210,7 +210,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
             // and TLB refill exception.
             long endAddr = startAddr + (0x200 + (sizePerVector * (intList.getLastVectorNumber() + 1)));
 
-            addMemoryRegion(new LinkerMemoryRegion("execption_mem", 0, startAddr, endAddr));
+            addMemoryRegion(new LinkerMemoryRegion("exception_mem", 0, startAddr, endAddr));
         }
 
         // Each device config register has its own region, which makes it easier to place the
@@ -231,7 +231,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
      */
     private void outputPreamble(long defaultEBaseAddress) {
         if(0 == defaultEBaseAddress)
-            defaultEBaseAddress = 0x9D000000;
+            defaultEBaseAddress = 0x9D000000L;
 
         writer_.println("OUTPUT_FORMAT(\"elf32-tradlittlemips\")");
         writer_.println("ENTRY(_reset)");
@@ -849,8 +849,8 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
             for(int vectorNum = 0; vectorNum <= intList.getLastVectorNumber(); ++vectorNum) {
                 writer_.println("  .vector_dispatch_" + vectorNum + " _ebase_address + 0x200 + ((_vector_spacing << 3) * " + vectorNum + ") :");
                 writer_.println("  {");
-                writer_.println("    __vector_target_" + vectorNum + " = (SIZEOF(.vector_ " + vectorNum + ") > 0 ? ADDR(.vector_ " + vectorNum + ") : ADDR(.vector_default));");
-                writer_.println("     LONG(0xD4000000 | ((__vector_target_ " + vectorNum + " >> 1) & 0x03FFFFFF));");
+                writer_.println("    __vector_target_" + vectorNum + " = (SIZEOF(.vector_" + vectorNum + ") > 0 ? ADDR(.vector_" + vectorNum + ") : ADDR(.vector_default));");
+                writer_.println("     LONG(0xD4000000 | ((__vector_target_" + vectorNum + " >> 1) & 0x03FFFFFF));");
                 writer_.println("     LONG(0x00000800);");
                 writer_.println("  } > exception_mem");
             }
@@ -864,9 +864,9 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
             for(int vectorNum = 0; vectorNum <= intList.getLastVectorNumber(); ++vectorNum) {
                 writer_.println("  .vector_dispatch_" + vectorNum + " _ebase_address + 0x200 + ((_vector_spacing << 5) * " + vectorNum + ") :");
                 writer_.println("  {");
-                writer_.println("    __vector_target_" + vectorNum + " = (SIZEOF(.vector_ " + vectorNum + ") > 0 ? ADDR(.vector_ " + vectorNum + ") : ADDR(.vector_default));");
-                writer_.println("     LONG(0x3C1A0000 | ((__vector_target_ " + vectorNum + " >> 16) & 0xFFFF));");
-                writer_.println("     LONG(0x375A0000 | ((__vector_target_ " + vectorNum + ") & 0xFFFF));");
+                writer_.println("    __vector_target_" + vectorNum + " = (SIZEOF(.vector_" + vectorNum + ") > 0 ? ADDR(.vector_" + vectorNum + ") : ADDR(.vector_default));");
+                writer_.println("     LONG(0x3C1A0000 | ((__vector_target_" + vectorNum + " >> 16) & 0xFFFF));");
+                writer_.println("     LONG(0x375A0000 | ((__vector_target_" + vectorNum + ") & 0xFFFF));");
                 writer_.println("     LONG(0x03400008);");
                 writer_.println("     LONG(0x00000040);");
                 writer_.println("  } > exception_mem");

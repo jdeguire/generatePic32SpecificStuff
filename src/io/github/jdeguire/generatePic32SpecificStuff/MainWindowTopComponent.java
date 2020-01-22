@@ -201,44 +201,18 @@ public final class MainWindowTopComponent extends TopComponent {
             try {
                 List<Device> deviceList = gen.getDeviceList();
                 for(Device device : deviceList) {
-/*                    Family family = device.getFamily();
-
-                    if(Family.ARM32BIT == family) {
-                        publish(device.getName() + " (ARM32)");
-                        gen.generate(device);
-                    }
-                    else if(Family.PIC32 == family) {
-                        publish(device.getName() + " (MIPS32)");
-                        gen.generate(device);
-                    }
-*/
-                    // DEBUG STUFF FOR NOW
+                    // Generate for only a few processors for now to make it easier to verify output.
                     if("PIC32MX795F512L".equalsIgnoreCase(device.getName())  ||  
                        "ATSAME54P20A".equalsIgnoreCase(device.getName()) ||
                        "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
                        "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
                         long startTime = System.currentTimeMillis();
-//                        List<String> nodeNames = gen.makeNodeMap(device);
-//                        List<String> nodeNames = gen.getMemoryRegionsForLinker(device);
-//                        List<String> nodeNames = gen.getMemorySpaces(device);
-//                        List<String> nodeNames = gen.getConfigRegAddresses(device);
-//                        List<String> nodeNames = gen.getAtdfInfo(device);
-//                        List<String> nodeNames = gen.getHeaderFileStuff(device);
                         gen.generate(device);
                         long genTime = System.currentTimeMillis() - startTime;
 
                         publish("----------");
                         publish(device.getName());
                         publish(genTime + "ms");
-                        
-/*                        if(nodeNames.isEmpty()) {
-                            publish("Nothing here");
-                        }
-                        else {
-                            for(String name : nodeNames)
-                                publish(name);
-                        }
-*/
                     }
                 }
             } catch(Exception ex) {

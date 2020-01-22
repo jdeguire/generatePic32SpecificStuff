@@ -64,9 +64,9 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
         outputDataSections(target.hasL1Cache());
         outputRuntimeMemorySections();
 
-        writer_.println("    . = ALIGN(4);");
-        writer_.println("    _end = . ;");
-        writer_.println("    _ram_end_ = ORIGIN(ram) + LENGTH(ram) -1 ;");
+        writer_.println("  . = ALIGN(4);");
+        writer_.println("  _end = . ;");
+        writer_.println("  _ram_end_ = ORIGIN(ram) + LENGTH(ram) -1 ;");
 
         outputElfDebugSections();
 
@@ -142,113 +142,113 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
     /* Output a section containing the interrupt vector table.
      */
     private void outputVectorsSection() {
-        writer_.println("    .vectors :");
-        writer_.println("    {");
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        _sfixed = .;");
-        writer_.println("        __svectors = .;");
-        writer_.println("        KEEP(*(.vectors .vectors.* .vectors_default .vectors_default.*))");
-        writer_.println("        KEEP(*(.isr_vector))");
-        writer_.println("        KEEP(*(.reset*))");
-        writer_.println("        KEEP(*(.after_vectors))");
-        writer_.println("        __evectors = .;");
-        writer_.println("    } > rom");
+        writer_.println("  .vectors :");
+        writer_.println("  {");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    _sfixed = .;");
+        writer_.println("    __svectors = .;");
+        writer_.println("    KEEP(*(.vectors .vectors.* .vectors_default .vectors_default.*))");
+        writer_.println("    KEEP(*(.isr_vector))");
+        writer_.println("    KEEP(*(.reset*))");
+        writer_.println("    KEEP(*(.after_vectors))");
+        writer_.println("    __evectors = .;");
+        writer_.println("  } > rom");
         writer_.println();
     }
 
     /* Output the .text section, which contains the program code and data initialization code.
      */
     private void outputTextSection() {
-        writer_.println("    .text :");
-        writer_.println("    {");
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        *(.text .text.* .gnu.linkonce.t.*)");
-        writer_.println("        *(.glue_7t) *(.glue_7)");
-        writer_.println("        *(.rodata .rodata* .gnu.linkonce.r.*)");
-        writer_.println("        *(.ARM.extab* .gnu.linkonce.armextab.*)");
+        writer_.println("  .text :");
+        writer_.println("  {");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    *(.text .text.* .gnu.linkonce.t.*)");
+        writer_.println("    *(.glue_7t) *(.glue_7)");
+        writer_.println("    *(.rodata .rodata* .gnu.linkonce.r.*)");
+        writer_.println("    *(.ARM.extab* .gnu.linkonce.armextab.*)");
         writer_.println();
-        writer_.println("        /* Support C constructors, and C destructors in both user code");
-        writer_.println("           and the C library. This also provides support for C++ code. */");
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        KEEP(*(.init))");
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        __preinit_array_start = .;");
-        writer_.println("        KEEP (*(.preinit_array))");
-        writer_.println("        __preinit_array_end = .;");
+        writer_.println("    /* Support C constructors, and C destructors in both user code");
+        writer_.println("       and the C library. This also provides support for C++ code. */");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    KEEP(*(.init))");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    __preinit_array_start = .;");
+        writer_.println("    KEEP (*(.preinit_array))");
+        writer_.println("    __preinit_array_end = .;");
         writer_.println();
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        __init_array_start = .;");
-        writer_.println("        KEEP (*(SORT(.init_array.*)))");
-        writer_.println("        KEEP (*(.init_array))");
-        writer_.println("        __init_array_end = .;");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    __init_array_start = .;");
+        writer_.println("    KEEP (*(SORT(.init_array.*)))");
+        writer_.println("    KEEP (*(.init_array))");
+        writer_.println("    __init_array_end = .;");
         writer_.println();
-        writer_.println("        . = ALIGN(0x4);");
-        writer_.println("        KEEP (*crtbegin.o(.ctors))");
-        writer_.println("        KEEP (*(EXCLUDE_FILE (*crtend.o) .ctors))");
-        writer_.println("        KEEP (*(SORT(.ctors.*)))");
-        writer_.println("        KEEP (*crtend.o(.ctors))");
+        writer_.println("    . = ALIGN(0x4);");
+        writer_.println("    KEEP (*crtbegin.o(.ctors))");
+        writer_.println("    KEEP (*(EXCLUDE_FILE (*crtend.o) .ctors))");
+        writer_.println("    KEEP (*(SORT(.ctors.*)))");
+        writer_.println("    KEEP (*crtend.o(.ctors))");
         writer_.println();
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        KEEP(*(.fini))");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    KEEP(*(.fini))");
         writer_.println();
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        __fini_array_start = .;");
-        writer_.println("        KEEP (*(.fini_array))");
-        writer_.println("        KEEP (*(SORT(.fini_array.*)))");
-        writer_.println("        __fini_array_end = .;");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    __fini_array_start = .;");
+        writer_.println("    KEEP (*(.fini_array))");
+        writer_.println("    KEEP (*(SORT(.fini_array.*)))");
+        writer_.println("    __fini_array_end = .;");
         writer_.println();
-        writer_.println("        KEEP (*crtbegin.o(.dtors))");
-        writer_.println("        KEEP (*(EXCLUDE_FILE (*crtend.o) .dtors))");
-        writer_.println("        KEEP (*(SORT(.dtors.*)))");
-        writer_.println("        KEEP (*crtend.o(.dtors))");
+        writer_.println("    KEEP (*crtbegin.o(.dtors))");
+        writer_.println("    KEEP (*(EXCLUDE_FILE (*crtend.o) .dtors))");
+        writer_.println("    KEEP (*(SORT(.dtors.*)))");
+        writer_.println("    KEEP (*crtend.o(.dtors))");
         writer_.println();
-        writer_.println("        . = ALIGN(4);");
+        writer_.println("    . = ALIGN(4);");
         writer_.println();
-        writer_.println("        KEEP(*(.eh_frame*))");
+        writer_.println("    KEEP(*(.eh_frame*))");
         writer_.println();
-        writer_.println("        _efixed = .;            /* End of text section */");
-        writer_.println("    } > rom");
+        writer_.println("    _efixed = .;            /* End of text section */");
+        writer_.println("  } > rom");
         writer_.println();
     }
 
     /* Output a section that is, according to Stack Overflow, used for stack unwind tables.
      */
     private void outputArmStackUnwindSection() {
-        writer_.println("    /* .ARM.exidx is sorted, so has to go in its own output section.  */");
-        writer_.println("    PROVIDE_HIDDEN (__exidx_start = .);");
-        writer_.println("    .ARM.exidx :");
-        writer_.println("    {");
-        writer_.println("      *(.ARM.exidx* .gnu.linkonce.armexidx.*)");
-        writer_.println("    } > rom");
-        writer_.println("    PROVIDE_HIDDEN (__exidx_end = .);");
+        writer_.println("  /* .ARM.exidx is sorted, so has to go in its own output section.  */");
+        writer_.println("  PROVIDE_HIDDEN (__exidx_start = .);");
+        writer_.println("  .ARM.exidx :");
+        writer_.println("  {");
+        writer_.println("    *(.ARM.exidx* .gnu.linkonce.armexidx.*)");
+        writer_.println("  } > rom");
+        writer_.println("  PROVIDE_HIDDEN (__exidx_end = .);");
         writer_.println();
-        writer_.println("    _etext = ALIGN(4);");
-        writer_.println("    __etext = _etext;");
+        writer_.println("  _etext = ALIGN(4);");
+        writer_.println("  __etext = _etext;");
         writer_.println();
     }
 
     /* Output sections for data as opposed to code.
     */
     private void outputDataSections(boolean hasCache) {
-        writer_.println("    .relocate : AT (_etext)");
-        writer_.println("    {");
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        _srelocate = .;");
-        writer_.println("        __data_start__ = .;");
+        writer_.println("  .relocate : AT (_etext)");
+        writer_.println("  {");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    _srelocate = .;");
+        writer_.println("    __data_start__ = .;");
         if(hasCache) {
-            writer_.println("        /* For data that should bypass the cache (eg. will be accessed by DMA). */");
-            writer_.println("        /* User code must configure the MPU for this section. */");
-            writer_.println("        __uncached_data_start__ = .;");
-            writer_.println("        *(.uncacheddata .uncacheddata.*)");
-            writer_.println("        . = ALIGN(. - _suncacheddata <= 32 ? 32 : 1 << LOG2CEIL(. - _suncacheddata));");
-            writer_.println("        __uncached_data_end__ = .;");
+            writer_.println("    /* For data that should bypass the cache (eg. will be accessed by DMA). */");
+            writer_.println("    /* User code must configure the MPU for this section. */");
+            writer_.println("    __uncached_data_start__ = .;");
+            writer_.println("    *(.uncacheddata .uncacheddata.*)");
+            writer_.println("    . = ALIGN(. - _suncacheddata <= 32 ? 32 : 1 << LOG2CEIL(. - _suncacheddata));");
+            writer_.println("    __uncached_data_end__ = .;");
         }
-        writer_.println("        *(.ramfunc .ramfunc.*);");
-        writer_.println("        *(.data .data.*);");
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        __data_end__ = .;");
-        writer_.println("        _erelocate = .;");
-        writer_.println("    } > ram");
+        writer_.println("    *(.ramfunc .ramfunc.*);");
+        writer_.println("    *(.data .data.*);");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    __data_end__ = .;");
+        writer_.println("    _erelocate = .;");
+        writer_.println("  } > ram");
         writer_.println();
 
         Utils.writeMultilineCComment(writer_, 2, 
@@ -274,19 +274,19 @@ public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
         writer_.println("  } > ram");
         writer_.println();
         
-        writer_.println("    .bss (NOLOAD) :");
-        writer_.println("    {");
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        __bss_start__ = .;");
-        writer_.println("        _sbss = . ;");
-        writer_.println("        _szero = .;");
-        writer_.println("        *(.bss .bss.*);");
-        writer_.println("        *(COMMON)");
-        writer_.println("        . = ALIGN(4);");
-        writer_.println("        __bss_end__ = .;");
-        writer_.println("        _ebss = . ;");
-        writer_.println("        _ezero = .;");
-        writer_.println("    } > ram");
+        writer_.println("  .bss (NOLOAD) :");
+        writer_.println("  {");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    __bss_start__ = .;");
+        writer_.println("    _sbss = . ;");
+        writer_.println("    _szero = .;");
+        writer_.println("    *(.bss .bss.*);");
+        writer_.println("    *(COMMON)");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    __bss_end__ = .;");
+        writer_.println("    _ebss = . ;");
+        writer_.println("    _ezero = .;");
+        writer_.println("  } > ram");
         writer_.println();
     }
 
