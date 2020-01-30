@@ -29,12 +29,18 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.Pair;
 import com.microchip.crownking.edc.Bitfield;
 import com.microchip.crownking.edc.DCR;
 import com.microchip.crownking.edc.Mode;
 import com.microchip.crownking.edc.Register;
 import com.microchip.crownking.edc.SFR;
+import com.microchip.crownking.mplabinfo.FamilyDefinitions;
+import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
+import com.microchip.mplab.crownkingx.xMemoryPartition;
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import org.w3c.dom.Node;
 
@@ -51,12 +57,13 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
     public void generate(TargetDevice target) throws java.io.FileNotFoundException {
         List<SFR> sfrList = target.getSFRs();
         List<DCR> dcrList = target.getDCRs();
-        String devicename = getDeviceNameForHeader(target).substring(1);  // remove staring 'p'
+        InterruptList interruptList = new InterruptList(target.getPic());
 
         createNewHeaderFile(target);
         outputLicenseHeader(writer_, false);
-        outputIncludeGuardStart(devicename);
+        outputIncludeGuardStart(target);
 
+        // Stuff for C/C++ only
         writeNoAssemblyStart(writer_);
         outputIncludedHeaders();
         outputExternCStart();
@@ -67,34 +74,39 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
         writer_.println("#else  /* __ASSEMBLER__ */");
         writer_.println();
 
+        // Stuff for assembler only
         outputSfrAssemblerMacros(target, sfrList);
         outputDcrAssemblerMacros(target, dcrList);
-        outputSfrFieldMacros(sfrList);
-        outputDcrFieldMacros(dcrList);
 
         writer_.println();
         writeNoAssemblyEnd(writer_);
         writer_.println();
 
-        outputIncludeGuardEnd(devicename);
+        // Stuff for both C/C++ and assembler
+        outputSfrFieldMacros(sfrList);
+        outputDcrFieldMacros(dcrList);
+        outputInterruptMacros(interruptList);
+        outputPeripheralMacros(target);
+        outputMemoryRegionMacros(target, interruptList);
+        outputTargetFeatureMacros(target, interruptList.getNumShadowRegs());
+
+        outputIncludeGuardEnd(target);
         closeHeaderFile();
     }
 
 
     /* Output the opening "#ifndef...#define" sequence of an include guard for this header file.
      */
-    private void outputIncludeGuardStart(String devname) {
-        devname = devname.toUpperCase();
-        writer_.println("#ifndef __" + devname + "_H");
-        writer_.println("#define __" + devname + "_H");
+    private void outputIncludeGuardStart(TargetDevice target) {
+        writer_.println("#ifndef __" + target.getBaseDeviceName() + "_H");
+        writer_.println("#define __" + target.getBaseDeviceName() + "_H");
         writer_.println();
     }
 
     /* Output the closing "#endif" of an include guard for this header file.
      */
-    private void outputIncludeGuardEnd(String devname) {
-        devname = devname.toUpperCase();
-        writer_.println("#endif  /* __" + devname + "_H */");
+    private void outputIncludeGuardEnd(TargetDevice target) {
+        writer_.println("#endif  /* __" + target.getBaseDeviceName() + "_H */");
     }
 
     /* Output the opening sequence of macros for C linkage.
@@ -174,6 +186,195 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
         }
     }
 
+    /* Output macros providing the interrupt vectors and requests (if used) for the device.
+     */
+    private void outputInterruptMacros(InterruptList interruptList) {
+        List<InterruptList.Interrupt> vectorList = interruptList.getInterruptVectors();
+
+        writer_.println("/* Interrupt Vector Numbers */");
+        for(InterruptList.Interrupt vector : vectorList) {
+            writeLengthyDecimalMacro(writer_, 
+                                     "_" + vector.getName() + "_VECTOR",
+                                     (long)vector.getIntNumber());
+        }
+        writer_.println();
+
+        // Some PIC32MX devices have to share vectors with multiple requests because the MIPS CPU
+        // at the time supported only 64 vectors, but the PIC32MX had more than 64 request sources.
+        // In such a case, the request numbers are separate, so we need to output those too.
+        if(interruptList.hasSeparateInterruptRequests()) {
+            List<InterruptList.Interrupt> requestList = interruptList.getInterruptRequests();
+
+            writer_.println("/* Interrupt Request Numbers */");
+            for(InterruptList.Interrupt request : requestList) {
+                writeLengthyDecimalMacro(writer_, 
+                                         "_" + request.getName() + "_IRQ",
+                                         (long)request.getIntNumber());
+            }
+            writer_.println();
+        }
+    }
+
+    /* Output macros that indicate that a particular peripheral is present on the device as well as
+     * that peripheral's base address.
+     */
+    private void outputPeripheralMacros(TargetDevice target) {
+        List<Node> baseNodeList = getPeripheralBaseNodes(target);
+
+        writer_.println("/* Device Peripherals */");
+        for(Node node : baseNodeList) {
+            String[] peripherals = Utils.getNodeAttribute(node, "ltx:baseofperipheral", "").split(" ");
+
+            for(String periph : peripherals) {
+                writeStringMacro(writer_, "_" + periph, null, null);
+            }
+        }
+        writer_.println();
+
+        writer_.println("/* Peripheral Base Addresses */");
+        for(Node node : baseNodeList) {
+            String[] peripherals = Utils.getNodeAttribute(node, "ltx:baseofperipheral", "").split(" ");
+            long addr = makeKseg1Addr(Utils.getNodeAttributeAsLong(node, "edc:_addr", 0));
+
+            for(String periph : peripherals) {
+                writeLengthyHexMacro(writer_, "_" + periph + "_BASE_ADDRESS", addr);
+            }
+        }
+        writer_.println();
+    }
+
+    /* Output macros that give the memory location and size of the default memory regions used by
+     * the linker scripts generated by this tool.
+     */
+    private void outputMemoryRegionMacros(TargetDevice target,
+                                          InterruptList interruptList) {
+        ArrayList<LinkerMemoryRegion> lmrList = new ArrayList<>();
+        MipsCommon.addStandardMemoryRegions(lmrList, target, interruptList, Collections.<DCR>emptyList());
+
+        writer_.println("/* Default Memory Region Macros */");
+        for(LinkerMemoryRegion lmr : lmrList) {
+            String lmrMacroBase = "__" + lmr.getName().toUpperCase() + "_";
+
+            writeLengthyHexMacro(writer_, lmrMacroBase + "BASE", lmr.getStartAddress());
+            writeLengthyHexMacro(writer_, lmrMacroBase + "LENGTH", lmr.getLength());
+        }
+
+        writer_.println();
+    }
+
+    /* Output macros that code can use to query device feature, such as instruction set support or
+     * the number of shadow registers.  This function needs to know the number of shadow register 
+     * sets the device has, which can be retrieved from an InterruptList.
+     */
+    private void outputTargetFeatureMacros(TargetDevice target, int srsCount) {
+        String devname = target.getDeviceName();
+        String basename = target.getBaseDeviceName();
+
+        // Output macros common to all devices.
+        writeGuardedMacro(writer_, "__" + basename, "1");
+        writeGuardedMacro(writer_, "__" + basename + "__", "1");
+        writeGuardedMacro(writer_, "__XC", "1");
+        writeGuardedMacro(writer_, "__XC__", "1");
+        writeGuardedMacro(writer_, "__XC32", "1");
+        writeGuardedMacro(writer_, "__XC32__", "1");
+        writer_.println();
+
+        // Output a macro to indicate device series, which is the first few character of the name.
+        // The MGCxxx and MECxxx devices are a bit different here.
+        String series;
+        if(devname.startsWith("M")) {
+            series = devname.substring(0, 3);
+        } else if(devname.startsWith("USB")) {
+            series = devname.substring(0, 5);
+        } else {
+            series = devname.substring(0, 7);
+        }
+        writeGuardedMacro(writer_, "__" + series, "1");
+        writeGuardedMacro(writer_, "__" + series + "__", "1");
+
+        // Output feature macros that use the name of the device to fill in.  These are used only
+        // on PIC32 devices.
+        if(series.startsWith("PIC32")) {
+            if(series.equals("PIC32MX")) {
+                String flashSize = substringWithoutLeadingZeroes(basename, 8, 11);
+                writeGuardedMacro(writer_, "__PIC32_FLASH_SIZE", flashSize);
+                writeGuardedMacro(writer_, "__PIC32_FLASH_SIZE__", flashSize);
+                writeGuardedMacro(writer_, "__PIC32_MEMORY_SIZE", flashSize);
+                writeGuardedMacro(writer_, "__PIC32_MEMORY_SIZE__", flashSize);
+
+                String featureSet = basename.substring(4, 7);
+                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET", featureSet);
+                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET__", featureSet);
+
+                String pinSet = "\'" + basename.substring(basename.length()-1) + "\'";
+                writeGuardedMacro(writer_, "__PIC32_PIN_SET", pinSet);
+                writeGuardedMacro(writer_, "__PIC32_PIN_SET__", pinSet);
+            } else {
+                String flashSize = substringWithoutLeadingZeroes(basename, 4, 8);
+                writeGuardedMacro(writer_, "__PIC32_FLASH_SIZE", flashSize);
+                writeGuardedMacro(writer_, "__PIC32_FLASH_SIZE__", flashSize);
+                
+                String featureSet = basename.substring(8, 10);
+                String featureSet0 = featureSet.substring(0, 1);
+                String featureSet1 = featureSet.substring(1, 2);
+                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET", "\"" + featureSet + "\"");
+                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET__", "\"" + featureSet + "\"");
+                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET0", "\'" + featureSet0 + "\'");
+                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET0__", "\'" + featureSet0 + "\'");
+                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET1", "\'" + featureSet1 + "\'");
+                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET1__", "\'" + featureSet1 + "\'");
+
+                String productGroup = "\'" + basename.substring(10, 11) + "\'";
+                writeGuardedMacro(writer_, "__PIC32_PRODUCT_GROUP", productGroup);
+                writeGuardedMacro(writer_, "__PIC32_PRODUCT_GROUP__", productGroup);
+
+                String pinCount = substringWithoutLeadingZeroes(basename, basename.length()-3, basename.length());
+                writeGuardedMacro(writer_, "__PIC32_PIN_COUNT", pinCount);
+                writeGuardedMacro(writer_, "__PIC32_PIN_COUNT__", pinCount);
+            }
+        }
+        writer_.println();
+
+        // Output macros that give architecture details like supported instruction sets and if the 
+        // device has an FPU.
+        if(target.hasL1Cache()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_L1CACHE", "1");
+        }
+        if(target.supportsMips32Isa()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_MIPS32R2", "1");
+        }
+        if(TargetDevice.TargetArch.MIPS32R5 == target.getArch()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_MIPS32R5", "1");
+        }
+        if(target.supportsMicroMipsIsa()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_MICROMIPS", "1");
+        }
+        if(target.supportsMips16Isa()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_MIPS16", "1");
+        }
+        if(target.supportsDspR2Ase()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_DSPR2", "1");
+        }
+        if(target.supportsMcuAse()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_MCUASE", "1");
+        }
+        if(target.hasFpu()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_FPU64", "1");
+        }
+        if(!series.equals("PIC32MX")) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_SSX", "1");
+        }
+        if(SubFamily.PIC32MZ == target.getSubFamily()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_MMU_MZ_FIXED", "1");
+        }
+        if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa()) {
+            writeGuardedMacro(writer_, "__PIC32_HAS_INTCONVS", "1");
+        }
+
+        writeGuardedMacro(writer_, "__PIC32_HAS_INIT_DATA", "1");
+        writeGuardedMacro(writer_, "__PIC32_SRS_SET_COUNT", Integer.toString(srsCount));
+        writer_.println();
+    }
 
     /* Output C definitions for the given Register.  This is the implementation of the two methods
      * outputSfrDefinitions() and outputDcrDefinitions() since SFRs and DCRs are really just types
@@ -324,9 +525,9 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
                 long mask = bf.getMask() << position;
                 long width = bf.getWidth();
 
-                writeLongHexMacro(writer_, macroBase + "POSITION", position);
-                writeLongHexMacro(writer_, macroBase + "MASK", mask);
-                writeLongHexMacro(writer_, macroBase + "LENGTH", width);
+                writeLengthyHexMacro(writer_, macroBase + "POSITION", position);
+                writeLengthyHexMacro(writer_, macroBase + "MASK", mask);
+                writeLengthyHexMacro(writer_, macroBase + "LENGTH", width);
                 writer_.println();
             }
 
@@ -341,9 +542,9 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
         if(wroteMacros  &&  needsWordMacros) {
             String macroBase = "_" + register.getName() + "_w_";
 
-            writeLongHexMacro(writer_, macroBase + "POSITION", 0);
-            writeLongHexMacro(writer_, macroBase + "MASK", 0xFFFFFFFFL);
-            writeLongHexMacro(writer_, macroBase + "LENGTH", 32);
+            writeLengthyHexMacro(writer_, macroBase + "POSITION", 0);
+            writeLengthyHexMacro(writer_, macroBase + "MASK", 0xFFFFFFFFL);
+            writeLengthyHexMacro(writer_, macroBase + "LENGTH", 32);
             writer_.println();
         }
     }
@@ -367,6 +568,25 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
         return bitfieldList;
     }
 
+    /* Return a new list of Nodes that are the base of peripherals; that is, the Node represents an
+     * SFR that is the first one of that peripheral and so its address is also the base address of 
+     * the peripheral.  We can't use SFR objects directly because the MPLAB X API does not expose
+     * the info we need and there isn't a method to get the Node directly from an SFR object.
+     */
+    private List<Node> getPeripheralBaseNodes(TargetDevice target) {
+        ArrayList<Node> baseNodeList = new ArrayList<>(32);
+        List<Node> regions = target.getPic().getMainPartition().getSFRRegions();
+
+        for(Node sfrSection : regions) {
+            List<Node> children = Utils.filterAllChildNodes(sfrSection, 
+                                                            "edc:SFRDef", 
+                                                            "ltx:baseofperipheral", 
+                                                            null);
+            baseNodeList.addAll(children);
+        }
+
+        return baseNodeList;
+    }
 
     /* Return True if the given bitfield was not meant to appear in the header file.  These would
      * presumably be used by the MPLAB X simulator or debugger.
@@ -408,12 +628,43 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
     /* Write a macro that evaluates to a hex value.  Use this for macros that have particularly
      * long names because this will add a lot of padding between the macro name and value.
      */
-    private void writeLongHexMacro(PrintWriter writer, String macroName, long value) {
+    private void writeLengthyHexMacro(PrintWriter writer, String macroName, long value) {
         String macro = "#define " + macroName;
         macro = Utils.padStringWithSpaces(macro, 56, 4);
         macro += String.format("(0x%08X)", value);
 
         writer.println(macro);
+    }
+
+    /* Write a macro that evaluates to a deciaml value.  Use this for macros that have particularly
+     * long names because this will add a lot of padding between the macro name and value.
+     */
+    private void writeLengthyDecimalMacro(PrintWriter writer, String macroName, long value) {
+        String macro = "#define " + macroName;
+        macro = Utils.padStringWithSpaces(macro, 56, 4);
+        macro += "(" + value + ")";
+
+        writer.println(macro);
+    }
+
+    /* Write a macro that is surrounded by a check if the macro has already been defined.  That is,
+     * write the macro in the form:
+     *
+     *    #ifndef macroName
+     *    #  define macroName   [value, if present]
+     *    #endif
+     */
+    private void writeGuardedMacro(PrintWriter writer, String macroName, String value) {
+        String macro = "#  define " + macroName;
+
+        if(null != value  &&  !value.isEmpty()) {
+            macro = Utils.padStringWithSpaces(macro, 40, 4);
+            macro += value;
+        }
+
+        writer.println("#ifndef " + macroName);
+        writer.println(macro);
+        writer.println("#endif");
     }
 
     /* Return the typename of the C struct/union that breaks out the bitfields of the given register.
@@ -429,5 +680,19 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
      */
     private long makeKseg1Addr(long addr) {
         return ((addr & 0x1FFFFFFFL) | 0xA0000000L);
+    }
+
+    /* Return the substring of the given string starting with 'begin' and ending one before 'end'
+     * (like with Java's String.substring() method) and with any leading zeroes in the resulting
+     * substring removed.  Presumably, you'd use this when grabbing numbers from strings.
+     */
+    private String substringWithoutLeadingZeroes(String str, int begin, int end) {
+        String substr = str.substring(begin, end);
+
+        int i;
+        for(i = 0; i < substr.length()  &&  '0' == substr.charAt(i); ++i) {
+        }
+
+        return substr.substring(i);
     }
 }

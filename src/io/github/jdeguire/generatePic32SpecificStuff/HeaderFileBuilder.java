@@ -57,16 +57,10 @@ public abstract class HeaderFileBuilder {
     /* Return the device name formatted for use as a header name.
      */
     public String getDeviceNameForHeader(TargetDevice target) {
-        String devicename = target.getDeviceName().toLowerCase();
+        String devicename = target.getBaseDeviceName().toLowerCase();
 
         if(target.isMips32()) {
-            if(devicename.startsWith("pic32")) {
-                devicename = devicename.substring(3);
-            }
-
             devicename = "p" + devicename;
-        } else if(devicename.startsWith("atsam")) {
-            devicename = devicename.substring(2);
         }
 
         return devicename;

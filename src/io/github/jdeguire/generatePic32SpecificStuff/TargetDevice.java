@@ -67,6 +67,9 @@ public class TargetDevice {
     final private xPIC pic_;
     final private String name_;
 	private ArrayList<String> instructionSets_;
+    private ArrayList<LinkerMemoryRegion> lmrList_ = null;
+    private ArrayList<SFR> sfrList_ = null;
+    private ArrayList<DCR> dcrList_ = null;
     private AtdfDoc atdfDoc_ = null;
 
     /* Create a new TargetDevice based on the given name.  Throws an exception if the given name is
@@ -80,10 +83,18 @@ public class TargetDevice {
 		javax.xml.parsers.ParserConfigurationException, 
 		IllegalArgumentException {
 
-        name_ = devname.toUpperCase();
-        pic_ = (xPIC)xPICFactory.getInstance().get(name_);
-        
-		if(Family.PIC32 == pic_.getFamily()  ||  Family.ARM32BIT == pic_.getFamily()) {
+        devname = devname.toUpperCase();
+        pic_ = (xPIC)xPICFactory.getInstance().get(devname);
+
+        // Make sure SAM devices start with "ATSAM" (they already do as of 29 Jan 2020) just so we
+        // can keep the name consistent and predictable.
+        if(devname.startsWith("SAM")) {
+            devname = "AT" + devname;
+        }
+
+        name_ = devname;
+
+        if(Family.PIC32 == pic_.getFamily()  ||  Family.ARM32BIT == pic_.getFamily()) {
    			instructionSets_ = new ArrayList<>(pic_.getInstructionSet().getSubsetIDs());
 
 			String setId = pic_.getInstructionSet().getID();
@@ -118,19 +129,20 @@ public class TargetDevice {
         return name_;
     }
 
-    public String getDeviceNameMacro() {
+    /* Return the name of the device modified such that it can be used for C macros and file names.
+     * How the name is modified depends on the device, but an example is that "PIC32" devices will
+     * have the "PIC" portion removed and "ATSAM" devices will have the "AT" removed.
+     */
+    public String getBaseDeviceName() {
         String name = getDeviceName();
-        String res = "";
 
         if (name.startsWith("PIC32")) {
-            res = "__" + name.substring(3) + "__";       // "__32MX795F512L__"
+            return name.substring(3);                 // "32MX795F512L"
         } else if(name.startsWith("ATSAM")) {
-            res = "__" + name.substring(2) + "__";       // "__SAME70Q21__"
-        } else if (!name.isEmpty()) {
-            res = "__" + name + "__";
+            return name.substring(2);                 // "SAME70Q21"
+        } else {
+            return name;
         }
-
-        return res;
     }
 
     /* Get the device family of the target, which is used to determine its features.
@@ -303,6 +315,14 @@ public class TargetDevice {
 		return hasDsp;
     }
 
+    /* Return True if the target supports the MIPS MCU application specific extension.
+     */
+    public boolean supportsMcuAse() {
+        // There's no way to tell from the MPLAB X API, but looking at datasheets for different PIC32
+        // series suggests that devices that support microMIPS also support the MCU ASE.
+        return supportsMicroMipsIsa();
+    }
+
     /* Return True if the target supports the ARM instruction set.
      */
     public boolean supportsArmIsa() {
@@ -338,7 +358,7 @@ public class TargetDevice {
                 case ARMV7A:
                     // There does not yet seem to be a way to check for NEON other than name.
                     String name = getDeviceName();
-                    if(name.startsWith("SAMA5D3")  ||  name.startsWith("ATSAMA5D3"))
+                    if(name.startsWith("ATSAMA5D3"))
                         fpuName = "vfp4-dp-d16";
                     else
                         fpuName = "neon-vfpv4";
@@ -356,43 +376,55 @@ public class TargetDevice {
      * code memory, and data memory regions.
      */
     public List<LinkerMemoryRegion> getMemoryRegions() {
-        ArrayList<LinkerMemoryRegion> regions = new ArrayList<>();
-        xMemoryPartition mainPartition = getPic().getMainPartition();
+        if(null == lmrList_) {
+            lmrList_ = new ArrayList<>();
+            xMemoryPartition mainPartition = getPic().getMainPartition();
 
-        // MIPS:  This is for the boot flash regions.  The CPU starts executing here at 0x1FC00000.
-        // ARM:   This is for the SAM-BA boot ROM on Atmel devices, which seems to act as a simple 
-        //        UART/USB bootloader and contains a routine for applications to program themselves.
-        for(Node bootRegion : mainPartition.getBootConfigRegions()) {
-            regions.add(new LinkerMemoryRegion(bootRegion, LinkerMemoryRegion.Type.BOOT));
+            // MIPS:  This is for the boot flash regions.  The CPU starts executing here at 0x1FC00000.
+            // ARM:   This is for the SAM-BA boot ROM on Atmel devices, which seems to act as a simple 
+            //        UART/USB bootloader and contains a routine for applications to program themselves.
+            for(Node bootRegion : mainPartition.getBootConfigRegions()) {
+                lmrList_.add(new LinkerMemoryRegion(bootRegion, LinkerMemoryRegion.Type.BOOT));
+            }
+
+            // This is the main code region and also includes the ITCM on ARM devices.
+            for(Node codeRegion : mainPartition.getCodeRegions()) {
+                lmrList_.add(new LinkerMemoryRegion(codeRegion, LinkerMemoryRegion.Type.CODE));
+            }
+
+            // This actually seems to be for RAM regions despite its name.
+            // This includes the DTCM on ARM devices.
+            for(Node gprRegion : mainPartition.getGPRRegions()) {
+                lmrList_.add(new LinkerMemoryRegion(gprRegion, LinkerMemoryRegion.Type.SRAM));
+            }
+
+            // Used for the device's external bus interface, if present.
+            for(Node ebiRegion : mainPartition.getEBIRegions()) {
+                lmrList_.add(new LinkerMemoryRegion(ebiRegion, LinkerMemoryRegion.Type.EBI));
+            }
+
+            // Used for the device's serial quad interface, if present.
+            for(Node sqiRegion : mainPartition.getSQIRegions()) {
+                lmrList_.add(new LinkerMemoryRegion(sqiRegion, LinkerMemoryRegion.Type.SQI));
+            }
+
+            // Used for the device's external DDR or SDRAM interface, if present.
+            for(Node ddrRegion : mainPartition.getDDRRegions()) {
+                lmrList_.add(new LinkerMemoryRegion(ddrRegion, LinkerMemoryRegion.Type.SDRAM));
+            }
+
+            // Used for the device's config fuses.
+            for(Node dcrRegion : mainPartition.getDCRRegions()) {
+                lmrList_.add(new LinkerMemoryRegion(dcrRegion, LinkerMemoryRegion.Type.FUSE));
+            }
+
+            // Used for the device's peripheral registers.
+            for(Node sfrRegion : mainPartition.getSFRRegions()) {
+                lmrList_.add(new LinkerMemoryRegion(sfrRegion, LinkerMemoryRegion.Type.PERIPHERAL));
+            }
         }
 
-        // This is the main code region and also includes the ITCM on ARM devices.
-        for(Node codeRegion : mainPartition.getCodeRegions()) {
-            regions.add(new LinkerMemoryRegion(codeRegion, LinkerMemoryRegion.Type.CODE));
-        }
-
-        // This actually seems to be for RAM regions despite its name.
-        // This includes the DTCM on ARM devices.
-        for(Node gprRegion : mainPartition.getGPRRegions()) {
-            regions.add(new LinkerMemoryRegion(gprRegion, LinkerMemoryRegion.Type.SRAM));
-        }
-
-        // Used for the device's external bus interface, if present.
-        for(Node ebiRegion : mainPartition.getEBIRegions()) {
-            regions.add(new LinkerMemoryRegion(ebiRegion, LinkerMemoryRegion.Type.EBI));
-        }
-
-        // Used for the device's serial quad interface, if present.
-        for(Node sqiRegion : mainPartition.getSQIRegions()) {
-            regions.add(new LinkerMemoryRegion(sqiRegion, LinkerMemoryRegion.Type.SQI));
-        }
-
-        // Used for the device's external DDR or SDRAM interface, if present.
-        for(Node ddrRegion : mainPartition.getDDRRegions()) {
-            regions.add(new LinkerMemoryRegion(ddrRegion, LinkerMemoryRegion.Type.SDRAM));
-        }
-        
-        return regions;
+        return lmrList_;
     }
 
     /* Return a list of all of the special function registers (used for controlling peripherals) on
@@ -400,21 +432,24 @@ public class TargetDevice {
      * also does not include non-memory-mapped registers (NMMRs).
      */
     public List<SFR> getSFRs() {
-        ArrayList<SFR> sfrList = new ArrayList<>(256);
+        if(null == sfrList_) {
+            sfrList_ = new ArrayList<>(64);
+            List<Node> regions = getPic().getMainPartition().getSFRRegions();
 
-        for(Node sfrSection : getPic().getMainPartition().getSFRRegions()) {
-            NodeList childNodes = sfrSection.getChildNodes();
+            for(Node sfrSection : regions) {
+                NodeList childNodes = sfrSection.getChildNodes();
 
-            for(int i = 0; i < childNodes.getLength(); ++i) {
-                Node currentNode = childNodes.item(i);
+                for(int i = 0; i < childNodes.getLength(); ++i) {
+                    Node currentNode = childNodes.item(i);
 
-                if(currentNode.getNodeName().equals("edc:SFRDef")) {
-                    sfrList.add(new SFR(currentNode));
+                    if(currentNode.getNodeName().equals("edc:SFRDef")) {
+                        sfrList_.add(new SFR(currentNode));
+                    }
                 }
             }
         }
 
-        return sfrList;
+        return sfrList_;
     }
 
     /* Return a list of all of the device configuration registers on the device.  This does not 
@@ -422,21 +457,24 @@ public class TargetDevice {
      * not include non-memory-mapped registers (NMMRs).
      */
     public List<DCR> getDCRs() {
-        ArrayList<DCR> dcrList = new ArrayList<>(256);
+        if(null == dcrList_) {
+            dcrList_ = new ArrayList<>(16);
+            List<Node> regions = getPic().getMainPartition().getDCRRegions();
 
-        for(Node dcrSection : getPic().getMainPartition().getDCRRegions()) {
-            NodeList childNodes = dcrSection.getChildNodes();
+            for(Node dcrSection : regions) {
+                NodeList childNodes = dcrSection.getChildNodes();
 
-            for(int i = 0; i < childNodes.getLength(); ++i) {
-                Node currentNode = childNodes.item(i);
+                for(int i = 0; i < childNodes.getLength(); ++i) {
+                    Node currentNode = childNodes.item(i);
 
-                if(currentNode.getNodeName().equals("edc:DCRDef")) {
-                    dcrList.add(new DCR(currentNode));
+                    if(currentNode.getNodeName().equals("edc:DCRDef")) {
+                        dcrList_.add(new DCR(currentNode));
+                    }
                 }
             }
         }
 
-        return dcrList;
+        return dcrList_;
     }
 
     /* Get the address at which the given register is located.  Registers include SFRs and DCRs, so

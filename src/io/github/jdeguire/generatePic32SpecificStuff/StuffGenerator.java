@@ -30,8 +30,6 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import com.microchip.crownking.Anomaly;
-import com.microchip.crownking.Pair;
-import com.microchip.crownking.edc.DCR;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -39,13 +37,8 @@ import com.microchip.crownking.mplabinfo.DeviceSupport;
 import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
 import com.microchip.crownking.mplabinfo.DeviceSupportException;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
-import com.microchip.mplab.crownkingx.xMemoryPartition;
-import com.microchip.mplab.crownkingx.xPIC;
 import java.io.IOException;
 import javax.xml.parsers.ParserConfigurationException;
-import org.w3c.dom.NamedNodeMap;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
 
@@ -92,7 +85,7 @@ public class StuffGenerator {
     public List<Device> getDeviceList() throws DeviceSupportException {
         DeviceSupport deviceSupport = DeviceSupport.getInstance();
         List<Device> deviceList = deviceSupport.getDevices();
-        ArrayList<Device> resultList = new ArrayList<>(100);
+        ArrayList<Device> resultList = new ArrayList<>(256);
 
         for(Device device : deviceList) {
             Family family = device.getFamily();

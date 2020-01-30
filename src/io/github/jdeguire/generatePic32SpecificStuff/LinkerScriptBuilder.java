@@ -60,21 +60,13 @@ public abstract class LinkerScriptBuilder {
      * for this class.
      */
     public String getLinkerScriptRelativePath(TargetDevice target) {
-        String devicename = target.getDeviceName();
+        String devicename = target.getBaseDeviceName();
         String pathname;
 
         if(target.isMips32()) {
-            if(devicename.startsWith("PIC32")) {
-                devicename = devicename.substring(3);
-            }
-
             pathname = devicename + "/p" + devicename + ".ld";
         } else {
-            if(devicename.startsWith("SAM")) {
-                devicename = "AT" + devicename;
-            }
-
-            pathname = devicename + "/" + devicename + ".ld";                
+            pathname = devicename + "/AT" + devicename + ".ld";                
         }
 
         return pathname;

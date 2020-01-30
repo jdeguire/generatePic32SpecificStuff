@@ -119,7 +119,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         List<AtdfValue> basicDeviceParams = device.getBasicParameterValues();
 
         outputLicenseHeader(writer_, true);
-        outputIncludeGuardStart(getDeviceNameForHeader(target));
+        outputIncludeGuardStart(target);
         outputExternCStart();
         outputPreamble();
         outputInterruptDefinitions(target);
@@ -133,7 +133,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
         outputDeviceSignatureMacros(device);
         outputElectricalParameterMacros(device);
         outputExternCEnd();
-        outputIncludeGuardEnd(getDeviceNameForHeader(target));
+        outputIncludeGuardEnd(target);
 
         closeHeaderFile();
     }
@@ -141,16 +141,16 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
 
     /* Output the opening "#ifndef...#define" sequence of an include guard for this header file.
      */
-    private void outputIncludeGuardStart(String devname) {
-        writer_.println("#ifndef _INCLUDE_" + devname.toUpperCase() + "_H_");
-        writer_.println("#define _INCLUDE_" + devname.toUpperCase() + "_H_");
+    private void outputIncludeGuardStart(TargetDevice target) {
+        writer_.println("#ifndef _INCLUDE_" + target.getBaseDeviceName() + "_H_");
+        writer_.println("#define _INCLUDE_" + target.getBaseDeviceName() + "_H_");
         writer_.println();
     }
 
     /* Output the closing "#endif" of an include guard for this header file.
      */
-    private void outputIncludeGuardEnd(String devname) {
-        writer_.println("#endif  /* _INCLUDE_" + devname.toUpperCase() + "_H_ */");
+    private void outputIncludeGuardEnd(TargetDevice target) {
+        writer_.println("#endif  /* _INCLUDE_" + target.getBaseDeviceName() + "_H_ */");
     }
 
     /* Output the opening sequence of macros for C linkage.
