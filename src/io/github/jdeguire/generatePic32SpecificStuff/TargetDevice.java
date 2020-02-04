@@ -70,6 +70,7 @@ public class TargetDevice {
     private ArrayList<LinkerMemoryRegion> lmrList_ = null;
     private ArrayList<SFR> sfrList_ = null;
     private ArrayList<DCR> dcrList_ = null;
+    private InterruptList interruptList_ = null;
     private AtdfDoc atdfDoc_ = null;
 
     /* Create a new TargetDevice based on the given name.  Throws an exception if the given name is
@@ -475,6 +476,16 @@ public class TargetDevice {
         }
 
         return dcrList_;
+    }
+
+    /* Return a list of interrupts for this device.
+     */
+    public InterruptList getInterruptList() {
+        if(null == interruptList_) {
+            interruptList_ = new InterruptList(getPic());
+        }
+
+        return interruptList_;
     }
 
     /* Get the address at which the given register is located.  Registers include SFRs and DCRs, so

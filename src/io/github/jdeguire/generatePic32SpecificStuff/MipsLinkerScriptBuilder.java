@@ -49,7 +49,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
         createNewLinkerFile(target);
 
         clearMemoryRegions();
-        MipsCommon.addStandardMemoryRegions(regions_, target, intList, dcrList);
+        MipsCommon.addStandardMemoryRegions(regions_, target, dcrList);
 
         outputLicenseHeader();
         outputPreamble(intList.getDefaultBaseAddress());

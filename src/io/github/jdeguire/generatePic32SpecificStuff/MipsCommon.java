@@ -54,7 +54,6 @@ public class MipsCommon {
      */
     public static void addStandardMemoryRegions(List<LinkerMemoryRegion> lmrList,
                                                 TargetDevice target, 
-                                                InterruptList intList, 
                                                 List<DCR> dcrList) {
         List<LinkerMemoryRegion> targetRegions = target.getMemoryRegions();
 
@@ -117,6 +116,7 @@ public class MipsCommon {
             }
         }
 
+        InterruptList intList = target.getInterruptList();
         if(!intList.usesVariableOffsets()) {
             long startAddr = intList.getDefaultBaseAddress();
             long sizePerVector = 32;
