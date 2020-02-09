@@ -327,7 +327,7 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
     private void outputTargetFeatureMacros(TargetDevice target) {
         Utils.writeMultilineCComment(writer_, 0, 
                 "These macros should already be provided if you used one of the target config "
-                        + "files bundled with Clang (see the \target_config directory).  The "
+                        + "files bundled with Clang (see the \\target_config directory).  The "
                         + "MPLAB X plugin will handle this for you if you didn't decide to use "
                         + "your own.\n\n"
                         + "These are here just to help MPLAB X find what macros are defined.");
