@@ -29,6 +29,7 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.Pair;
 import com.microchip.crownking.edc.Bitfield;
 import com.microchip.crownking.edc.DCR;
 import com.microchip.crownking.edc.Mode;
@@ -324,114 +325,23 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
      * sets the device has, which can be retrieved from an InterruptList.
      */
     private void outputTargetFeatureMacros(TargetDevice target) {
-        String devname = target.getDeviceName();
-        String basename = target.getBaseDeviceName();
+        Utils.writeMultilineCComment(writer_, 0, 
+                "These macros should already be provided if you used one of the target config "
+                        + "files bundled with Clang (see the \target_config directory).  The "
+                        + "MPLAB X plugin will handle this for you if you didn't decide to use "
+                        + "your own.\n\n"
+                        + "These are here just to help MPLAB X find what macros are defined.");
 
-        // Output macros common to all devices.
-        writeGuardedMacro(writer_, "__" + basename, "1");
-        writeGuardedMacro(writer_, "__" + basename + "__", "1");
+        // Output macros to stay compatible with Microchip's XC32 compiler.
         writeGuardedMacro(writer_, "__XC", "1");
         writeGuardedMacro(writer_, "__XC__", "1");
         writeGuardedMacro(writer_, "__XC32", "1");
         writeGuardedMacro(writer_, "__XC32__", "1");
-        writer_.println();
 
-        // Output a macro to indicate device series, which is the first few character of the name.
-        // The MGCxxx and MECxxx devices are a bit different here.
-        String series;
-        if(devname.startsWith("M")) {
-            series = devname.substring(0, 3);
-        } else if(devname.startsWith("USB")) {
-            series = devname.substring(0, 5);
-        } else {
-            series = devname.substring(0, 7);
+        List<Pair<String, String>> macroList = MipsCommon.getMipsFeatureMacros(target);
+        for(Pair<String, String> macro : macroList) {
+            writeGuardedMacro(writer_, macro.first, macro.second);
         }
-        writeGuardedMacro(writer_, "__" + series, "1");
-        writeGuardedMacro(writer_, "__" + series + "__", "1");
-
-        // Output feature macros that use the name of the device to fill in.  These are used only
-        // on PIC32 devices.
-        if(series.startsWith("PIC32")) {
-            if(series.equals("PIC32MX")) {
-                String flashSize = substringWithoutLeadingZeroes(basename, 8, 11);
-                writeGuardedMacro(writer_, "__PIC32_FLASH_SIZE", flashSize);
-                writeGuardedMacro(writer_, "__PIC32_FLASH_SIZE__", flashSize);
-                writeGuardedMacro(writer_, "__PIC32_MEMORY_SIZE", flashSize);
-                writeGuardedMacro(writer_, "__PIC32_MEMORY_SIZE__", flashSize);
-
-                String featureSet = basename.substring(4, 7);
-                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET", featureSet);
-                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET__", featureSet);
-
-                String pinSet = "\'" + basename.substring(basename.length()-1) + "\'";
-                writeGuardedMacro(writer_, "__PIC32_PIN_SET", pinSet);
-                writeGuardedMacro(writer_, "__PIC32_PIN_SET__", pinSet);
-            } else {
-                String flashSize = substringWithoutLeadingZeroes(basename, 4, 8);
-                writeGuardedMacro(writer_, "__PIC32_FLASH_SIZE", flashSize);
-                writeGuardedMacro(writer_, "__PIC32_FLASH_SIZE__", flashSize);
-                
-                String featureSet = basename.substring(8, 10);
-                String featureSet0 = featureSet.substring(0, 1);
-                String featureSet1 = featureSet.substring(1, 2);
-                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET", "\"" + featureSet + "\"");
-                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET__", "\"" + featureSet + "\"");
-                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET0", "\'" + featureSet0 + "\'");
-                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET0__", "\'" + featureSet0 + "\'");
-                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET1", "\'" + featureSet1 + "\'");
-                writeGuardedMacro(writer_, "__PIC32_FEATURE_SET1__", "\'" + featureSet1 + "\'");
-
-                String productGroup = "\'" + basename.substring(10, 11) + "\'";
-                writeGuardedMacro(writer_, "__PIC32_PRODUCT_GROUP", productGroup);
-                writeGuardedMacro(writer_, "__PIC32_PRODUCT_GROUP__", productGroup);
-
-                String pinCount = substringWithoutLeadingZeroes(basename, basename.length()-3, basename.length());
-                writeGuardedMacro(writer_, "__PIC32_PIN_COUNT", pinCount);
-                writeGuardedMacro(writer_, "__PIC32_PIN_COUNT__", pinCount);
-            }
-        }
-        writer_.println();
-
-        // Output macros that give architecture details like supported instruction sets and if the 
-        // device has an FPU.
-        if(target.hasL1Cache()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_L1CACHE", "1");
-        }
-        if(target.supportsMips32Isa()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_MIPS32R2", "1");
-        }
-        if(TargetDevice.TargetArch.MIPS32R5 == target.getArch()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_MIPS32R5", "1");
-        }
-        if(target.supportsMicroMipsIsa()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_MICROMIPS", "1");
-        }
-        if(target.supportsMips16Isa()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_MIPS16", "1");
-        }
-        if(target.supportsDspR2Ase()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_DSPR2", "1");
-        }
-        if(target.supportsMcuAse()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_MCUASE", "1");
-        }
-        if(target.hasFpu()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_FPU64", "1");
-        }
-        if(!series.equals("PIC32MX")) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_SSX", "1");
-        }
-        if(SubFamily.PIC32MZ == target.getSubFamily()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_MMU_MZ_FIXED", "1");
-        }
-        if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa()) {
-            writeGuardedMacro(writer_, "__PIC32_HAS_INTCONVS", "1");
-        }
-
-        writeGuardedMacro(writer_, "__PIC32_HAS_INIT_DATA", "1");
-
-        int srsCount = target.getInterruptList().getNumShadowRegs();
-        writeGuardedMacro(writer_, "__PIC32_SRS_SET_COUNT", Integer.toString(srsCount));
         writer_.println();
     }
 
@@ -739,19 +649,5 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
      */
     private long makeKseg1Addr(long addr) {
         return ((addr & 0x1FFFFFFFL) | 0xA0000000L);
-    }
-
-    /* Return the substring of the given string starting with 'begin' and ending one before 'end'
-     * (like with Java's String.substring() method) and with any leading zeroes in the resulting
-     * substring removed.  Presumably, you'd use this when grabbing numbers from strings.
-     */
-    private String substringWithoutLeadingZeroes(String str, int begin, int end) {
-        String substr = str.substring(begin, end);
-
-        int i;
-        for(i = 0; i < substr.length()  &&  '0' == substr.charAt(i); ++i) {
-        }
-
-        return substr.substring(i);
     }
 }

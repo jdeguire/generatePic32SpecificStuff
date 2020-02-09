@@ -680,6 +680,7 @@ public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
          */
         writer_.println("  .vector_offset_init");
         writer_.println("  {");
+        writer_.println("    . = ALIGN(4) ;");
         writer_.println("    _vector_offset_init_begin = . ;");
 
         for(int vectorNum = 0; vectorNum <= intList.getLastVectorNumber(); ++vectorNum) {

@@ -371,6 +371,21 @@ public class Utils {
         }      
     }
 
+    /* Return the substring of the given string starting with 'begin' and ending one before 'end'
+     * (like with Java's String.substring() method) and with any leading zeroes in the resulting
+     * substring removed.  Presumably, you'd use this when grabbing numbers from strings.
+     */
+    public static String substringWithoutLeadingZeroes(String str, int begin, int end) {
+        String substr = str.substring(begin, end);
+
+        int i;
+        for(i = 0; i < substr.length()  &&  '0' == substr.charAt(i); ++i) {
+        }
+
+        return substr.substring(i);
+    }
+
+
     /* Return today's date with the given date format.  See the Java docs for SimpleDateFormat for
      * what the format string should contain.  Note that the format string is case-sensive ("m" is 
      * for minutes and "M" is for months, for example) and that the number of successive letters may

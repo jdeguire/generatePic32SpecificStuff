@@ -29,7 +29,10 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.Pair;
 import com.microchip.crownking.edc.DCR;
+import com.microchip.crownking.mplabinfo.FamilyDefinitions;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -146,6 +149,120 @@ public class MipsCommon {
             dcrRegion.setAsKseg1Region();
             lmrList.add(dcrRegion);
         }
+    }
+
+
+    /* Return a list of Pairs in which the first value is the name of a macro and the second value
+     * is the value of macro.  The second value may be empty for macros that do not require a value.
+     */
+    public static List<Pair<String, String>> getMipsFeatureMacros(TargetDevice target) {
+        ArrayList<Pair<String, String>> macroList = new ArrayList<>(32);
+        String devname = target.getDeviceName();
+        String basename = target.getBaseDeviceName();
+
+        // Provide macros indicating the name of the device in use.
+        macroList.add(new Pair<>("__" + basename, "1"));
+        macroList.add(new Pair<>("__" + basename + "__", "1"));
+
+        // Provide a macro to indicate device series, which is the first few character of the name.
+        // The MGCxxx and MECxxx devices are a bit different here.
+        String series;
+        if(devname.startsWith("M")) {
+            series = devname.substring(0, 3);
+        } else if(devname.startsWith("USB")) {
+            series = devname.substring(0, 5);
+        } else {
+            series = devname.substring(0, 7);
+        }
+        macroList.add(new Pair<>("__" + series, "1"));
+        macroList.add(new Pair<>("__" + series + "__", "1"));
+
+        // Provide feature macros that use the name of the device to fill in.  These are used only
+        // on PIC32 devices.
+        if(series.startsWith("PIC32")) {
+            if(series.equals("PIC32MX")) {
+                String flashSize = Utils.substringWithoutLeadingZeroes(basename, 8, 11);
+                macroList.add(new Pair<>("__PIC32_FLASH_SIZE", flashSize));
+                macroList.add(new Pair<>("__PIC32_FLASH_SIZE__", flashSize));
+                macroList.add(new Pair<>("__PIC32_MEMORY_SIZE", flashSize));
+                macroList.add(new Pair<>("__PIC32_MEMORY_SIZE__", flashSize));
+
+                String featureSet = basename.substring(4, 7);
+                macroList.add(new Pair<>("__PIC32_FEATURE_SET", featureSet));
+                macroList.add(new Pair<>("__PIC32_FEATURE_SET__", featureSet));
+
+                String pinSet = "\'" + basename.substring(basename.length()-1) + "\'";
+                macroList.add(new Pair<>("__PIC32_PIN_SET", pinSet));
+                macroList.add(new Pair<>("__PIC32_PIN_SET__", pinSet));
+            } else {
+                String flashSize = Utils.substringWithoutLeadingZeroes(basename, 4, 8);
+                macroList.add(new Pair<>("__PIC32_FLASH_SIZE", flashSize));
+                macroList.add(new Pair<>("__PIC32_FLASH_SIZE__", flashSize));
+
+                String featureSet = basename.substring(8, 10);
+                String featureSet0 = featureSet.substring(0, 1);
+                String featureSet1 = featureSet.substring(1, 2);
+                macroList.add(new Pair<>("__PIC32_FEATURE_SET", "\"" + featureSet + "\""));
+                macroList.add(new Pair<>("__PIC32_FEATURE_SET__", "\"" + featureSet + "\""));
+                macroList.add(new Pair<>("__PIC32_FEATURE_SET0", "\'" + featureSet0 + "\'"));
+                macroList.add(new Pair<>("__PIC32_FEATURE_SET0__", "\'" + featureSet0 + "\'"));
+                macroList.add(new Pair<>("__PIC32_FEATURE_SET1", "\'" + featureSet1 + "\'"));
+                macroList.add(new Pair<>("__PIC32_FEATURE_SET1__", "\'" + featureSet1 + "\'"));
+
+                String productGroup = "\'" + basename.substring(10, 11) + "\'";
+                macroList.add(new Pair<>("__PIC32_PRODUCT_GROUP", productGroup));
+                macroList.add(new Pair<>("__PIC32_PRODUCT_GROUP__", productGroup));
+
+                int pinBegin = basename.length() - 3;
+                int pinEnd = basename.length();
+                String pinCount = Utils.substringWithoutLeadingZeroes(basename, pinBegin, pinEnd);
+                macroList.add(new Pair<>("__PIC32_PIN_COUNT", pinCount));
+                macroList.add(new Pair<>("__PIC32_PIN_COUNT__", pinCount));
+            }
+        }
+
+        // Provide macros that give architecture details like supported instruction sets and if the 
+        // device has an FPU.
+        if(target.hasL1Cache()) {
+            macroList.add(new Pair<>("__PIC32_HAS_L1CACHE", "1"));
+        }
+        if(target.supportsMips32Isa()) {
+            macroList.add(new Pair<>("__PIC32_HAS_MIPS32R2", "1"));
+        }
+        if(TargetDevice.TargetArch.MIPS32R5 == target.getArch()) {
+            macroList.add(new Pair<>("__PIC32_HAS_MIPS32R5", "1"));
+        }
+        if(target.supportsMicroMipsIsa()) {
+            macroList.add(new Pair<>("__PIC32_HAS_MICROMIPS", "1"));
+        }
+        if(target.supportsMips16Isa()) {
+            macroList.add(new Pair<>("__PIC32_HAS_MIPS16", "1"));
+        }
+        if(target.supportsDspR2Ase()) {
+            macroList.add(new Pair<>("__PIC32_HAS_DSPR2", "1"));
+        }
+        if(target.supportsMcuAse()) {
+            macroList.add(new Pair<>("__PIC32_HAS_MCUASE", "1"));
+        }
+        if(target.hasFpu()) {
+            macroList.add(new Pair<>("__PIC32_HAS_FPU64", "1"));
+        }
+        if(!series.equals("PIC32MX")) {
+            macroList.add(new Pair<>("__PIC32_HAS_SSX", "1"));
+        }
+        if(FamilyDefinitions.SubFamily.PIC32MZ == target.getSubFamily()) {
+            macroList.add(new Pair<>("__PIC32_HAS_MMU_MZ_FIXED", "1"));
+        }
+        if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa()) {
+            macroList.add(new Pair<>("__PIC32_HAS_INTCONVS", "1"));
+        }
+
+        macroList.add(new Pair<>("__PIC32_HAS_INIT_DATA", "1"));
+
+        int srsCount = target.getInterruptList().getNumShadowRegs();
+        macroList.add(new Pair<>("__PIC32_SRS_SET_COUNT", Integer.toString(srsCount)));
+
+        return macroList;
     }
 
 
