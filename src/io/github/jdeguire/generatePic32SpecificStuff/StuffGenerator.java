@@ -56,6 +56,7 @@ public class StuffGenerator {
     CortexMHeaderFileBuilder cortexmHeaderBuilder_;
     MipsLinkerScriptBuilder mipsLinkerBuilder_;
     MipsHeaderFileBuilder mipsHeaderBuilder_;
+    TargetConfigBuilder targetConfigBuilder_;
 
     /**
      * Constructor for the Stuff Generator.
@@ -65,13 +66,15 @@ public class StuffGenerator {
      *                     name.
      */
     public StuffGenerator(String outputDir) {
-        outputDirBase_ = outputDir;
+        outputDirBase_ = outputDir + "/target/";
 
-        cortexmLinkerBuilder_ = new CortexMLinkerScriptBuilder(outputDirBase_ + "/cortex-m/lib/proc");
-        cortexmHeaderBuilder_ = new CortexMHeaderFileBuilder(outputDirBase_ + "/cortex-m/include/proc");
+        cortexmLinkerBuilder_ = new CortexMLinkerScriptBuilder(outputDirBase_ + "cortex-m/lib/proc");
+        cortexmHeaderBuilder_ = new CortexMHeaderFileBuilder(outputDirBase_ + "cortex-m/include/proc");
 
-        mipsLinkerBuilder_ = new MipsLinkerScriptBuilder(outputDirBase_ + "/mips32/lib/proc");
-        mipsHeaderBuilder_ = new MipsHeaderFileBuilder(outputDirBase_ + "/mips32/include/proc");
+        mipsLinkerBuilder_ = new MipsLinkerScriptBuilder(outputDirBase_ + "mips32/lib/proc");
+        mipsHeaderBuilder_ = new MipsHeaderFileBuilder(outputDirBase_ + "mips32/include/proc");
+
+        targetConfigBuilder_ = new TargetConfigBuilder(outputDirBase_ + "config");
     }
 
     
@@ -114,7 +117,7 @@ public class StuffGenerator {
      */
     public void generate(Device device)
             throws Anomaly, SAXException, IOException, ParserConfigurationException {
-        TargetDevice target = new TargetDevice(device.getName());
+        TargetDevice target = new TargetDevice(device);
 
         if(target.isArm()) {
             // TODO:  We'll need to target Cortex-A devices in the future.
@@ -126,5 +129,7 @@ public class StuffGenerator {
             mipsLinkerBuilder_.generate(target);
             mipsHeaderBuilder_.generate(target);
         }
+
+        targetConfigBuilder_.generate(target);
     }
 }

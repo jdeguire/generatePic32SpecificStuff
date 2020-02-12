@@ -102,15 +102,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
     @Override
     public void generate(TargetDevice target) 
                                     throws java.io.FileNotFoundException, SAXException {
-        String basename = target.getDeviceName();
-        AtdfDoc atdfDoc;
-        try {
-            atdfDoc = new AtdfDoc(basename);
-        } catch(SAXException ex) {
-            throw ex;
-        } catch(Exception ex) {
-            throw new java.io.FileNotFoundException(ex.getMessage());
-        }
+        AtdfDoc atdfDoc = target.getAtdfDocument();
 
         createNewHeaderFile(target);
 
@@ -142,15 +134,15 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
     /* Output the opening "#ifndef...#define" sequence of an include guard for this header file.
      */
     private void outputIncludeGuardStart(TargetDevice target) {
-        writer_.println("#ifndef _INCLUDE_" + target.getBaseDeviceName() + "_H_");
-        writer_.println("#define _INCLUDE_" + target.getBaseDeviceName() + "_H_");
+        writer_.println("#ifndef _INCLUDE_" + target.getDeviceNameForMacro() + "_H_");
+        writer_.println("#define _INCLUDE_" + target.getDeviceNameForMacro() + "_H_");
         writer_.println();
     }
 
     /* Output the closing "#endif" of an include guard for this header file.
      */
     private void outputIncludeGuardEnd(TargetDevice target) {
-        writer_.println("#endif  /* _INCLUDE_" + target.getBaseDeviceName() + "_H_ */");
+        writer_.println("#endif  /* _INCLUDE_" + target.getDeviceNameForMacro() + "_H_ */");
     }
 
     /* Output the opening sequence of macros for C linkage.

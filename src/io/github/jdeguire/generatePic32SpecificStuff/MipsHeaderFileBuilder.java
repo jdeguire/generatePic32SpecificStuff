@@ -36,7 +36,6 @@ import com.microchip.crownking.edc.Mode;
 import com.microchip.crownking.edc.Option;
 import com.microchip.crownking.edc.Register;
 import com.microchip.crownking.edc.SFR;
-import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -97,15 +96,15 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
     /* Output the opening "#ifndef...#define" sequence of an include guard for this header file.
      */
     private void outputIncludeGuardStart(TargetDevice target) {
-        writer_.println("#ifndef __" + target.getBaseDeviceName() + "_H");
-        writer_.println("#define __" + target.getBaseDeviceName() + "_H");
+        writer_.println("#ifndef __" + target.getDeviceNameForMacro() + "_H");
+        writer_.println("#define __" + target.getDeviceNameForMacro() + "_H");
         writer_.println();
     }
 
     /* Output the closing "#endif" of an include guard for this header file.
      */
     private void outputIncludeGuardEnd(TargetDevice target) {
-        writer_.println("#endif  /* __" + target.getBaseDeviceName() + "_H */");
+        writer_.println("#endif  /* __" + target.getDeviceNameForMacro() + "_H */");
     }
 
     /* Output the opening sequence of macros for C linkage.
@@ -327,17 +326,14 @@ public class MipsHeaderFileBuilder extends HeaderFileBuilder {
     private void outputTargetFeatureMacros(TargetDevice target) {
         Utils.writeMultilineCComment(writer_, 0, 
                 "These macros should already be provided if you used one of the target config "
-                        + "files bundled with Clang (see the \\target_config directory).  The "
+                        + "files bundled with Clang (see the /target/config directory).  The "
                         + "MPLAB X plugin will handle this for you if you didn't decide to use "
                         + "your own.\n\n"
                         + "These are here just to help MPLAB X find what macros are defined.");
 
-        // Output macros to stay compatible with Microchip's XC32 compiler.
-        writeGuardedMacro(writer_, "__XC", "1");
-        writeGuardedMacro(writer_, "__XC__", "1");
-        writeGuardedMacro(writer_, "__XC32", "1");
-        writeGuardedMacro(writer_, "__XC32__", "1");
-
+        // Notice that we are not outputting XC32 macros (like "__XC32__", "__XC32_VERSION__", etc.)
+        // because the MPLAB X plugin will let the user select if those macros should be included
+        // and will let the user fake an XC32 version.
         List<Pair<String, String>> macroList = MipsCommon.getMipsFeatureMacros(target);
         for(Pair<String, String> macro : macroList) {
             writeGuardedMacro(writer_, macro.first, macro.second);

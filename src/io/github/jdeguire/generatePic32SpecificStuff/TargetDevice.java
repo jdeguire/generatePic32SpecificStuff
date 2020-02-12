@@ -32,6 +32,7 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 import com.microchip.crownking.edc.DCR;
 import com.microchip.crownking.edc.Register;
 import com.microchip.crownking.edc.SFR;
+import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.SubFamily;
 import com.microchip.mplab.crownkingx.xMemoryPartition;
@@ -41,6 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
 
 
 /**
@@ -73,27 +75,20 @@ public class TargetDevice {
     private InterruptList interruptList_ = null;
     private AtdfDoc atdfDoc_ = null;
 
-    /* Create a new TargetDevice based on the given name.  Throws an exception if the given name is
-     * not recognized by this class.  Note that this class parses the name just enough to determine
-     * the device's family, so a lack of an exception does not necessarily mean that the device is 
-     * fully supported.
+    /* Create a new TargetDevice based on the given Device object.  Throws an exception if the given 
+     * device is not recognized by this class or if the device does not represent a MIPS or Arm
+     * device.
      */
-    public TargetDevice(String devname) throws com.microchip.crownking.Anomaly, 
+    public TargetDevice(Device device) throws com.microchip.crownking.Anomaly, 
 		org.xml.sax.SAXException,
 		java.io.IOException, 
 		javax.xml.parsers.ParserConfigurationException, 
 		IllegalArgumentException {
 
-        devname = devname.toUpperCase();
+        String devname = device.getName();
+
         pic_ = (xPIC)xPICFactory.getInstance().get(devname);
-
-        // Make sure SAM devices start with "ATSAM" (they already do as of 29 Jan 2020) just so we
-        // can keep the name consistent and predictable.
-        if(devname.startsWith("SAM")) {
-            devname = "AT" + devname;
-        }
-
-        name_ = devname;
+        name_ = normalizeDeviceName(devname);
 
         if(Family.PIC32 == pic_.getFamily()  ||  Family.ARM32BIT == pic_.getFamily()) {
    			instructionSets_ = new ArrayList<>(pic_.getInstructionSet().getSubsetIDs());
@@ -103,7 +98,7 @@ public class TargetDevice {
 				instructionSets_.add(setId);
         }
 		else {
-            String what = "Device " + devname + " is not a recognized MIPS32 or ARM device.";
+            String what = "Device " + devname + " is not a recognized MIPS32 or Arm device.";
             throw new IllegalArgumentException(what);
         }
     }
@@ -130,11 +125,11 @@ public class TargetDevice {
         return name_;
     }
 
-    /* Return the name of the device modified such that it can be used for C macros and file names.
-     * How the name is modified depends on the device, but an example is that "PIC32" devices will
-     * have the "PIC" portion removed and "ATSAM" devices will have the "AT" removed.
+    /* Return the name of the device modified such that it can be used for C macros.  How the name 
+     * is modified depends on the device, but an example is that "PIC32" devices will have the 
+     * "PIC" portion removed and "ATSAM" devices will have the "AT" removed.
      */
-    public String getBaseDeviceName() {
+    public String getDeviceNameForMacro() {
         String name = getDeviceName();
 
         if (name.startsWith("PIC32")) {
@@ -158,7 +153,22 @@ public class TargetDevice {
 		return pic_.getSubFamily();
 	}
 
-	/* Get the CPU architecture for the device.
+    /* Return the name of the ATDF device family for this device, such as "SAME" or "PIC32CX", that 
+     * applies to Arm devices.  This will return an empty string if a family is not provided.  MIPS
+     * device will generally not have an ATDF family, at least not at the time of this writing 
+     * (2 Feb 2020).
+     */
+    public String getAtdfFamily() {
+        String atdfFamily = pic_.getATDFFamily();
+
+        if(null == atdfFamily) {
+            atdfFamily = "";
+        }
+
+        return atdfFamily;
+    }
+
+    /* Get the CPU architecture for the device.
 	 */
 	public TargetArch getArch() {
 		TargetArch arch;
@@ -261,7 +271,38 @@ public class TargetDevice {
     /* Return True if the target has an FPU.
      */
     public boolean hasFpu() {
-        return pic_.hasFPU();
+        boolean hasfpu = false;
+
+        if(isMips32()) {
+            hasfpu = pic_.hasFPU();
+        } else {
+            // The .PIC files don't encode this the same way for Arm devices, so we have to dig for
+            // it ourselves.
+
+            // We don't need the "edc:" prefix here since we're using the MPLAB X API.
+            Node peripheralListNode = pic_.first("PeripheralList");
+
+            if(null != peripheralListNode) {
+                // We do need the "edc:" prefix here because this is not part of the MPLAB X API.
+                Node fpuNode = Utils.filterFirstChildNode(peripheralListNode,
+                                                          "edc:Peripheral",
+                                                          "edc:cname",
+                                                          "FPU");
+
+                if(null != fpuNode) {
+                    hasfpu = true;
+                }
+            }
+        }
+
+        return hasfpu;
+    }
+
+    /* Return True if the target has a 64-bit FPU.
+     */
+    public boolean hasFpu64() {
+        // So far, only the Cortex-M4 devices have a single-precision FPU.
+        return hasFpu()  &&  !getCpuName().equals("cortex-m4");
     }
 
     /* Return True if the device has an L1 cache.  This is actually just a guess for now based on
@@ -364,8 +405,11 @@ public class TargetDevice {
                     else
                         fpuName = "neon-vfpv4";
                     break;
+                case ARMV8A:
+                    fpuName = "fp-armv8";
+                    break;
                 default:
-                    fpuName = "vfp4-dp-d16";
+                    fpuName = "vfp4-sp-d16";
                     break;
             }
 		}
@@ -499,17 +543,39 @@ public class TargetDevice {
 
     /* Return the ATDF document relating to this target device or null if one could not be found.
      * ATDF documents came from Atmel, so not all MIPS-based devices have them (as of this writing
-     * on 14 Nov 2019).
+     * on 14 Nov 2019).  This will throw an SAXException if the file cannot be parsed properly or
+     * a FileNotFound exception if the file cannot be opened for some reason.
      */
-    public AtdfDoc getAtdfDocument() {
+    public AtdfDoc getAtdfDocument() throws java.io.FileNotFoundException, SAXException {
         if(null == atdfDoc_) {
             try {
                 atdfDoc_ = new AtdfDoc(name_);
+            } catch(SAXException ex) {
+                throw ex;
             } catch(Exception ex) {
-                atdfDoc_ = null;
+                throw new java.io.FileNotFoundException(ex.getMessage());
             }
         }
 
         return atdfDoc_;
+    }
+
+
+    /* Ensure the device name is in a predictable format for use by users of this class.  We don't 
+     * control what device names we get from the MPLAB X Device objects, so do this to ensure that 
+     * we stay consistent even if they change.
+     */
+    private String normalizeDeviceName(String devname) {
+        devname = devname.toUpperCase();
+
+        if(devname.startsWith("SAM")) {
+            devname = "AT" + devname;
+        } else if(devname.startsWith("32")) {
+            devname = "PIC" + devname;
+        } else if(devname.startsWith("P32")) {
+            devname = "PIC" + devname.substring(1);
+        }
+
+        return devname;        
     }
 }

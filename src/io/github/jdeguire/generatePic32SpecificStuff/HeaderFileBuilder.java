@@ -57,13 +57,7 @@ public abstract class HeaderFileBuilder {
     /* Return the device name formatted for use as a header name.
      */
     public String getDeviceNameForHeader(TargetDevice target) {
-        String devicename = target.getBaseDeviceName().toLowerCase();
-
-        if(target.isMips32()) {
-            devicename = "p" + devicename;
-        }
-
-        return devicename;
+        return target.getDeviceName().toLowerCase();
     }
 
     /* Return the path to the header file, including the linker script file itself, used in the
