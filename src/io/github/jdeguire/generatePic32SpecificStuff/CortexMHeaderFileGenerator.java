@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, Jesse DeGuire
+/* Copyright (c) 2020, Jesse DeGuire
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -272,7 +272,7 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
             }
 
             String vectorString = "  void *pfn" + vector.getName() + "_Handler;";
-            String descString = String.format("/* %3d %s */", vector.getIntNumber(), vector.getDescription());
+            String descString = String.format("/* %3d %s */", vectorNumber, vector.getDescription());
 
             writer_.println(Utils.padStringWithSpaces(vectorString, 44, 4) + descString);
 

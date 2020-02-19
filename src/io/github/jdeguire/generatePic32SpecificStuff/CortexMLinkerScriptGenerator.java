@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, Jesse DeGuire
+/* Copyright (c) 2020, Jesse DeGuire
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -66,6 +66,7 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
 
         writer_.println("  . = ALIGN(4);");
         writer_.println("  _end = . ;");
+        writer_.println("  __end__ = . ;");
         writer_.println("  _ram_end_ = ORIGIN(ram) + LENGTH(ram) -1 ;");
 
         outputElfDebugSections();
@@ -142,10 +143,12 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
     /* Output a section containing the interrupt vector table.
      */
     private void outputVectorsSection() {
+        writer_.println("  . = ALIGN(4);");
+        writer_.println("  _sfixed = .;");
+        writer_.println();
+
         writer_.println("  .vectors :");
         writer_.println("  {");
-        writer_.println("    . = ALIGN(4);");
-        writer_.println("    _sfixed = .;");
         writer_.println("    __svectors = .;");
         writer_.println("    KEEP(*(.vectors .vectors.* .vectors_default .vectors_default.*))");
         writer_.println("    KEEP(*(.isr_vector))");
@@ -222,6 +225,7 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println("  } > rom");
         writer_.println("  PROVIDE_HIDDEN (__exidx_end = .);");
         writer_.println();
+
         writer_.println("  _etext = ALIGN(4);");
         writer_.println("  __etext = _etext;");
         writer_.println();
@@ -237,11 +241,14 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println("    __data_start__ = .;");
         if(hasCache) {
             writer_.println("    /* For data that should bypass the cache (eg. will be accessed by DMA). */");
-            writer_.println("    /* User code must configure the MPU for this section. */");
-            writer_.println("    __uncached_data_start__ = .;");
-            writer_.println("    *(.uncacheddata .uncacheddata.*)");
-            writer_.println("    . = ALIGN(. - _suncacheddata <= 32 ? 32 : 1 << LOG2CEIL(. - _suncacheddata));");
-            writer_.println("    __uncached_data_end__ = .;");
+            writer_.println("    /* User code must configure the MPU for this section. The name matches */");
+            writer_.println("    /* an XC32 attribute for compatibility. */");
+            writer_.println("    __coherent_start__ = .;");
+            writer_.println("    _scoherent_ = .;");
+            writer_.println("    *(.coherent .coherent.*)");
+            writer_.println("    . = ALIGN(. - _scoherent <= 32 ? 32 : 1 << LOG2CEIL(. - _scoherent));");
+            writer_.println("    _ecoherent = .;");
+            writer_.println("    __coherent_end__ = .;");
         }
         writer_.println("    *(.ramfunc .ramfunc.*);");
         writer_.println("    *(.data .data.*);");
@@ -260,7 +267,7 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
             writer_.println("    /* Ensure normal and persistent sections do not overlap 32-byte cache line. */");
             writer_.println("    . = ALIGN(32) ;");
         }
-        writer_.println("    _persist_begin = .;");
+        writer_.println("    _spersist = .;");
         writer_.println("    __persist_start__ = .;");
         writer_.println("    *(.persist .persist.*)");
         writer_.println("    *(.pbss .pbss.*)");
@@ -270,7 +277,7 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
             writer_.println("    . = ALIGN(4) ;");
         }
         writer_.println("    __persist_end__ = .;");
-        writer_.println("    _persist_end = .;");
+        writer_.println("    _epersist= .;");
         writer_.println("  } > ram");
         writer_.println();
         
@@ -298,10 +305,12 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println("  .heap :");
         writer_.println("  {");
         writer_.println("    . = ALIGN(8) ;");
+        writer_.println("    __heap_start__ = . ;");
         writer_.println("    _sheap = . ;");
         writer_.println("    . += _min_heap_size ;");
         writer_.println("    . = ALIGN(8) ;");
         writer_.println("    _eheap = . ;");
+        writer_.println("    __heap_end__ = . ;");
         writer_.println("    __HeapLimit = . ;");
         writer_.println("  } > ram");
         writer_.println();
@@ -311,14 +320,16 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
                  "downward.  This is just the minimum stack size that will be allowed; the stack " +
                  "can actually grow larger. Use this symbol to check for overflow."));
         writer_.println("  __StackLimit = . ;");
-        writer_.println("  /* Ensure stack size is properly aligned. */");
+        writer_.println("  /* Ensure stack size is properly aligned on 8-byte boundary. */");
         writer_.println("  _min_stack_size = (_min_stack_size + 7) & 0x07 ;");
         writer_.println("  .stack ORIGIN(ram) + LENGTH(ram) - _min_stack_size :");
         writer_.println("  {");
         writer_.println("    . = ALIGN(8) ;");
+        writer_.println("    __stack_start__ = . ;");
         writer_.println("    _sstack = . ;");
         writer_.println("    . += _min_stack_size ;");
         writer_.println("    _estack = . ;");
+        writer_.println("    __stack_end__ = . ;");
         writer_.println("    __StackTop = . ;");
         writer_.println("  } > ram");
         writer_.println("  PROVIDE(__stack = __StackTop);");

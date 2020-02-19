@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, Jesse DeGuire
+/* Copyright (c) 2020, Jesse DeGuire
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,6 +48,10 @@ public class TargetConfigGenerator {
 
     private final String configDir_;
 
+    /* Create a new TargetConfigGenerator that can be used to generate target config files for
+     * multiple devices.  All config files generated will be put into the base path as ".cfg" files
+     * with the filename being the name of the device in lower-case.
+     */
     public TargetConfigGenerator(String basepath) {
         configDir_ = basepath;
     }
@@ -56,6 +60,7 @@ public class TargetConfigGenerator {
         String targetPath = configDir_ + "/" + target.getDeviceName().toLowerCase() + ".cfg";
 
         try(PrintWriter writer = Utils.createUnixPrintWriter(targetPath)) {
+            outputLicenseString(writer);
             outputTargetArchOptions(writer, target);
             outputFpuOptions(writer, target);
             outputDspR2Option(writer, target);
@@ -73,6 +78,16 @@ public class TargetConfigGenerator {
         }
     }
 
+
+    /* Ouput a license string comment to indicate that this file is reusable under the BSD 3-clause
+     * license.
+     */
+    private void outputLicenseString(PrintWriter writer) {
+        String header = (Utils.generatedByString() + "\n\n" + Utils.generatorLicenseString());
+
+        Utils.writeMultilineComment(writer, 0, header, "# ", "# ", "# ");
+        writer.println();
+    }
 
     /* Output basic options for the given device that tell the compiler the device's architecture.
      */

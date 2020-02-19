@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, Jesse DeGuire
+/* Copyright (c) 2020, Jesse DeGuire
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,12 +61,14 @@ public class Utils {
                     };
     }
 
-
-    /* Write a multiline C comment using the given writer, automatically wrapping the string at 100
-     * characters.  This will add 'indent' number of spaces before the comment block (max 60).  The 
-     * comment will be laid out like the one containing this text.  This does not trim whitespace.
+    /* Write a multiline comment using the given writer, automatically wrapping the string at 100
+     * characters.  This will add 'indent' number of spaces before the comment block (max 60).  This
+     * is generic, requiring one to provide the comment characters to use for the start, middle, and
+     * end of the comment.  For example, this comment would use "/* ", " * ", and " *\/" for the
+     * character sequences.
      */
-    public static void writeMultilineCComment(PrintWriter writer, int indent, String str) {
+    public static void writeMultilineComment(PrintWriter writer, int indent, String str,
+                                             String commStart, String commMid, String commEnd) {
         if(indent > 60)
             indent = 60;
         else if(indent < 0)
@@ -80,16 +82,24 @@ public class Utils {
         String lines[] = createWrappedString(str, 100 - indent - 3).split("\n");
 
         if(lines.length > 0) {
-            writer.println(spacesStr + "/* " + lines[0]);
+            writer.println(spacesStr + commStart + lines[0]);
 
             for(int i = 1; i < lines.length; ++i) {
-                writer.println(spacesStr + " * " + lines[i]);
+                writer.println(spacesStr + commMid + lines[i]);
             }
         } else {
-            writer.println(spacesStr + "/* ");
+            writer.println(spacesStr + commEnd);
         }
 
         writer.println(spacesStr + " */");
+    }
+
+    /* Write a multiline C comment using the given writer, automatically wrapping the string at 100
+     * characters.  This will add 'indent' number of spaces before the comment block (max 60).  The 
+     * comment will be laid out like the one containing this text.  This does not trim whitespace.
+     */
+    public static void writeMultilineCComment(PrintWriter writer, int indent, String str) {
+        writeMultilineComment(writer, indent, str, "/* ", " * ", " */");
     }
 
     /* Create a new string that is a wrapped version of the given string by copying the original

@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, Jesse DeGuire
+/* Copyright (c) 2020, Jesse DeGuire
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -213,6 +213,10 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
     /* Output the .text section, which contains most code.
      */
     private void outputCodeSections() {
+        writer_.println("  . = ALIGN(4);");
+        writer_.println("  _sfixed = .;");
+        writer_.println();
+
         writer_.println("  .text :");
         writer_.println("  {");
         writer_.println("    *(.text .text.* .stub .gnu.linkonce.t.*)");
@@ -224,6 +228,8 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println("  } >kseg0_program_mem");
         writer_.println();
     }
+
+// TODO: Can we merge a bunch of the Initialization sections and read-only sections with the text section, like the Cortex-M script does?
 
     /* Output sections that contain initialization data used by the library to set up statically-
      * allocated symbols.
@@ -317,6 +323,9 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println("    . = ALIGN(4) ;");
         writer_.println("  } >kseg0_program_mem");
         writer_.println();
+
+        writer_.println("    _efixed = .;            /* End of code sections */");
+        writer_.println();
     }
 
     /* Output sections that contain read-only data.  These will always put read-only data into
@@ -373,6 +382,10 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println("  } >kseg0_program_mem");
         writer_.println("    . = ALIGN(4) ;");
         writer_.println();
+
+        writer_.println("  _etext = ALIGN(4);          /* End of program data */");
+        writer_.println("  __etext = _etext;");
+        writer_.println();
     }
 
     /* Output a section used to reserve RAM for the debugger.
@@ -408,6 +421,33 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         else
             dataRegion = "kseg1_data_mem";
 
+// TODO: Do we want to move the persist section?
+// TODO: Can we add a coherent section like in the Cortex-M script?
+// TODO: Do we need _etext to help with data initialization like in the Cortex-M script?
+        Utils.writeMultilineCComment(writer_, 2, 
+                ("Use the \'section\' attribute to put data in this section that you want to " +
+                 "persist through software resets."));
+        writer_.println("  .persist (NOLOAD) :");
+        writer_.println("  {");
+        if(hasCache) {
+            writer_.println("    /* Ensure normal and persistent sections do not overlap 16-byte cache line. */");
+            writer_.println("    . = ALIGN(16) ;");
+        }
+        writer_.println("    _spersist = .;");
+        writer_.println("    __persist_start__ = .;");
+        writer_.println("    *(.persist .persist.*)");
+        writer_.println("    *(.pbss .pbss.*)");
+        if(hasCache) {
+            writer_.println("    . = ALIGN(16) ;");
+        } else {
+            writer_.println("    . = ALIGN(4) ;");
+        }
+        writer_.println("    __persist_end__ = .;");
+        writer_.println("    _epersist = .;");
+        writer_.println("  } >" + dataRegion);
+        writer_.println();
+
+// TODO: Can we merge some of these sections?
         writer_.println("  .jcr   :");
         writer_.println("  {");
         writer_.println("    KEEP (*(.jcr))");
@@ -427,29 +467,6 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println("    *(.gcc_except_table .gcc_except_table.*)");
         writer_.println("  } >" + dataRegion);
         writer_.println("    . = ALIGN(4) ;");
-        writer_.println();
-
-        Utils.writeMultilineCComment(writer_, 2, 
-                ("Use the \'section\' attribute to put data in this section that you want to " +
-                 "persist through software resets."));
-        writer_.println("  .persist (NOLOAD) :");
-        writer_.println("  {");
-        if(hasCache) {
-            writer_.println("    /* Ensure normal and persistent sections do not overlap 16-byte cache line. */");
-            writer_.println("    . = ALIGN(16) ;");
-        }
-        writer_.println("    _persist_begin = .;");
-        writer_.println("    __persist_start__ = .;");
-        writer_.println("    *(.persist .persist.*)");
-        writer_.println("    *(.pbss .pbss.*)");
-        if(hasCache) {
-            writer_.println("    . = ALIGN(16) ;");
-        } else {
-            writer_.println("    . = ALIGN(4) ;");
-        }
-        writer_.println("    __persist_end__ = .;");
-        writer_.println("    _persist_end = .;");
-        writer_.println("  } >" + dataRegion);
         writer_.println();
 
         writer_.println("  __data_start__ = .;");
@@ -534,6 +551,7 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
 
         writer_.println("  . = ALIGN(4) ;");
         writer_.println("  _end = . ;");
+        writer_.println("  __end__ = . ;");
         writer_.println("  _bss_end = . ;");
         writer_.println("  __bss_end__ = .;");
         writer_.println();
@@ -553,10 +571,12 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
 
         writer_.println("  .heap :");
         writer_.println("  {");
+        writer_.println("    __heap_start__ = . ;");
         writer_.println("    _sheap = . ;");
         writer_.println("    . += _min_heap_size ;");
         writer_.println("    . = ALIGN(4) ;");
         writer_.println("    _eheap = . ;");
+        writer_.println("    __heap_end__ = . ;");
         writer_.println("    __HeapLimit = . ;");
         writer_.println("  } >" + dataRegion);
         writer_.println();
@@ -566,13 +586,16 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
                  "downward.  This is just the minimum stack size that will be allowed; the stack " +
                  "can actually grow larger. Use this symbol to check for overflow."));
         writer_.println("  __StackLimit = . ;");
-        writer_.println("  /* Ensure stack size is properly aligned. */");
-        writer_.println("  _min_stack_size = (_min_stack_size + 3) & 0x03 ;");
+        writer_.println("  /* Ensure stack size is properly aligned on 8-byte boundary. */");
+        writer_.println("  _min_stack_size = (_min_stack_size + 7) & 0x07 ;");
         writer_.println("  .stack ORIGIN(" + dataRegion + ") + LENGTH(" + dataRegion + ") - _min_stack_size :");
         writer_.println("  {");
+        writer_.println("    . = ALIGN(8) ;");
+        writer_.println("    __stack_start__ = . ;");
         writer_.println("    _sstack = . ;");
         writer_.println("    . += _min_stack_size ;");
         writer_.println("    _estack = . ;");
+        writer_.println("    __stack_end__ = . ;");
         writer_.println("    __StackTop = . ;");
         writer_.println("  } >" + dataRegion);
         writer_.println("  PROVIDE(__stack = __StackTop);");

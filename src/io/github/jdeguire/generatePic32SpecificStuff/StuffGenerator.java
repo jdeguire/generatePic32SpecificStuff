@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, Jesse DeGuire
+/* Copyright (c) 2020, Jesse DeGuire
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,6 +54,7 @@ public class StuffGenerator {
     private final String outputDirBase_;
     CortexMLinkerScriptGenerator cortexmLinkerGen_;
     CortexMHeaderFileGenerator cortexmHeaderGen_;
+    CortexMStartupGenerator cortexmStartupGen_;
     MipsLinkerScriptGenerator mipsLinkerGen_;
     MipsHeaderFileGenerator mipsHeaderGen_;
     TargetConfigGenerator targetConfigGen_;
@@ -70,6 +71,7 @@ public class StuffGenerator {
 
         cortexmLinkerGen_ = new CortexMLinkerScriptGenerator(outputDirBase_ + "cortex-m/lib/proc");
         cortexmHeaderGen_ = new CortexMHeaderFileGenerator(outputDirBase_ + "cortex-m/include/proc");
+        cortexmStartupGen_ = new CortexMStartupGenerator(outputDirBase_ + "cortex-m/lib/proc");
 
         mipsLinkerGen_ = new MipsLinkerScriptGenerator(outputDirBase_ + "mips32/lib/proc");
         mipsHeaderGen_ = new MipsHeaderFileGenerator(outputDirBase_ + "mips32/include/proc");
@@ -124,6 +126,7 @@ public class StuffGenerator {
             if(!target.supportsArmIsa()) {
                 cortexmLinkerGen_.generate(target);
                 cortexmHeaderGen_.generate(target);
+                cortexmStartupGen_.generate(target);
             }
         } else {
             mipsLinkerGen_.generate(target);

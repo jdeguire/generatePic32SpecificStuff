@@ -1,4 +1,4 @@
-/* Copyright (c) 2019, Jesse DeGuire
+/* Copyright (c) 2020, Jesse DeGuire
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -258,8 +258,6 @@ public class MipsCommon {
         if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa()) {
             macroList.add(new Pair<>("__PIC32_HAS_INTCONVS", ""));
         }
-
-        macroList.add(new Pair<>("__PIC32_HAS_INIT_DATA", ""));
 
         int srsCount = target.getInterruptList().getNumShadowRegs();
         macroList.add(new Pair<>("__PIC32_SRS_SET_COUNT", Integer.toString(srsCount)));
