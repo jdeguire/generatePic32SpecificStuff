@@ -60,6 +60,7 @@ public class TargetConfigBuilder {
             outputFpuOptions(writer, target);
             outputDspR2Option(writer, target);
             outputSystemIncludeDirOptions(writer, target);
+            outputLibraryDirOptions(writer, target);
             outputTargetMacros(writer, target);
 
             writer.println("# This config file does not include library paths because the");
@@ -68,6 +69,7 @@ public class TargetConfigBuilder {
             writer.println("# The MPLAB X plugin handles this for you.");
 
 // TODO: Do we need -nostdinc or -nostdlib/-nodefaultlibs/-nolibc?
+// TOOD: What about CMSIS directories?
         }
     }
 
@@ -81,6 +83,8 @@ public class TargetConfigBuilder {
         
         if(target.isArm()) {
             writer.println("-mtune=" + target.getCpuName());
+        } else if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa()) {
+            writer.println("-mmicromips");
         }
 
         writer.println();
@@ -121,19 +125,27 @@ public class TargetConfigBuilder {
     /* Output an option to tell the compiler where to find device-specific headers.
      */
     private void outputSystemIncludeDirOptions(PrintWriter writer, TargetDevice target) {
-        String archDir;
-        if(target.isMips32())
-            archDir = "mips32";
-        else {
-            // This should get us "cortex-m" or "cortex-a" or whatever else.
-            archDir = target.getCpuName().toLowerCase().substring(0, 8);
-        }
+        String archDir = getArchDirName(target);
 
         writer.println("# The '=' makes this directory relative to the --sysroot option.");
         writer.println("# When using this config file, the --sysroot option must be provided to");
         writer.println("# point to the base directory of where this toolchain is located.");
         writer.println("# The MPLAB X plugin will do this for you.");
         writer.println("-isystem \"=/target/" + archDir + "/include\"");
+        writer.println();
+
+// TODO:  Does Clang use directories relative to this config file?  If so, we might be able to set
+//        sysroot based on where this file is located.
+    }
+
+    /* Output an option to tell the linker where to find device-specific object files or linker
+     * scripts.
+     */
+    private void outputLibraryDirOptions(PrintWriter writer, TargetDevice target) {
+        String archDir = getArchDirName(target);
+        String devname = target.getDeviceName().toLowerCase();
+
+        writer.println("-L\"=/target/" + archDir + "/lib/proc/" + devname + "\"");
         writer.println();
 
 // TODO:  Does Clang use directories relative to this config file?  If so, we might be able to set
@@ -190,5 +202,17 @@ public class TargetConfigBuilder {
         }
         
         writer.println();
+    }
+
+
+    /* Return a name that can be used for an architecture-specific directory.
+     */
+    private String getArchDirName(TargetDevice target) {
+        if(target.isMips32())
+            return "mips32";
+        else {
+            // This should get us "cortex-m" or "cortex-a" or whatever else.
+            return target.getCpuName().toLowerCase().substring(0, 8);
+        }
     }
 }
