@@ -35,9 +35,9 @@ import java.util.List;
 /**
  * A subclass of the LinkerScriptBuilder that handles MIPS devices.
  */
-public class MipsLinkerScriptBuilder extends LinkerScriptBuilder {
+public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
 
-    public MipsLinkerScriptBuilder(String basepath) {
+    public MipsLinkerScriptGenerator(String basepath) {
         super(basepath);
     }
 

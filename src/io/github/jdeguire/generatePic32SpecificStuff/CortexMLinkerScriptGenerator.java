@@ -34,9 +34,9 @@ import java.util.List;
 /**
  * A subclass of the LinkerScriptBuilder that handles ARM Cortex-M devices.
  */
-public class CortexMLinkerScriptBuilder extends LinkerScriptBuilder {
+public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
     
-    public CortexMLinkerScriptBuilder(String basepath) {
+    public CortexMLinkerScriptGenerator(String basepath) {
         super(basepath);
     }
 

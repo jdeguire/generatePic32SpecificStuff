@@ -36,7 +36,7 @@ import org.xml.sax.SAXException;
  * This is a base class for building device-specific header files that contain register definitions,
  * part-specific macros, and interrupt vector names.
  */
-public abstract class HeaderFileBuilder {
+public abstract class HeaderFileGenerator {
     protected String basepath_;
     protected PrintWriter writer_;
 
@@ -44,7 +44,7 @@ public abstract class HeaderFileBuilder {
      * the given base path (which should be a directory).  Use getHeaderRelativePath() to
      * determine where a particular target's script will be located.
      */
-    public HeaderFileBuilder(String basepath) {
+    public HeaderFileGenerator(String basepath) {
         basepath_ = basepath;
     }
 

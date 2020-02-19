@@ -44,11 +44,11 @@ import java.util.List;
  * selects in MPLAB X, such as optimization options, library options, and ISA options (MIPS32 vs.
  * microMIPS, for example).
  */
-public class TargetConfigBuilder {
+public class TargetConfigGenerator {
 
     private final String configDir_;
 
-    public TargetConfigBuilder(String basepath) {
+    public TargetConfigGenerator(String basepath) {
         configDir_ = basepath;
     }
 

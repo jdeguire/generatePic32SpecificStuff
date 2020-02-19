@@ -45,9 +45,9 @@ import org.w3c.dom.Node;
 /**
  * A subclass of the HeaderFileBuilder class that handles MIPS devices.
  */
-public class MipsHeaderFileBuilder extends HeaderFileBuilder {
+public class MipsHeaderFileGenerator extends HeaderFileGenerator {
 
-    public MipsHeaderFileBuilder(String basepath) {
+    public MipsHeaderFileGenerator(String basepath) {
         super(basepath);
     }
 

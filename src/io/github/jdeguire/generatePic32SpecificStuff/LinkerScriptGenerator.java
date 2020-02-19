@@ -36,7 +36,7 @@ import java.util.Collections;
 /**
  * This is a base class for building default linker scripts for the different target devices.
  */
-public abstract class LinkerScriptBuilder {
+public abstract class LinkerScriptGenerator {
 
     protected ArrayList<LinkerMemoryRegion> regions_;
     protected String basepath_;
@@ -46,7 +46,7 @@ public abstract class LinkerScriptBuilder {
      * the given base path (which should be a directory).  Use getLinkerScriptRelativePath() to
      * determine where a particular target's script will be located.
      */
-    public LinkerScriptBuilder(String basepath) {
+    public LinkerScriptGenerator(String basepath) {
         regions_ = new ArrayList<>();
         basepath_ = basepath;
     }

@@ -52,11 +52,11 @@ import org.xml.sax.SAXException;
 public class StuffGenerator {
 
     private final String outputDirBase_;
-    CortexMLinkerScriptBuilder cortexmLinkerBuilder_;
-    CortexMHeaderFileBuilder cortexmHeaderBuilder_;
-    MipsLinkerScriptBuilder mipsLinkerBuilder_;
-    MipsHeaderFileBuilder mipsHeaderBuilder_;
-    TargetConfigBuilder targetConfigBuilder_;
+    CortexMLinkerScriptGenerator cortexmLinkerGen_;
+    CortexMHeaderFileGenerator cortexmHeaderGen_;
+    MipsLinkerScriptGenerator mipsLinkerGen_;
+    MipsHeaderFileGenerator mipsHeaderGen_;
+    TargetConfigGenerator targetConfigGen_;
 
     /**
      * Constructor for the Stuff Generator.
@@ -68,13 +68,13 @@ public class StuffGenerator {
     public StuffGenerator(String outputDir) {
         outputDirBase_ = outputDir + "/target/";
 
-        cortexmLinkerBuilder_ = new CortexMLinkerScriptBuilder(outputDirBase_ + "cortex-m/lib/proc");
-        cortexmHeaderBuilder_ = new CortexMHeaderFileBuilder(outputDirBase_ + "cortex-m/include/proc");
+        cortexmLinkerGen_ = new CortexMLinkerScriptGenerator(outputDirBase_ + "cortex-m/lib/proc");
+        cortexmHeaderGen_ = new CortexMHeaderFileGenerator(outputDirBase_ + "cortex-m/include/proc");
 
-        mipsLinkerBuilder_ = new MipsLinkerScriptBuilder(outputDirBase_ + "mips32/lib/proc");
-        mipsHeaderBuilder_ = new MipsHeaderFileBuilder(outputDirBase_ + "mips32/include/proc");
+        mipsLinkerGen_ = new MipsLinkerScriptGenerator(outputDirBase_ + "mips32/lib/proc");
+        mipsHeaderGen_ = new MipsHeaderFileGenerator(outputDirBase_ + "mips32/include/proc");
 
-        targetConfigBuilder_ = new TargetConfigBuilder(outputDirBase_ + "config");
+        targetConfigGen_ = new TargetConfigGenerator(outputDirBase_ + "config");
     }
 
     
@@ -122,14 +122,14 @@ public class StuffGenerator {
         if(target.isArm()) {
             // TODO:  We'll need to target Cortex-A devices in the future.
             if(!target.supportsArmIsa()) {
-                cortexmLinkerBuilder_.generate(target);
-                cortexmHeaderBuilder_.generate(target);
+                cortexmLinkerGen_.generate(target);
+                cortexmHeaderGen_.generate(target);
             }
         } else {
-            mipsLinkerBuilder_.generate(target);
-            mipsHeaderBuilder_.generate(target);
+            mipsLinkerGen_.generate(target);
+            mipsHeaderGen_.generate(target);
         }
 
-        targetConfigBuilder_.generate(target);
+        targetConfigGen_.generate(target);
     }
 }

@@ -39,7 +39,7 @@ import org.xml.sax.SAXException;
 /**
  * A subclass of the HeaderFileBuilder that handles ARM Cortex-M devices.
  */
-public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
+public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
 
     /* This is here for convenience when we create custom fields that are "vectors" of adjacent 
      * fields or when we create gaps.
@@ -95,7 +95,7 @@ public class CortexMHeaderFileBuilder extends HeaderFileBuilder {
     private final HashSet<String> peripheralFiles_ = new HashSet<>(20);
 
 
-    public CortexMHeaderFileBuilder(String basepath) {
+    public CortexMHeaderFileGenerator(String basepath) {
         super(basepath);
     }
 
