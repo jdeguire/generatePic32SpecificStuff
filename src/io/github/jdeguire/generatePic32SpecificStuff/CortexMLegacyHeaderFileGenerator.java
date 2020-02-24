@@ -37,9 +37,12 @@ import java.util.List;
 import org.xml.sax.SAXException;
 
 /**
- * A subclass of the HeaderFileBuilder that handles ARM Cortex-M devices.
+ * A subclass of the HeaderFileBuilder that handles ARM Cortex-M devices.  This generates "legacy"
+ * header files that were used when Atmel was still independent.  Microchip has since updated the
+ * header files to be compatible with Harmony 3 and those are generally simplified compared to 
+ * these ones.
  */
-public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
+public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
     /* This is here for convenience when we create custom fields that are "vectors" of adjacent 
      * fields or when we create gaps.
@@ -95,7 +98,7 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
     private final HashSet<String> peripheralFiles_ = new HashSet<>(20);
 
 
-    public CortexMHeaderFileGenerator(String basepath) {
+    public CortexMLegacyHeaderFileGenerator(String basepath) {
         super(basepath);
     }
 
