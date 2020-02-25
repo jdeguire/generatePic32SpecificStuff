@@ -32,6 +32,7 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import org.xml.sax.SAXException;
@@ -667,7 +668,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                 }
 
                 members.addAll(group.getMembersByMode("DEFAULT"));
-                Collections.sort(members);
+                sortAtdfRegistersByOffset(members);
             }
 
             writeNoAssemblyStart(writer);
@@ -1393,5 +1394,24 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
         }
         
         return str;
+    }
+
+    /* Sort the given list of AtdfRegisters by their offset value, with lower offsets coming first.
+     */
+    private void sortAtdfRegistersByOffset(List<AtdfRegister> registerList) {
+        Collections.sort(registerList, new Comparator<AtdfRegister>() {
+            @Override
+            public int compare(AtdfRegister one, AtdfRegister two) {
+                long oneOffset = one.getBaseOffset();
+                long twoOffset = two.getBaseOffset();
+
+                if(oneOffset > twoOffset)
+                    return 1;
+                else if(oneOffset < twoOffset)
+                    return -1;
+                else
+                    return 0;
+                }
+        });
     }
 }

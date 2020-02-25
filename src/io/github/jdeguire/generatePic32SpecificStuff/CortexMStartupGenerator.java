@@ -67,6 +67,8 @@ public class CortexMStartupGenerator {
                 outputInterruptTable(writer, target);
                 outputDummyHandler(writer);
                 outputCmsisInitFunctions(writer);
+// TODO:  These next three functions and the default interrupt handler should be declared and called here,
+//        but probably defined in a library.
                 outputFpuEnableFunction(writer);
                 outputCmccCacheEnableFunction(writer);
                 outputCpuCacheEnableFunction(writer);

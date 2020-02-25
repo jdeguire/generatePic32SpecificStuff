@@ -34,7 +34,7 @@ import org.w3c.dom.Node;
 /* This will represent a single memory region that the linker script will contain in its MEMORY
  * section.  This is here mostly for convience and so we can sort and search regions.
  */
-public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
+public class LinkerMemoryRegion {
 
     public enum Type {
         UNSPECIFIED,
@@ -169,15 +169,5 @@ public class LinkerMemoryRegion implements Comparable<LinkerMemoryRegion> {
 
         return String.format("%-" + (32 - accessStr.length()) + "s%s : ORIGIN = 0x%08X, LENGTH = 0x%X",
                              name_, accessStr, startAddr_, length_);
-    }
-
-    @Override
-    public int compareTo(LinkerMemoryRegion other) {
-        if(startAddr_ > other.startAddr_)
-            return 1;
-        else if(startAddr_ < other.startAddr_)
-            return -1;
-        else
-            return 0;
     }
 }

@@ -32,6 +32,7 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 
 /**
  * This is a base class for building default linker scripts for the different target devices.
@@ -104,7 +105,20 @@ public abstract class LinkerScriptGenerator {
      * before higher addresses.
      */
     protected void sortRegionList() {
-        Collections.sort(regions_);
+        Collections.sort(regions_, new Comparator<LinkerMemoryRegion>() {
+            @Override
+            public int compare(LinkerMemoryRegion one, LinkerMemoryRegion two) {
+                long oneAddr = one.getStartAddress();
+                long twoAddr = two.getStartAddress();
+
+                if(oneAddr > twoAddr)
+                    return 1;
+                else if(oneAddr < twoAddr)
+                    return -1;
+                else
+                    return 0;
+                }
+        });
     }
 
 

@@ -41,7 +41,7 @@ import org.w3c.dom.Node;
  * contains a subgroup.  This class refers to such a placeholder as a "group alias".  This class 
  * handles both because a subgroup is presented similarly to a register that has no fields.
  */
-public class AtdfRegister implements Comparable<AtdfRegister> {
+public class AtdfRegister {
     public static final int REG_READ  = 0x01;
     public static final int REG_WRITE = 0x02;
     public static final int REG_RW    = 0x03;
@@ -264,18 +264,5 @@ public class AtdfRegister implements Comparable<AtdfRegister> {
         }
 
         return equal;
-    }
-
-    @Override
-    public int compareTo(AtdfRegister other) {
-        long myOffset = getBaseOffset();
-        long otherOffset = other.getBaseOffset();
-
-        if(myOffset > otherOffset)
-            return 1;
-        else if(myOffset < otherOffset)
-            return -1;
-        else
-            return 0;
     }
 }
