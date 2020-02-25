@@ -205,7 +205,8 @@ public class CortexMStartupGenerator {
      * function.  This will have just an infinite loop in it.
      */
     private void outputDummyHandler(PrintWriter writer) {
-        writer.println("/* A dummy handler that does nothing.  This is the default handler. */");
+        Utils.writeMultilineCComment(writer, 0, 
+                "A dummy handler that does nothing.  This is the default handler.");
         writer.println("void __attribute__((weak)) Dummy_Handler(void)");
         writer.println("{");
         writer.println("    while(1) {}");
@@ -217,8 +218,9 @@ public class CortexMStartupGenerator {
      * source files showed them having only bare implementations that use a fixed value for a clock.
     */
     private void outputCmsisInitFunctions(PrintWriter writer) {
-        writer.println("/* Some dummy items to fulfill some CMSIS requirements.");
-        writer.println(" * These do not seem to have been used by Atmel. */");
+        Utils.writeMultilineCComment(writer, 0, 
+                "Some dummy items to fulfill some CMSIS requirements.  "
+              + "These do not seem to have been used by Atmel or Microchip.");
         writer.println("uint32_t __attribute__((weak)) SystemCoreClock = 1000000;");
         writer.println();
 
@@ -237,7 +239,7 @@ public class CortexMStartupGenerator {
      * This makes use of the Arm-specific macro __ARM_FP to check for FPU support.
      */
     private void outputFpuEnableFunction(PrintWriter writer) {
-        writer.println("/* Enable the FPU for devices that have one. */");
+        Utils.writeMultilineCComment(writer, 0, "Enable the FPU for devices that have one.");
         writer.println("void __attribute__((weak)) _EnableFpu(void)");
         writer.println("{");
         writer.println("#if defined(__ARM_FP) && (4 == __ARM_FP || 14 == __ARM_FP)");
@@ -254,8 +256,9 @@ public class CortexMStartupGenerator {
      * normally does not have one.
      */
     private void outputCmccCacheEnableFunction(PrintWriter writer) {
-        writer.println("/* Enable the Cortex-M Cache Controller with default values.  This is used ");
-        writer.println(" * to supplement Cortex-M devices that do not have a CPU cache.");
+        Utils.writeMultilineCComment(writer, 0, 
+                "Enable the Cortex-M Cache Controller with default values.  This is used to "
+              + "supplement Cortex-M devices that do not have a CPU cache.");
         writer.println("void __attribute__((weak)) _EnableCmccCache(void)");
         writer.println("{");
         writer.println("#if defined(ID_CMCC)");
@@ -270,8 +273,9 @@ public class CortexMStartupGenerator {
      * normally does not have one.
      */
     private void outputCpuCacheEnableFunction(PrintWriter writer) {
-        writer.println("/* Enable the Cortex-M CPU instruction and data caches. Only the Cortex-M7 ");
-        writer.println(" * has a CPU-level cache at this time. */");
+        Utils.writeMultilineCComment(writer, 0, 
+                "Enable the Cortex-M CPU instruction and data caches. Only the Cortex-M7 has a "
+              + "CPU-level cache at this time.");
         writer.println("void __attribute__((weak)) _EnableCpuCache(void)");
         writer.println("{");
         writer.println("    // These invalidate the caches before enabling them.");
@@ -289,7 +293,8 @@ public class CortexMStartupGenerator {
      * objects.
      */
     private void outputLibcInitArrayFunction(PrintWriter writer) {
-        writer.println("/* Call compiler-generated initialization routines for C and C++. */ ");
+        Utils.writeMultilineCComment(writer, 0, 
+                "Call compiler-generated initialization routines for C and C++.");
         writer.println("void __attribute__((weak)) _LibcInitArray(void)");
         writer.println("{");
         writer.println("    void (**preinit_ptr)(void) = &__preinit_array_start;");
@@ -315,10 +320,11 @@ public class CortexMStartupGenerator {
      * declarations do not have to be defined and will be 0 if they are not defined by the user.
      */
     private void outputUserFunctionDeclarations(PrintWriter writer) {
-        writer.println("/* Define these to run code during startup.  The _on_reset() function is run");
-        writer.println(" * almost immediately, so the cache and FPU will probably not be usable unless");
-        writer.println(" * they are enabled in _on_reset().  The _on_bootstrap() function is run just");
-        writer.println(" * before main is called and so everything should be initialized. */");
+        Utils.writeMultilineCComment(writer, 0, 
+                "Define these to run code during startup.  The _on_reset() function is run almost "
+              + "immediately, so the cache and FPU will probably not be usable unless they are "
+              + "enabled in _on_reset().  The _on_bootstrap() function is run just before main is "
+              + "called and so everything should be initialized.");
         writer.println("extern void __attribute__((weak, long_call)) _on_reset(void);");
         writer.println("extern void __attribute__((weak, long_call)) _on_bootstrap(void);");
         writer.println();
