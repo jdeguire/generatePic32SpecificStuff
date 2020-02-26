@@ -85,7 +85,7 @@ public class TargetConfigGenerator {
     private void outputLicenseString(PrintWriter writer) {
         String header = (Utils.generatedByString() + "\n\n" + Utils.generatorLicenseString());
 
-        Utils.writeMultilineComment(writer, 0, header, "# ", "# ", "# ");
+        Utils.writeMultilineComment(writer, 0, header, "# ", "# ", "");
         writer.println();
     }
 

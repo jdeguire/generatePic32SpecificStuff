@@ -65,7 +65,8 @@ public class Utils {
      * characters.  This will add 'indent' number of spaces before the comment block (max 60).  This
      * is generic, requiring one to provide the comment characters to use for the start, middle, and
      * end of the comment.  For example, this comment would use "/* ", " * ", and " *\/" for the
-     * character sequences.
+     * character sequences.  The 'commEnd' input can be empty or null if closing sequence is not
+     * needed.
      */
     public static void writeMultilineComment(PrintWriter writer, int indent, String str,
                                              String commStart, String commMid, String commEnd) {
@@ -88,10 +89,12 @@ public class Utils {
                 writer.println(spacesStr + commMid + lines[i]);
             }
         } else {
-            writer.println(spacesStr + commEnd);
+            writer.println(spacesStr + commStart);
         }
 
-        writer.println(spacesStr + " */");
+        if(null != commEnd  &&  !commEnd.isEmpty()) {
+            writer.println(spacesStr + commEnd);
+        }
     }
 
     /* Write a multiline C comment using the given writer, automatically wrapping the string at 100
