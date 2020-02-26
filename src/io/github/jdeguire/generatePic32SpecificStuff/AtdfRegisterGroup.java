@@ -45,7 +45,8 @@ import org.w3c.dom.NodeList;
 public class AtdfRegisterGroup {
     private final Node moduleNode_;
     private final Node groupNode_;
-    private final HashMap<String, ArrayList<AtdfRegister>> members_ = new HashMap<>(10);
+    private final HashMap<String, ArrayList<AtdfRegister>> members_ = new HashMap<>(8);
+    private final HashMap<String, String> nonduplicateModes_ = new HashMap<>(8);
     
     /* Create a new AtdfRegisterGroup based on the given nodes from an ATDF document.  The 
      * 'moduleNode' is a Node that refers to the "module" XML node that contains the desired group
@@ -121,16 +122,36 @@ public class AtdfRegisterGroup {
         return new ArrayList<>(members_.keySet());
     }
 
+    /* Like <code>getMemberModes()</code>, but returns a list of mode names that contain unique
+     * members.  These will usually be similar to normal mode names, but may have part of the end
+     * of the name removed.  For example, if there were two duplicate modes "MODE1" and "MODE2",
+     * this would return just "MODE" as one of the modes.
+    */
+    public List<String> getNonduplicateModes() {
+        if(nonduplicateModes_.isEmpty()) {
+            populateNonduplicateMap();
+        }
+
+        return new ArrayList<>(nonduplicateModes_.keySet());
+    }
+
     /* Return the registers that are a part of the given mode or an empty List if the given mode 
-     * name does not exist.
+     * name does not exist.  This will work for mode names retrieved using either getMemberModes()
+     * or getNonduplicateModes(), with the former taking precendence.
      */
     public List<AtdfRegister> getMembersByMode(String modeName) {
         if(members_.isEmpty()) {
             populateMemberMap();
         }
 
+        if(nonduplicateModes_.isEmpty()) {
+            populateNonduplicateMap();
+        }
+
         if(members_.containsKey(modeName)) {
             return members_.get(modeName);
+        } else if(nonduplicateModes_.containsKey(modeName)) {
+            return members_.get(nonduplicateModes_.get(modeName));
         } else {
             return Collections.<AtdfRegister>emptyList();
         }
@@ -162,101 +183,91 @@ public class AtdfRegisterGroup {
      */
     private void populateMemberMap() {
         NodeList children = groupNode_.getChildNodes();
-        List<String> possibleModes = getPossibleMemberModes(children);
-        List<ArrayList<AtdfRegister>> possibleRegisters = 
-                    getPossibleMemberRegistersByMode(possibleModes, children);
 
-        /* The original Atmel headers appear to coalesce modes that had the same registers, so we
-         * need to do the same by comparing all of the registers in each mode and making a single
-         * mode from multiple equivalent modes.
-         */
-        if(possibleModes.size() > 1) {
-            for(int i = 0; i < possibleModes.size(); ++i) {
-                for(int j = possibleModes.size()-1; j > i; --j) {
-                    // Walk backwards so we can remove elements without having to worry about 
-                    // invalidating our iteration.
+        // First, we need to find all of the mode names and initialize the map with them.
+        // There is always a "DEFAULT" mode, which is the mode used when a register does not give
+        // a mode.
+        members_.put("DEFAULT", new ArrayList<AtdfRegister>(16));
 
-                    if(areRegistersEqual(possibleRegisters.get(i), possibleRegisters.get(j))) {
-                        // Modes are equal because their registers are equal, so remove the duplicate
-                        // unless they don't share any part of their name.
-                        String prefix = getCommonPrefix(possibleModes.get(i), possibleModes.get(j));
-
-                        if(!prefix.isEmpty()) {
-                            possibleModes.set(i, prefix);
-                            possibleModes.remove(j);
-                            possibleRegisters.remove(j);
-                        }
-                    }
-                }
-
-                // Update the mode name for the remaining register set.
-                for(AtdfRegister reg : possibleRegisters.get(i)) {
-                    reg.setMode(possibleModes.get(i));
-                }
-            }
-        }
-
-        for(int i = 0; i < possibleModes.size(); ++i) {
-            members_.put(possibleModes.get(i), possibleRegisters.get(i));
-        }
-    }
-
-    /* Search through the NodeList for special nodes that indicate the modes for the member 
-     * registers and return a list of the mode names.
-     */
-    private List<String> getPossibleMemberModes(NodeList memberNodes) {
-        ArrayList<String> modes = new ArrayList<>(5);
-
-        // We'll always have the default mode.
-        modes.add("DEFAULT");
-
-        for(int i = 0; i < memberNodes.getLength(); ++i) {
-            Node member = memberNodes.item(i);
+        for(int i = 0; i < children.getLength(); ++i) {
+            Node member = children.item(i);
             String name = member.getNodeName();
 
             if(name.equals("mode")) {
                 String modeName = Utils.getNodeAttribute(member, "name", "");
 
                 if(!modeName.isEmpty()) {
-                    modes.add(modeName);
+                    members_.put(modeName, new ArrayList<AtdfRegister>(16));
                 }
             }
         }
 
-        return modes;
-    }
-
-    /* Search through the NodeList for registers and use them to build a series of arrays in which
-     * each array contains the registers for a particular mode as given by 'modeList'.
-     */
-    private List<ArrayList<AtdfRegister>> getPossibleMemberRegistersByMode(List<String> modeList,
-                                                                           NodeList memberNodes) {
-        ArrayList<ArrayList<AtdfRegister>> registers = new ArrayList<>(modeList.size());
-
-        for(int i = 0; i < modeList.size(); ++i) {
-            registers.add(new ArrayList<AtdfRegister>(8));
-        }
-
-        for(int i = 0; i < memberNodes.getLength(); ++i) {
-            Node member = memberNodes.item(i);
+        // Now, we can sort the registers into their proper modes.
+        for(int i = 0; i < children.getLength(); ++i) {
+            Node member = children.item(i);
             String name = member.getNodeName();
 
             if(name.equals("register")  ||  name.equals("register-group")) {
                 String modeName = Utils.getNodeAttribute(member, "modes", "DEFAULT");
 
-                int j = 0;
-                for(String match : modeList) {
-                    if(match.equals(modeName)) {
-                        registers.get(j).add(new AtdfRegister(moduleNode_, member));
-                        break;
-                    }
-
-                    ++j;
+                if(members_.containsKey(modeName)) {
+                    members_.get(modeName).add(new AtdfRegister(moduleNode_, member));
                 }
             }
         }
+    }
 
-        return registers;
+    /* Populate the mapping from nondupicate mode names to the regular mode name, which would then
+     * be used as the key to look up the registers by that mode.  The original Atmel headers would
+     * coalesce modes that were duplicates--ie. had the same registers--so this will let us do the
+     * same.  Note that since XC32 v2.40 and Harmony 3, Microchip is using a new header file format
+     * that does not coalesce modes.
+    */
+    private void populateNonduplicateMap() {
+        if(members_.isEmpty()) {
+            populateMemberMap();
+        }
+
+        List<String> modeList = getMemberModes();
+        boolean[] alreadyTaken = new boolean[modeList.size()];
+
+        for(int i = 0; i < modeList.size(); ++i) {
+            if(alreadyTaken[i]) {
+                continue;
+            }
+
+            String iModeName = modeList.get(i);
+            List<AtdfRegister> iRegisters = members_.get(iModeName);
+            String commonPrefix = iModeName;
+            boolean foundDuplicate = false;
+
+            for(int j = i+1; j < modeList.size(); ++j) {
+                if(alreadyTaken[j]) {
+                    continue;
+                }
+
+                String jModeName = modeList.get(j);
+                List<AtdfRegister> jRegisters = members_.get(jModeName);
+
+                if(areRegistersEqual(iRegisters, jRegisters)) {
+                    // These modes are duplicates because their registers are equal, so mark this 
+                    // as already found and add it to the map if they share a part of their name.
+                    String possiblePrefix = getCommonPrefix(commonPrefix, jModeName);
+
+                    if(!possiblePrefix.isEmpty()) {
+                        nonduplicateModes_.put(possiblePrefix, iModeName);
+                        commonPrefix = possiblePrefix;
+                        alreadyTaken[j] = true;
+                        foundDuplicate = true;
+                    }
+                }
+            }
+
+            if(!foundDuplicate) {
+                // No duplicates were found for this mode, so add it to the list now.
+                nonduplicateModes_.put(iModeName, iModeName);
+            }
+        }
     }
 
     /* Return True if the two lists of registers are equal--that is, the lists are the same size and
@@ -289,7 +300,9 @@ public class AtdfRegisterGroup {
      */
     private String getCommonPrefix(String str1, String str2) {
         int i = 0;
-        while(str1.charAt(i) == str2.charAt(i)) {
+        int len = (str1.length() > str2.length() ? str2.length() : str1.length());
+
+        while(str1.charAt(i) == str2.charAt(i)  &&  i < len) {
             ++i;
         }
 

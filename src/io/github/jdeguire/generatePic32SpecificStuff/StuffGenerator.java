@@ -70,7 +70,7 @@ public class StuffGenerator {
         outputDirBase_ = outputDir + "/target/";
 
         cortexmLinkerGen_ = new CortexMLinkerScriptGenerator(outputDirBase_ + "cortex-m/lib/proc");
-        cortexmLegacyHeaderGen_ = new CortexMLegacyHeaderFileGenerator(outputDirBase_ + "cortex-m/include/proc");
+        cortexmLegacyHeaderGen_ = new CortexMLegacyHeaderFileGenerator(outputDirBase_ + "cortex-m/include/proc_legacy");
         cortexmStartupGen_ = new CortexMStartupGenerator(outputDirBase_ + "cortex-m/lib/proc");
 
         mipsLinkerGen_ = new MipsLinkerScriptGenerator(outputDirBase_ + "mips32/lib/proc");

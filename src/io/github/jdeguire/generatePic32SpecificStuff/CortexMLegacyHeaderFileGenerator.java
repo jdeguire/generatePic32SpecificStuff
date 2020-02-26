@@ -350,7 +350,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
             String peripheralName = peripheral.getName();
             String peripheralId = peripheral.getModuleId();
             String peripheralMacro = (peripheralName + "_" + peripheralId).toUpperCase();
-            String peripheralFilename = "component_legacy/" + peripheralMacro.toLowerCase() + ".h";
+            String peripheralFilename = "component/" + peripheralMacro.toLowerCase() + ".h";
 
             if(isArmInternalPeripheral(peripheral)) {
                 continue;
@@ -374,7 +374,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
                     // Output definitions for each register in all of the groups.
                     for(AtdfRegisterGroup registerGroup : peripheral.getAllRegisterGroups()) {
-                        for(String mode : registerGroup.getMemberModes()) {
+                        for(String mode : registerGroup.getNonduplicateModes()) {
                             for(AtdfRegister register : registerGroup.getMembersByMode(mode)) {
                                 if(!register.isGroupAlias())
                                     outputRegisterDefinition(peripheralWriter, register, mode);
@@ -411,7 +411,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
         List<AtdfBitfield> vecfieldList = Collections.<AtdfBitfield>emptyList();
         String peripheralName = register.getOwningPeripheralName();
         String qualifiedRegName;
-        String regNameAsC = getCVariableNameForRegister(register);
+        String regNameAsC = getCVariableNameForRegister(register, null);
 
         regNameAsC = removeStartOfString(regNameAsC, peripheralName);
 
@@ -496,7 +496,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
         // Finish writing our register union.
         writer.println("  " + c99type + " reg;");
-        writer.println("} " + getCTypeNameForRegister(register) + ";");
+        writer.println("} " + getCTypeNameForRegister(register, groupMode) + ";");
         writeNoAssemblyEnd(writer);
         writer.println();
 
@@ -649,7 +649,8 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
      * one mode.
      */
     private void outputGroupDefinition(PrintWriter writer, AtdfRegisterGroup group) {
-        List<String> memberModes = group.getMemberModes();
+        List<String> memberModes = group.getNonduplicateModes();
+        List<AtdfRegister> defaultRegs = group.getMembersByMode("DEFAULT");
 
         for(String mode : memberModes) {
             long regNextOffset = 0;
@@ -659,16 +660,20 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
             if(members.isEmpty()) {
                 continue;
             }
-            
-            // Peripherals with a default mode in addition to others duplicate the default mode
-            // registers throughout the other modes, so add the default mode registers in that case.
+
             if(memberModes.size() > 1) {
-                if(mode.equals("DEFAULT")) {
+                // Peripherals with a default mode in addition to others copy the default mode
+                // registers into each other mode, so add the default mode registers in that case.
+                // We also don't need to process the default mode separately in that case, so we
+                // can skip it here.
+                if(isModeNameDefault(mode)) {
                     continue;
                 }
 
-                members.addAll(group.getMembersByMode("DEFAULT"));
-                sortAtdfRegistersByOffset(members);
+                if(!defaultRegs.isEmpty()) {
+                    members.addAll(defaultRegs);
+                    sortAtdfRegistersByOffset(members);
+                }
             }
 
             writeNoAssemblyStart(writer);
@@ -687,10 +692,19 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                     regNextOffset = reg.getBaseOffset();
                 }
 
-                String regStr = "  " + getIOMacroFromRegisterAccess(reg) + " " + getCTypeNameForRegister(reg);
+                // Peripherals with a default mode in addition to others should still treat the 
+                // default mode registers as such for the purposes of naming.  That is, they should
+                // not take the name of the mode into which they've been copied.
+                String regMode = reg.getMode();
+                if(!isModeNameDefault(regMode)) {
+                    regMode = mode;
+                }
+
+                String regStr = "  " + getIOMacroFromRegisterAccess(reg) + " ";
+                regStr += getCTypeNameForRegister(reg, regMode);
                 regStr = Utils.padStringWithSpaces(regStr, 36, 4);
 
-                regStr += getCVariableNameForRegister(reg);
+                regStr += getCVariableNameForRegister(reg, null);
                 int count = reg.getNumRegisters();
                 if(count > 1) {
                     regStr += "[" + count + "]";
@@ -724,14 +738,16 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
             if(alignment > 0) {
                 alignmentAttr = " __attribute__((aligned(" + alignment + ")))";
             }
-            writer.println("} " + getCTypeNameForGroup(group, mode) + alignmentAttr + ";");
 
+            writer.println("} " + getCTypeNameForGroup(group, mode) + alignmentAttr + ";");
             writeNoAssemblyEnd(writer);
             writer.println();
         }
 
-        // Output a union of modes if this group had multiple modes.
-        if(memberModes.size() > 1) {
+        // Output a union of modes if this group has multiple non-default modes.  There is always
+        // a default mode, even if it is empty, so we need at least 3 modes total.
+        if(memberModes.size() > 2) {
+            writeNoAssemblyStart(writer);
             writer.println("typedef union {");
 
             for(String mode : memberModes) {
@@ -744,6 +760,8 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
             }
 
             writer.println("} " + getCTypeNameForGroup(group, null) + ";");
+            writeNoAssemblyEnd(writer);
+            writer.println();
         }
 
         // Add an extra section macro if needed.
@@ -837,7 +855,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
     private void outputRegisterGroupMacros(PrintWriter writer, AtdfRegisterGroup group, int numGroups,
                                            long groupOffset, AtdfPeripheral peripheral, AtdfInstance instance, 
                                            boolean isAssembler) {
-        for(String mode : group.getMemberModes()) {
+        for(String mode : group.getNonduplicateModes()) {
             for(int g = 0; g < numGroups; ++g) {
                 for(AtdfRegister register : group.getMembersByMode(mode)) {
                     long regOffset = register.getBaseOffset();
@@ -860,7 +878,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                                 name += mode + "_";
                             }
 
-                            String regNameAsC = getCVariableNameForRegister(register);
+                            String regNameAsC = getCVariableNameForRegister(register, null);
                             regNameAsC = removeStartOfString(regNameAsC, peripheral.getName());
                             name += regNameAsC;
 
@@ -992,7 +1010,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
             try {
                 List<AtdfInstance> instanceList = peripheral.getAllInstances();
                 String peripheralTypename = Utils.makeOnlyFirstLetterUpperCase(peripheral.getName());
-                peripheralTypename = String.format("(%-12s*)", peripheralTypename + "_t");
+                peripheralTypename = String.format("(%-12s*)", peripheralTypename);
 
                 // For C, start with outputting macros for each instance...
                 for(AtdfInstance instance : instanceList) {
@@ -1310,66 +1328,52 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
     /* Create a name for the group suitable as a C type or struct name in the resulting header file.
      * The type incorporates the owning peripheral name and the mode name if present.  The result
-     * will be either "OwnerModeGroup", "OwnerGroup" if 'mode' is null or empty, or just "Group" if
-     * the owner and group names are equal.
+     * will be either "OwnerModeGroup_t", "OwnerGroup_t" if 'mode' is null or empty, or just 
+     * "Owner" (no "_t") if the owner and group names are equal.  The latter is because such a
+     * type is presumably the name of a top-level peripheral struct/union, so no "_t" is added
+     * to keep somewhat compatible with Atmel header files.
      */
     private String getCTypeNameForGroup(AtdfRegisterGroup group, String mode) {
         String name = group.getName();
         String owner = group.getOwningPeripheralName();
 
-        name = removeStartOfString(name, owner);
-        name = Utils.makeOnlyFirstLetterUpperCase(name);
-        owner = Utils.makeOnlyFirstLetterUpperCase(owner);
-
-        if(isModeNameDefault(mode)) {
-            return owner + name + "_t";
-        } else {
-            mode = Utils.makeOnlyFirstLetterUpperCase(mode);
-            return owner + mode + name + "_t";
-        }
+        return createCGroupName(name, owner, mode, true);
     }
 
-    /* Create a name for the register suitable as a C variable name in the resulting header file.
-     * If this register is a group alias, the name will be formatted like a group name; otherwise, 
-     * it will be the register name in all caps.
+    /* Create a name for the register suitable as a C variable name in the resulting header file
+     * as though it is a member of the mode with the given name.  The mode can also be empty or null
+     * in order to not include it in the name.  If this register is a group alias, the name will be 
+     * formatted like a group name; otherwise, it will be the register name in all caps.
      */
-    private String getCVariableNameForRegister(AtdfRegister reg) {
+    private String getCVariableNameForRegister(AtdfRegister reg, String mode) {
         String name = reg.getName();
 
         if(reg.isGroupAlias()) {
-            String owner = reg.getOwningPeripheralName();
-
-            name = removeStartOfString(name, owner);
-            name = Utils.makeOnlyFirstLetterUpperCase(name);
-            owner = Utils.makeOnlyFirstLetterUpperCase(owner);
-
-            return owner + name;
+            return createCGroupName(name, "", mode, false);
         } else {
             return name.toUpperCase();
         }
     }
 
     /* Create a name for the register suitable as a C type or struct name in the resulting header 
-     * file.  The type incorporates the owning peripheral name and the mode name if this register
-     * has one.  If this is a group alias, then the name will be formatted like a group name.  If
-     * this is not a group alias and does not have a mode, then the result will look like 
-     * "OWNER_REGISTER_Type".  If this does have a mode, the result will be formatted as
-     * "OWNER_MODE_REGISTER_Type".
+     * file as though it is a member of the mode with the given name.  The mode can also be empty or
+     * null in order to not include it in the name.  The type incorporates the owning peripheral 
+     * name and the mode name if this register has one.  If this is a group alias, then the name 
+     * will be formatted like a group name.  If this is not a group alias and does not have a mode,
+     * then the result will look like "OWNER_REGISTER_Type".  If this does have a mode, the result 
+     * will be formatted as "OWNER_MODE_REGISTER_Type".
      */
-    private String getCTypeNameForRegister(AtdfRegister reg) {
+    private String getCTypeNameForRegister(AtdfRegister reg, String mode) {
         String name = reg.getName();
         String owner = reg.getOwningPeripheralName();
 
-        name = removeStartOfString(name, owner);
-
         if(reg.isGroupAlias()) {
-            name = Utils.makeOnlyFirstLetterUpperCase(name);
-            owner = Utils.makeOnlyFirstLetterUpperCase(owner);
-            return owner + name + "_t";
+            return createCGroupName(name, owner, mode, true);
         } else {
-            String mode = reg.getMode().toUpperCase();
+            name = removeStartOfString(name, owner);
 
             owner = owner.toUpperCase();
+            mode = mode.toUpperCase();
             name = name.toUpperCase();
 
             if(isModeNameDefault(mode)) {
@@ -1378,6 +1382,53 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                 return owner + "_" + mode + "_" + name + "_Type";                
             }
         }
+    }
+
+    /* Create a name for a register group suitable to be used as a C type name or variable name.
+     * The result will be either "OwnerModeGroup_t", "OwnerGroup_t" if 'mode' is null or empty, 
+     * or just  "Owner" (no "_t") if the owner and group names are equal.  The latter is because
+     * such a type is presumably the name of a top-level peripheral struct/union, so no "_t" is
+     * added to keep somewhat compatible with Atmel header files.
+     */
+    private String createCGroupName(String groupName, String ownerName, String modeName,
+                                    boolean isType) {
+        groupName = removeStartOfString(groupName, ownerName);
+        groupName = underscoresToPascalCase(groupName);
+        ownerName = underscoresToPascalCase(ownerName);
+
+        String typeSuffix = (isType ? "_t" : "");
+
+        if(isModeNameDefault(modeName)) {
+            if(groupName.isEmpty()) {
+                return ownerName;      // no suffix here for top-level structure
+            } else {
+                return ownerName + groupName + typeSuffix;
+            }
+        } else {
+            modeName = underscoresToPascalCase(modeName);
+
+            if(groupName.startsWith(modeName)) {
+                return ownerName + groupName + typeSuffix;
+            } else {
+                return ownerName + modeName + groupName + typeSuffix;
+            }
+        }
+    }
+
+    /* Split the given string at its underscores and remove them.  Each split portion of the string
+     * is then changed such that the first letter is upper-case and the rest are lower-case (this
+     * is often called Pascal Case).  For example, the string "AN_EXAMPLE_STR" would be returned as
+     * "AnExampleStr".
+     */
+    private String underscoresToPascalCase(String str) {
+        String result = "";
+
+        String[] parts = str.split("_");
+        for(String p : parts) {
+            result += Utils.makeOnlyFirstLetterUpperCase(p);
+        }
+
+        return result;
     }
 
     /* Return a string with the starting portion removed if it is present.  This will also remove
