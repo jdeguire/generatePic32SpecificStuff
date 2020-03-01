@@ -384,18 +384,20 @@ public class Utils {
         }      
     }
 
-    /* Return the substring of the given string starting with 'begin' and ending one before 'end'
-     * (like with Java's String.substring() method) and with any leading zeroes in the resulting
-     * substring removed.  Presumably, you'd use this when grabbing numbers from strings.
+    /* Split the given string at its underscores and remove them.  Each split portion of the string
+     * is then changed such that the first letter is upper-case and the rest are lower-case (this
+     * is often called Pascal Case).  For example, the string "AN_EXAMPLE_STR" would be returned as
+     * "AnExampleStr".
      */
-    public static String substringWithoutLeadingZeroes(String str, int begin, int end) {
-        String substr = str.substring(begin, end);
+    public static String underscoresToPascalCase(String str) {
+        String result = "";
 
-        int i;
-        for(i = 0; i < substr.length()  &&  '0' == substr.charAt(i); ++i) {
+        String[] parts = str.split("_");
+        for(String p : parts) {
+            result += Utils.makeOnlyFirstLetterUpperCase(p);
         }
 
-        return substr.substring(i);
+        return result;
     }
 
 
@@ -454,11 +456,11 @@ public class Utils {
                 "OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.");
     }
 
-    /* This is the license as was given in Microchip's generated processor-specific files.  This 
-     * should be included in link script and MIPS header files that this generates because these 
-     * files are based on the ones Microchip provides with XC32.
+    /* This is the license as was given in Microchip's older generated processor-specific files.
+     * This should be included in link script and MIPS header files that this generates because
+     * these files are based on the ones Microchip provides with XC32.
      */
-    public static String microchipLicenseString() {
+    public static String microchipBsdLicenseString() {
         return ("Copyright (c) 2018, Microchip Technology Inc. and its subsidiaries (\"Microchip\")\n" +
                 "All rights reserved.\n" +
                 "\n" +
@@ -510,5 +512,30 @@ public class Utils {
                 "WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. " +
                 "See the License for the specific language governing permissions and " +
                 "limitations under the License.");
+    }
+
+    /* This is the license as was given in Microchip's newer generated processor-specific files.
+     * This should be included in new-style Arm header files that this generates because these files
+     * are based on the ones Microchip provides with XC32.
+     */
+    public static String microchipStdLicenseString() {
+        return ("Copyright (c) 2020 Microchip Technology Inc. and its subsidiaries.\n" +
+                "\n" +
+                "Subject to your compliance with these terms, you may use Microchip software and " +
+                "any derivatives exclusively with Microchip products. It is your responsibility " +
+                "to comply with third party license terms applicable to your use of third party " +
+                "software (including open source software) that may accompany Microchip software.\n" +
+                "\n" +
+                "THIS SOFTWARE IS SUPPLIED BY MICROCHIP \"AS IS\". NO WARRANTIES, WHETHER EXPRESS, " +
+                "IMPLIED OR STATUTORY, APPLY TO THIS SOFTWARE, INCLUDING ANY IMPLIED WARRANTIES " +
+                "OF NON-INFRINGEMENT, MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.\n" +
+                "\n" +
+                "IN NO EVENT WILL MICROCHIP BE LIABLE FOR ANY INDIRECT, SPECIAL, PUNITIVE, " +
+                "INCIDENTAL OR CONSEQUENTIAL LOSS, DAMAGE, COST OR EXPENSE OF ANY KIND WHATSOEVER " +
+                "RELATED TO THE SOFTWARE, HOWEVER CAUSED, EVEN IF MICROCHIP HAS BEEN ADVISED OF " +
+                "THE POSSIBILITY OR THE DAMAGES ARE FORESEEABLE. TO THE FULLEST EXTENT ALLOWED " +
+                "BY LAW, MICROCHIP'S TOTAL LIABILITY ON ALL CLAIMS IN ANY WAY RELATED TO THIS " +
+                "SOFTWARE WILL NOT EXCEED THE AMOUNT OF FEES, IF ANY, THAT YOU HAVE PAID DIRECTLY " +
+                "TO MICROCHIP FOR THIS SOFTWARE.");
     }
 }

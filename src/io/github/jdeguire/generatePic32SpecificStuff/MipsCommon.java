@@ -181,11 +181,12 @@ public class MipsCommon {
         // on PIC32 devices.
         if(series.startsWith("PIC32")) {
             if(series.equals("PIC32MX")) {
-                String flashSize = Utils.substringWithoutLeadingZeroes(devmacroname, 8, 11);
-                macroList.add(new Pair<>("__PIC32_FLASH_SIZE", flashSize));
-                macroList.add(new Pair<>("__PIC32_FLASH_SIZE__", flashSize));
-                macroList.add(new Pair<>("__PIC32_MEMORY_SIZE", flashSize));
-                macroList.add(new Pair<>("__PIC32_MEMORY_SIZE__", flashSize));
+                int flashSizeKbytes = Integer.parseInt(devmacroname.substring(8, 11));
+                String flashSizeStr = Integer.toString(flashSizeKbytes);
+                macroList.add(new Pair<>("__PIC32_FLASH_SIZE", flashSizeStr));
+                macroList.add(new Pair<>("__PIC32_FLASH_SIZE__", flashSizeStr));
+                macroList.add(new Pair<>("__PIC32_MEMORY_SIZE", flashSizeStr));
+                macroList.add(new Pair<>("__PIC32_MEMORY_SIZE__", flashSizeStr));
 
                 String featureSet = devmacroname.substring(4, 7);
                 macroList.add(new Pair<>("__PIC32_FEATURE_SET", featureSet));
@@ -195,11 +196,20 @@ public class MipsCommon {
                 macroList.add(new Pair<>("__PIC32_PIN_SET", pinSet));
                 macroList.add(new Pair<>("__PIC32_PIN_SET__", pinSet));
             } else {
-                String flashSize = Utils.substringWithoutLeadingZeroes(devmacroname, 4, 8);
-                macroList.add(new Pair<>("__PIC32_FLASH_SIZE", flashSize));
-                macroList.add(new Pair<>("__PIC32_FLASH_SIZE__", flashSize));
-
                 String featureSet = devmacroname.substring(8, 10);
+                int flashSizeKbytes;
+
+                if(featureSet.equals("DA")) {
+                    // Will give us "20", "10", or "05" -> 2048, 1024, 512.
+                    flashSizeKbytes = Integer.parseInt(devmacroname.substring(4, 6)) / 5 * 512;
+                } else {
+                    flashSizeKbytes = Integer.parseInt(devmacroname.substring(4, 8));
+                }
+
+                String flashSizeStr = Integer.toString(flashSizeKbytes);
+                macroList.add(new Pair<>("__PIC32_FLASH_SIZE", flashSizeStr));
+                macroList.add(new Pair<>("__PIC32_FLASH_SIZE__", flashSizeStr));
+
                 String featureSet0 = featureSet.substring(0, 1);
                 String featureSet1 = featureSet.substring(1, 2);
                 macroList.add(new Pair<>("__PIC32_FEATURE_SET", "\"" + featureSet + "\""));
@@ -215,9 +225,10 @@ public class MipsCommon {
 
                 int pinBegin = devmacroname.length() - 3;
                 int pinEnd = devmacroname.length();
-                String pinCount = Utils.substringWithoutLeadingZeroes(devmacroname, pinBegin, pinEnd);
-                macroList.add(new Pair<>("__PIC32_PIN_COUNT", pinCount));
-                macroList.add(new Pair<>("__PIC32_PIN_COUNT__", pinCount));
+                int pinCount = Integer.parseInt(devmacroname.substring(pinBegin, pinEnd));
+                String pinCountStr = Integer.toString(pinCount);
+                macroList.add(new Pair<>("__PIC32_PIN_COUNT", pinCountStr));
+                macroList.add(new Pair<>("__PIC32_PIN_COUNT__", pinCountStr));
             }
         }
 

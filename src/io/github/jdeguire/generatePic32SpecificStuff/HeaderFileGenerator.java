@@ -83,20 +83,50 @@ public abstract class HeaderFileGenerator {
         writer_.close();
     }
     
-    /* Add the license header to the linker file opened by the given writer.
+    /* Add the license header to the header file opened by the given writer.  This will output the
+     * license for this generator and Microchip's BSD license.
      */
-    protected void outputLicenseHeader(PrintWriter writer, boolean useApache) {
+    protected void outputLicenseHeaderBsd(PrintWriter writer) {
         String header = (Utils.generatedByString() + "\n\n" +
                          Utils.generatorLicenseString() + "\n\n" +
                          "                                               ******\n\n" + 
                          "This file is generated based on source files included with Microchip " +
                          "Technology's XC32 toolchain.  Microchip's license is reproduced below:\n\n" +
-                         (useApache ? Utils.apacheLicenseString() : Utils.microchipLicenseString()));
+                         Utils.microchipBsdLicenseString());
 
         Utils.writeMultilineCComment(writer, 0, header);
         writer.println();
     }
 
+    /* Add the license header to the header file opened by the given writer.  This will output the
+     * license for this generator and Microchip's/Atmel's Apache license.
+     */
+    protected void outputLicenseHeaderApache(PrintWriter writer) {
+        String header = (Utils.generatedByString() + "\n\n" +
+                         Utils.generatorLicenseString() + "\n\n" +
+                         "                                               ******\n\n" + 
+                         "This file is generated based on source files included with Microchip " +
+                         "Technology's XC32 toolchain.  Microchip's license is reproduced below:\n\n" +
+                         Utils.apacheLicenseString());
+
+        Utils.writeMultilineCComment(writer, 0, header);
+        writer.println();
+    }
+
+    /* Add the license header to the header file opened by the given writer.  This will output the 
+     * license for this generator and Microchip's standard "use with Microchip products" license.
+     */
+    protected void outputLicenseHeaderMicrochipStandard(PrintWriter writer) {
+        String header = (Utils.generatedByString() + "\n\n" +
+                         Utils.generatorLicenseString() + "\n\n" +
+                         "                                               ******\n\n" + 
+                         "This file is generated based on source files included with Microchip " +
+                         "Technology's XC32 toolchain.  Microchip's license is reproduced below:\n\n" +
+                         Utils.microchipStdLicenseString());
+
+        Utils.writeMultilineCComment(writer, 0, header);
+        writer.println();
+    }
 
     /* These next four are just convenience methods used to output idefs and endifs that block out
      * sections of header file based on wether or not an assembler is running.

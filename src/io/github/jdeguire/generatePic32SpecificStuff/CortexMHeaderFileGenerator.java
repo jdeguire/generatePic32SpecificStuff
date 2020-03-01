@@ -32,68 +32,18 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import org.xml.sax.SAXException;
 
 /**
- * A subclass of the HeaderFileBuilder that handles ARM Cortex-M devices.  This generates "legacy"
- * header files that were used when Atmel was still independent.  Microchip has since updated the
- * header files to be compatible with Harmony 3 and those are generally simplified compared to 
- * these ones.
+ * A subclass of the HeaderFileBuilder that handles ARM Cortex-M devices.  This generates new style
+ * header files that Microchip generates for use with Harmony 3 and XC32 starting with v2.40.  These
+ * header files are generally simplified compared to the older style that Atmel generated in that
+ * these do not have structs for each register, only macros.
  */
 public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
-
-    /* This is here for convenience when we create custom fields that are "vectors" of adjacent 
-     * fields or when we create gaps.
-     */
-    private class CustomBitfield extends AtdfBitfield {
-        public String name_;
-        public String owner_;
-        public String caption_;
-        public long mask_;
-
-        CustomBitfield(String name, String owner, String caption, long mask) {
-            super(null, null, null);
-            name_ = name;
-            owner_ = owner;
-            caption_ = caption;
-            mask_ = mask;
-        }
-
-        CustomBitfield() {
-            this("", "", "", 0);
-        }
-
-        // Copy constructor
-        CustomBitfield(AtdfBitfield other) {
-            this(other.getName(), other.getOwningRegisterName(), other.getCaption(), other.getMask());
-        }
-
-        @Override
-        public String getName() { return name_; }
-        
-        @Override
-        public String getOwningRegisterName() { return owner_; }
-
-        @Override
-        public List<String> getModes() { 
-            List<String> modes = new ArrayList<>(1);
-            modes.add("DEFAULT");
-            return modes; 
-        }
-
-        @Override
-        public String getCaption() { return caption_; }
-        
-        @Override
-        public long getMask() { return mask_; }
-        
-        @Override
-        public List<AtdfValue> getFieldValues() { return Collections.<AtdfValue>emptyList(); }
-
-        public void updateMask(long update) { mask_ |= update; }
-    }
 
     private final HashSet<String> peripheralFiles_ = new HashSet<>(20);
 
@@ -113,7 +63,7 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
         AtdfDevice device = atdfDoc.getDevice();
         List<AtdfValue> basicDeviceParams = device.getBasicParameterValues();
 
-        outputLicenseHeader(writer_, true);
+        outputLicenseHeaderMicrochipStandard(writer_);
         outputIncludeGuardStart(target);
         outputExternCStart();
         outputPreamble();
@@ -127,6 +77,7 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
         outputMemoryMapMacros(atdfDoc.getDevice());
         outputDeviceSignatureMacros(device);
         outputElectricalParameterMacros(device);
+        outputEventMacros(device);
         outputExternCEnd();
         outputIncludeGuardEnd(target);
 
@@ -172,15 +123,6 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
     private void outputPreamble() {
         writeNoAssemblyStart(writer_);
         writer_.println("#include <stdint.h>");
-        writer_.println("typedef volatile const uint32_t RoReg;   /* Read only 32-bit register */");
-        writer_.println("typedef volatile const uint16_t RoReg16; /* Read only 16-bit register */");
-        writer_.println("typedef volatile const uint8_t  RoReg8;  /* Read only  8-bit register */");
-        writer_.println("typedef volatile       uint32_t WoReg;   /* Write only 32-bit register */");
-        writer_.println("typedef volatile       uint16_t WoReg16; /* Write only 16-bit register */");
-        writer_.println("typedef volatile       uint8_t  WoReg8;  /* Write only  8-bit register */");
-        writer_.println("typedef volatile       uint32_t RwReg;   /* Read-Write 32-bit register */");
-        writer_.println("typedef volatile       uint16_t RwReg16; /* Read-Write 16-bit register */");
-        writer_.println("typedef volatile       uint8_t  RwReg8;  /* Read-Write  8-bit register */");
         writeNoAssemblyEnd(writer_);
         writer_.println();
         writer_.println("#if !defined(SKIP_INTEGER_LITERALS)");
@@ -243,6 +185,7 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
         }
 
         writer_.println();
+        writer_.println("  PERIPH_MAX_IRQn                = " + interruptList.getLastVectorNumber());
         writer_.println("  PERIPH_COUNT_IRQn              = " + (interruptList.getLastVectorNumber()+1));
         writer_.println("} IRQn_Type;");
         writer_.println();
@@ -326,11 +269,11 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
         // The original Atmel files included a separate header that was arbitrarily based on some 
         // device series.  There was hardly anything in there and they all seem to be the same, so 
         // we'll just include the contents here for simplicity.
-        writer_.println("#if !defined DONT_USE_CMSIS_INIT");
+        writer_.println("#if defined USE_CMSIS_INIT");
         writer_.println("extern uint32_t SystemCoreClock;   /* System (Core) Clock Frequency */");
         writer_.println("void SystemInit(void);");
         writer_.println("void SystemCoreClockUpdate(void);");
-        writer_.println("#endif /* DONT_USE_CMSIS_INIT */");
+        writer_.println("#endif /* USE_CMSIS_INIT */");
         writer_.println();
     }
 
@@ -361,7 +304,7 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
 
                 try(PrintWriter peripheralWriter = Utils.createUnixPrintWriter(filepath)) {
                     // Output top-of-file stuff like license and include guards.
-                    outputLicenseHeader(peripheralWriter, true);
+                    outputLicenseHeaderMicrochipStandard(peripheralWriter);
                     peripheralWriter.println();
                     peripheralWriter.println("#ifndef _" + peripheralMacro + "_COMPONENT_");
                     peripheralWriter.println("#define _" + peripheralMacro + "_COMPONENT_");
@@ -406,194 +349,125 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
      */
     private void outputRegisterDefinition(PrintWriter writer, AtdfRegister register, String groupMode)
                                             throws SAXException {
-        ArrayList<AtdfBitfield> bitfieldList = new ArrayList<>(32);
-        ArrayList<AtdfBitfield> vecfieldList = new ArrayList<>(32);
-
+        List<AtdfBitfield> vecfieldList = Collections.<AtdfBitfield>emptyList();
         String peripheralName = register.getOwningPeripheralName();
-        String fullRegisterName;
+        String qualifiedRegName;
+        String regNameAsC = getCVariableNameForRegister(register, null);
+
+        regNameAsC = removeStartOfString(regNameAsC, peripheralName);
 
         if(isModeNameDefault(groupMode))
-            fullRegisterName = peripheralName + "_" + getCVariableNameForRegister(register);
+            qualifiedRegName = peripheralName + "_" + regNameAsC;
         else
-            fullRegisterName = peripheralName + "_" + groupMode + "_" + getCVariableNameForRegister(register);
+            qualifiedRegName = peripheralName + "_" + groupMode + "_" + regNameAsC;
 
         String c99type = getC99TypeFromRegisterSize(register);
-        CustomBitfield vecfield = null;
-        int bitwidth = register.getSizeInBytes() * 8;
-        int bfNextpos = 0;
-        int vecNextpos = 0;
-        List<String> bitfieldModes = register.getBitfieldModes();
+        int registerWidth = register.getSizeInBytes() * 8;
+        List<String> bitfieldModeNames = register.getBitfieldModes();
 
         // Write out starting description text and opening to our union.
         //
-        String captionStr = ("/* -------- " + fullRegisterName + " : (" + peripheralName + " Offset: ");
+        String captionStr = ("/* -------- " + qualifiedRegName + " : (" + peripheralName + " Offset: ");
         captionStr += String.format("0x%02X", register.getBaseOffset());
-        captionStr += ") (" + register.getRwAsString() + " " + bitwidth + ") " + register.getCaption();
+        captionStr += ") (" + register.getRwAsString() + " " + registerWidth + ") " + register.getCaption();
         captionStr += " -------- */";
         writer.println(captionStr);
         writeNoAssemblyStart(writer);
         writer.println("typedef union {");
 
-        // Fill our lists with bitfields and potential vecfields, including any gaps.
+        // Write a struct for each bitfield mode with the members being the bitfields themselves.
         //
-        for(String bfMode : bitfieldModes) {
-            bitfieldList.clear();
+        for(String bfModeName : bitfieldModeNames) {
+            List<AtdfBitfield> bitfieldList = register.getBitfieldsByMode(bfModeName);
+            int bfNextpos = 0;
 
-            for(AtdfBitfield bitfield : register.getBitfieldsByMode(bfMode)) {
-                boolean endCurrentVecfield = true;
-                boolean startNewVecfield = false;
-                boolean gapWasPresent = addGapToBitfieldListIfNeeded(bitfieldList, bitfield.getLsb(), bfNextpos);
-
-                // Check if we need to start a new vector field or continue one from this bitfield.
-                // We need a vector field if this bitfield has a width of 1 and has a number at the end
-                // of its name (basename != bitfield name).
-                String bfBasename = Utils.getInstanceBasename(bitfield.getName());
-                boolean bfHasNumberedName = !bfBasename.equals(bitfield.getName());
-                if(bfHasNumberedName  &&  bitfield.getBitWidth() == 1) {
-                    if(!gapWasPresent  &&  null != vecfield  &&  bfBasename.equals(vecfield.getName())) {
-                        // Continue a current vecfield.
-                        endCurrentVecfield = false;
-                        vecfield.updateMask(bitfield.getMask());
-                    } else {
-                        // Start a new vecfield and output the old one.
-                        startNewVecfield = true;
-                    }
+            writer.println("  struct {");
+            for(AtdfBitfield bitfield : bitfieldList) {
+                if(bitfield.getLsb() > bfNextpos) {
+                    int fieldWidth = bitfield.getLsb() - bfNextpos;
+                    writeBlankBitfieldDeclaration(writer, fieldWidth, c99type);
                 }
 
-                // Do we need to write out our current vector field and possibly create a new one?
-                if(endCurrentVecfield) {
-                    if(null != vecfield) {
-                        addGapToBitfieldListIfNeeded(vecfieldList, vecfield.getLsb(), vecNextpos);
-                        vecfieldList.add(vecfield);
-                        vecNextpos = vecfield.getMsb()+1;
-                    }
-
-                    // We won't output vecfields if we have multiple bitfield modes.
-                    if(bitfieldModes.size() <= 1  &&  startNewVecfield) {
-                        vecfield = new CustomBitfield(bfBasename,
-                                                      bitfield.getOwningRegisterName(),
-                                                      bitfield.getCaption().replaceAll("\\d", "x"),
-                                                      bitfield.getMask());
-                    } else {
-                        vecfield = null;
-                    }
-                }
-
-                bitfieldList.add(bitfield);
+                writeBitfieldDeclaration(writer, bitfield, c99type);
                 bfNextpos = bitfield.getMsb()+1;
             }
 
-            // Add last vector field if one is present.
-            if(null != vecfield) {
-                addGapToBitfieldListIfNeeded(vecfieldList, vecfield.getLsb(), vecNextpos);
-                vecfieldList.add(vecfield);
-                vecNextpos = vecfield.getMsb()+1;
+            // Fill in gap at end of field if needed.
+            if(registerWidth > bfNextpos) {
+                int fieldWidth = registerWidth - bfNextpos;
+                writeBlankBitfieldDeclaration(writer, fieldWidth, c99type);                
             }
 
-            // Fill unused bits at end if needed.
-            addGapToBitfieldListIfNeeded(bitfieldList, bitwidth, bfNextpos);
-            addGapToBitfieldListIfNeeded(vecfieldList, bitwidth, vecNextpos);
-
-
-            // Now, find duplicate vector fields and replace them with gaps of the same size.
-            //
-            for(int i = 0; i < vecfieldList.size()-1; ++i) {
-                String iName = vecfieldList.get(i).getName();
-                boolean duplicateFound = false;
-
-                // An empty name means that this is a gap, so skip it for now.
-                if(!iName.isEmpty()) {
-                    for(int j = i+1; j < vecfieldList.size(); ++j) {
-                        String jName = vecfieldList.get(j).getName();
-
-                        if(iName.equals(jName)) {
-                            vecfieldList.set(j, new CustomBitfield("", "", "", vecfieldList.get(j).getMask()));
-                            duplicateFound = true;
-                        }
-                    }
-                }
-
-                if(duplicateFound) {
-                    vecfieldList.set(i, new CustomBitfield("", "", "", vecfieldList.get(i).getMask()));
-                }
-            }
-
-            // Next, we need to coalesce any adjacent gaps together into a single big gap.
-            //
-            for(int i = 0; i < vecfieldList.size()-1; ++i) {
-                // An empty name means this is a gap, which is what we're looking for.
-                if(vecfieldList.get(i).getName().isEmpty()) {
-                    CustomBitfield bigGap = new CustomBitfield(vecfieldList.get(i));
-
-                    int j = i+1;
-                    while(j < vecfieldList.size()  &&  vecfieldList.get(j).getName().isEmpty()) {
-                        bigGap.updateMask(vecfieldList.get(j).getMask());
-                        vecfieldList.remove(j);
-                    }
-
-                    vecfieldList.set(i, bigGap);
-                }
-            }
-
-            // If we just have one big gap, then there's no need to have any vecfields.
-            if(1 == vecfieldList.size()  &&  vecfieldList.get(0).getName().isEmpty()) {
-                vecfieldList.clear();
-            }
-
-
-            // Write out stuff for this mode.
-            //
-            writer.println("  struct {");
-            for(AtdfBitfield bitfield : bitfieldList) {
-                writeBitfieldDeclaration(writer, bitfield, c99type);
-            }
-            if(isModeNameDefault(bfMode)) {
+            if(isModeNameDefault(bfModeName)) {
                 writer.println("  } bit;");
             } else {
-                writer.println("  } " + bfMode + ";");
+                writer.println("  } " + bfModeName + ";");
             }
 
-            if(!vecfieldList.isEmpty()) {
-                writer.println("  struct {");
-                for(AtdfBitfield vec : vecfieldList) {
-                    writeBitfieldDeclaration(writer, vec, c99type);
-                }
-                writer.println("  } vec;");
+            // Registers with a single mode for their bitfields can make use of vecfields to merge
+            // adjacent related bitfields.
+            if(1 == bitfieldModeNames.size()) {
+                vecfieldList = getVecfieldsFromBitfields(bitfieldList);
             }
         }
 
-        // Finish writing our our register union.
+        // Write out our vecfields if we actually have any.
+        if(!vecfieldList.isEmpty()) {
+            int vecNextpos = 0;
+
+            writer.println("  struct {");
+            for(AtdfBitfield vec : vecfieldList) {
+                if(vec.getLsb() > vecNextpos) {
+                    int fieldWidth = vec.getLsb() - vecNextpos;
+                    writeBlankBitfieldDeclaration(writer, fieldWidth, c99type);
+                }
+
+                writeBitfieldDeclaration(writer, vec, c99type);
+                vecNextpos = vec.getMsb()+1;
+            }
+
+            // Fill in gap at end of field if needed.
+            if(registerWidth > vecNextpos) {
+                int fieldWidth = registerWidth - vecNextpos;
+                writeBlankBitfieldDeclaration(writer, fieldWidth, c99type);                
+            }
+
+            writer.println("  } vec;");
+        }
+
+        // Finish writing our register union.
         writer.println("  " + c99type + " reg;");
-        writer.println("} " + getCTypeNameForRegister(register) + ";");
+        writer.println("} " + getCTypeNameForRegister(register, groupMode) + ";");
         writeNoAssemblyEnd(writer);
         writer.println();
 
         // Macros
         //
         writeStringMacro(writer, 
-                         fullRegisterName + "_OFFSET",
+                         qualifiedRegName + "_OFFSET",
                          String.format("(0x%02X)", register.getBaseOffset()),
-                         fullRegisterName + " offset");
+                         qualifiedRegName + " offset");
         writeStringMacro(writer, 
-                         fullRegisterName + "_RESETVALUE",
+                         qualifiedRegName + "_RESETVALUE",
                          String.format("_U_(0x%X)", register.getInitValue()),
-                         fullRegisterName + " reset value");
+                         qualifiedRegName + " reset value");
         writeStringMacro(writer,
-                         fullRegisterName + "_MASK",
+                         qualifiedRegName + "_MASK",
                          String.format("_U_(0x%X)", register.getMask()),
-                         fullRegisterName + " mask");
+                         qualifiedRegName + " mask");
 
         writer.println();
 
-        for(String bfMode : bitfieldModes) {
-            for(AtdfBitfield bitfield : register.getBitfieldsByMode(bfMode)) {
-                writeBitfieldMacros(writer, bitfield, bfMode, fullRegisterName, bitfield.getBitWidth() > 1);
+        for(String bfModeName : bitfieldModeNames) {
+            List<AtdfBitfield> bitfieldList = register.getBitfieldsByMode(bfModeName);
+            for(AtdfBitfield bitfield : bitfieldList) {
+                writeBitfieldMacros(writer, bitfield, bfModeName, qualifiedRegName, bitfield.getBitWidth() > 1);
 
                 // Some bitfields use C macros to indicate what the different values of the bitfield
                 // mean.  If this has those, then generate them here.
                 List<AtdfValue> fieldValues = bitfield.getFieldValues();
                 if(!fieldValues.isEmpty()) {
-                    String valueMacroBasename = fullRegisterName + "_" + bitfield.getName() + "_";
+                    String valueMacroBasename = qualifiedRegName + "_" + bitfield.getName() + "_";
 
                     // Create first set of macros containing option values.
                     for(AtdfValue val : fieldValues) {
@@ -614,12 +488,13 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
             }
         }
 
+        // Finally, output any macros for our vecfields.
         if(!vecfieldList.isEmpty()) {
             writer.println();
 
             for(AtdfBitfield vec : vecfieldList) {
                 if(!vec.getName().isEmpty()) {
-                    writeBitfieldMacros(writer, vec, null, fullRegisterName, true);
+                    writeBitfieldMacros(writer, vec, null, qualifiedRegName, true);
                 }
             }
         }
@@ -627,12 +502,96 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
         writer.println();
     }
 
+    /* Step through the list of bitfields and coalesce related adjacent single-bit fields into
+     * larger multi-bit fields.  The Atmel headers called the structs that contained these "vec" and
+     * so this generator uses that name; hence, "vecfield".  The 'regwidth' paramter is the width of
+     * the owning AtdfRegister in bits.
+     */
+    private List<AtdfBitfield> getVecfieldsFromBitfields(List<AtdfBitfield> bitfieldList) {
+        ArrayList<AtdfBitfield> vecfieldList = new ArrayList<>(8);
+        VecField vecfield = null;
+        int bfNextpos = 0;
+
+        for(AtdfBitfield bitfield : bitfieldList) {
+            boolean endCurrentVecfield = true;
+            boolean startNewVecfield = false;
+            boolean gapWasPresent = (bitfield.getLsb() > bfNextpos);
+
+            // Check if we need to start a new vector field or continue one from this bitfield.
+            // We need a vector field if this bitfield has a width of 1 and has a number at the end
+            // of its name (basename != bitfield name).
+            String bfBasename = Utils.getInstanceBasename(bitfield.getName());
+            boolean bfHasNumberedName = !bfBasename.equals(bitfield.getName());
+            if(bfHasNumberedName  &&  bitfield.getBitWidth() == 1) {
+                if(!gapWasPresent  &&  null != vecfield  &&  bfBasename.equals(vecfield.getName())) {
+                    // Continue a current vecfield.
+                    endCurrentVecfield = false;
+                    vecfield.updateMask(bitfield.getMask());
+                } else {
+                    // Start a new vecfield and output the old one.
+                    startNewVecfield = true;
+                }
+            }
+
+            // Do we need to write out our current vector field and possibly create a new one?
+            if(endCurrentVecfield) {
+                if(null != vecfield) {
+                    vecfieldList.add(vecfield);
+                }
+
+                if(startNewVecfield) {
+                    vecfield = new VecField(bfBasename,
+                                                  bitfield.getOwningRegisterName(),
+                                                  bitfield.getCaption().replaceAll("\\d", "x"),
+                                                  bitfield.getMask());
+                } else {
+                    vecfield = null;
+                }
+            }
+
+            bfNextpos = bitfield.getMsb()+1;
+        }
+
+        // Add last vector field if one is present.
+        if(null != vecfield) {
+            vecfieldList.add(vecfield);
+        }
+
+        // Now, find and remove duplicate vector fields.
+        //
+        if(vecfieldList.size() > 1) {
+            // Walk backwards in these so we can delete stuff after our current position without
+            // invalidating our indices.
+            for(int i = vecfieldList.size()-2; i >= 0; --i) {
+                String iName = vecfieldList.get(i).getName();
+                boolean duplicateFound = false;
+
+                for(int j = vecfieldList.size()-1; j > i; --j) {
+                    String jName = vecfieldList.get(j).getName();
+
+                    if(iName.equals(jName)) {
+                        // Just set a flag in case we find multiple duplicates.
+                        duplicateFound = true;
+                        vecfieldList.remove(j);
+                    }
+                }
+
+                if(duplicateFound) {
+                    vecfieldList.remove(i);
+                }
+            }
+        }
+
+        return vecfieldList;
+    }
+
     /* Output a C struct representing the layout of the given register group.  This will output
-     * structs for all of this groups modes and an extra union of modes if the group has more than
+     * structs for all of this group's modes and an extra union of modes if the group has more than
      * one mode.
      */
     private void outputGroupDefinition(PrintWriter writer, AtdfRegisterGroup group) {
         List<String> memberModes = group.getMemberModes();
+        List<AtdfRegister> defaultRegs = group.getMembersByMode("DEFAULT");
 
         for(String mode : memberModes) {
             long regNextOffset = 0;
@@ -642,7 +601,22 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
             if(members.isEmpty()) {
                 continue;
             }
-            
+
+            if(memberModes.size() > 1) {
+                // Peripherals with a default mode in addition to others copy the default mode
+                // registers into each other mode, so add the default mode registers in that case.
+                // We also don't need to process the default mode separately in that case, so we
+                // can skip it here.
+                if(isModeNameDefault(mode)) {
+                    continue;
+                }
+
+                if(!defaultRegs.isEmpty()) {
+                    members.addAll(defaultRegs);
+                    sortAtdfRegistersByOffset(members);
+                }
+            }
+
             writeNoAssemblyStart(writer);
             writer.println("typedef struct {");
 
@@ -659,10 +633,19 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
                     regNextOffset = reg.getBaseOffset();
                 }
 
-                String regStr = "  " + getIOMacroFromRegisterAccess(reg) + " " + getCTypeNameForRegister(reg);
+                // Peripherals with a default mode in addition to others should still treat the 
+                // default mode registers as such for the purposes of naming.  That is, they should
+                // not take the name of the mode into which they've been copied.
+                String regMode = reg.getMode();
+                if(!isModeNameDefault(regMode)) {
+                    regMode = mode;
+                }
+
+                String regStr = "  " + getIOMacroFromRegisterAccess(reg) + " ";
+                regStr += getCTypeNameForRegister(reg, regMode);
                 regStr = Utils.padStringWithSpaces(regStr, 36, 4);
 
-                regStr += getCVariableNameForRegister(reg);
+                regStr += getCVariableNameForRegister(reg, null);
                 int count = reg.getNumRegisters();
                 if(count > 1) {
                     regStr += "[" + count + "]";
@@ -696,18 +679,20 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
             if(alignment > 0) {
                 alignmentAttr = " __attribute__((aligned(" + alignment + ")))";
             }
-            writer.println("} " + getCTypeNameForGroup(group, mode) + alignmentAttr + ";");
 
+            writer.println("} " + getCTypeNameForGroup(group, mode) + alignmentAttr + ";");
             writeNoAssemblyEnd(writer);
             writer.println();
         }
 
-        // Output a union of modes if this group had multiple modes.
-        if(memberModes.size() > 1) {
+        // Output a union of modes if this group has multiple non-default modes.  There is always
+        // a default mode, even if it is empty, so we need at least 3 modes total.
+        if(memberModes.size() > 2) {
+            writeNoAssemblyStart(writer);
             writer.println("typedef union {");
 
             for(String mode : memberModes) {
-                if(!group.getMembersByMode(mode).isEmpty()) {
+                if(!isModeNameDefault(mode)  &&  !group.getMembersByMode(mode).isEmpty()) {
                     String modeStr = "       " + getCTypeNameForGroup(group, mode);
                     modeStr = Utils.padStringWithSpaces(modeStr, 36, 4);
                     modeStr += mode + ";";
@@ -716,6 +701,8 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
             }
 
             writer.println("} " + getCTypeNameForGroup(group, null) + ";");
+            writeNoAssemblyEnd(writer);
+            writer.println();
         }
 
         // Add an extra section macro if needed.
@@ -744,7 +731,7 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
 
         try(PrintWriter instancesWriter = Utils.createUnixPrintWriter(filepath)) {
             // Output top-of-file stuff like license and include guards.
-            outputLicenseHeader(instancesWriter, true);
+            outputLicenseHeaderMicrochipStandard(instancesWriter);
             instancesWriter.println();
             instancesWriter.println("#ifndef " + instancesMacro);
             instancesWriter.println("#define " + instancesMacro);
@@ -831,7 +818,10 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
                             if(!isModeNameDefault(mode)) {
                                 name += mode + "_";
                             }
-                            name += getCVariableNameForRegister(register);
+
+                            String regNameAsC = getCVariableNameForRegister(register, null);
+                            regNameAsC = removeStartOfString(regNameAsC, peripheral.getName());
+                            name += regNameAsC;
 
                             if(numGroups > 1) {
                                 name += g;
@@ -895,7 +885,8 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
                     int id = instance.getInstanceId();
 
                     if(id >= 0) {
-                        writeStringMacro(writer_, "ID_" + instance.getName(), Integer.toString(id), null);
+                        String idStr = "(" + Integer.toString(id) + ")";
+                        writeStringMacro(writer_, "ID_" + instance.getName(), idStr, null);
 
                         if(id > maxId)
                             maxId = id;
@@ -907,52 +898,29 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
             }
         }
 
-        writeStringMacro(writer_, "ID_PERIPH_COUNT", Integer.toString(maxId+1), null);
+        writeStringMacro(writer_, "ID_PERIPH_MAX", "(" + Integer.toString(maxId) + ")", null);
+        writeStringMacro(writer_, "ID_PERIPH_COUNT", "(" + Integer.toString(maxId+1) + ")", null);
         writer_.println();
     }
 
 
-    /* Output macros to provide the base address of peripherals along with information on the
-     * instances of each peripheral.
+    /* Output macros to provide the base address of peripheral instances.
      */
     private void outputBaseAddressMacros(List<AtdfPeripheral> peripheralList){
         writeHeaderSectionHeading(writer_, "Peripheral Base Address Macros");
 
-        writeAssemblyStart(writer_);
-        outputBaseAddressMacrosForAssembly(peripheralList);
-        writer_.println("#else /* !__ASSEMBLER__ */");
-        outputBaseAddressMacrosForC(peripheralList);
-        writeAssemblyEnd(writer_);
+        writeNoAssemblyStart(writer_);
+        outputInstanceRegisterAddressMacros(peripheralList);
+        writeNoAssemblyEnd(writer_);
+        writer_.println();
+        outputBareBaseAddressMacros(peripheralList);
         writer_.println();
     }
 
-    /* Output base address macros that could be used in assembly code.
+    /* Output base address macros that could be used in C to indirectly access the registers of
+     * a peripheral instance.  These are essentially an address cast to a register struct pointer.
      */
-    private void outputBaseAddressMacrosForAssembly(List<AtdfPeripheral> peripheralList){
-        for(AtdfPeripheral peripheral : peripheralList) {
-            if(isArmInternalPeripheral(peripheral)) {
-                continue;
-            }
-
-            try {
-                // For assembly, each instance just has its own macro for its base address.
-                for(AtdfInstance instance : peripheral.getAllInstances()) {
-                    writeStringMacro(writer_, 
-                                     instance.getName(), 
-                                     "(0x" + Long.toHexString(instance.getBaseAddress()).toUpperCase() + ")",
-                                     instance.getName() + " Base Address");
-                }
-            } catch(SAXException ex) {
-                // Do nothing for now because some peripherals (like crypto) have no useful instance
-                // info.
-            }
-        }
-    }
-
-    /* Output base address macros that could be used in C.  This also output macros that mimic an
-     * initializer list or array of all of the instances of a each peripheral.
-     */
-    private void outputBaseAddressMacrosForC(List<AtdfPeripheral> peripheralList){
+    private void outputInstanceRegisterAddressMacros(List<AtdfPeripheral> peripheralList){
         for(AtdfPeripheral peripheral : peripheralList) {
             if(isArmInternalPeripheral(peripheral)) {
                 continue;
@@ -960,42 +928,17 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
 
             try {
                 List<AtdfInstance> instanceList = peripheral.getAllInstances();
-                String peripheralTypename = Utils.makeOnlyFirstLetterUpperCase(peripheral.getName());
-                peripheralTypename = String.format("(%-12s*)", peripheralTypename);
+                String peripheralTypename = peripheral.getName().toLowerCase() + "_registers_t";
 
-                // For C, start with outputting macros for each instance...
                 for(AtdfInstance instance : instanceList) {
                     String addrString = "0x" + Long.toHexString(instance.getBaseAddress()).toUpperCase();
-                    String valString = "(" + peripheralTypename + addrString + "UL)";
+                    String valString = "((" + peripheralTypename + ")" + addrString + "UL)";
 
                     writeStringMacro(writer_,
-                                     instance.getName(),
+                                     instance.getName() + "_REGS",
                                      valString,
-                                     instance.getName() + " Base Address");
+                                     instance.getName() + " Instance Register Address");
                 }
-
-                // ...then output a macro for the number of instances...
-                writeStringMacro(writer_,
-                                 peripheral.getName() + "_INST_NUM",
-                                 Integer.toString(instanceList.size()),
-                                 "Number of instances for " + peripheral.getName());
-
-                // ...finally, output a macro that puts all instances into an initializer list.
-                String instancesStr = "{ ";
-                boolean first = true;
-                for(AtdfInstance instance : instanceList) {
-                    if(!first)
-                        instancesStr += ", ";
-
-                    instancesStr += instance.getName();
-                    first = false;
-                }
-                instancesStr += " };";
-                writeStringMacro(writer_,
-                                 peripheral.getName() + "_INSTS",
-                                 instancesStr,
-                                 peripheral.getName() + " Instances List");
-                writer_.println();
             } catch(SAXException ex) {
                 // Do nothing for now because some peripherals (like crypto) have no useful instance
                 // info.
@@ -1003,6 +946,28 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
         }
     }
 
+    /* Output bare base address macros that just contain the addresses of the peripheral instances.
+     */
+    private void outputBareBaseAddressMacros(List<AtdfPeripheral> peripheralList){
+        for(AtdfPeripheral peripheral : peripheralList) {
+            if(isArmInternalPeripheral(peripheral)) {
+                continue;
+            }
+
+            try {
+                for(AtdfInstance instance : peripheral.getAllInstances()) {
+                    String addrStr = "0x" + Long.toHexString(instance.getBaseAddress()).toUpperCase();
+                    writeStringMacro(writer_, 
+                                     instance.getName() + "_BASE_ADDRESS",
+                                     "_UL_(" + addrStr + ")",
+                                     instance.getName() + " Base Address");
+                }
+            } catch(SAXException ex) {
+                // Do nothing for now because some peripherals (like crypto) have no useful instance
+                // info.
+            }
+        }
+    }
 
     /* Write out macros that provide information on how the memory map is laid out on the device,
      * such as page size and the location of different memory spaces/
@@ -1049,7 +1014,7 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
 
         List<AtdfValue> sigList = device.getSignatureParameterValues();
 
-        if(sigList.size() > 0) {
+        if(!sigList.isEmpty()) {
             for(AtdfValue sig : sigList) {
                 writeStringMacro(writer_, sig.getName(), "_UL_(" + sig.getValue() + ")", sig.getCaption());
             }
@@ -1068,12 +1033,54 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
 
         List<AtdfValue> paramList = device.getElectricalParameterValues();
 
-        if(paramList.size() > 0) {
+        if(!paramList.isEmpty()) {
             for(AtdfValue param : paramList) {
                 writeStringMacro(writer_, param.getName(), "_UL_(" + param.getValue() + ")", param.getCaption());
             }
         } else {
             writer_.println("/* <No electrical parameter macros provided for this device.> */");
+        }
+
+        writer_.println();
+    }
+
+    /* Output macros used for the event system on the device if the device has one.
+     */
+    private void outputEventMacros(AtdfDevice device) {
+        // Generators
+        //
+        writeHeaderSectionHeading(writer_, "Device Event Generator Macros");
+        
+        List<AtdfEvent> generatorList = device.getEventGenerators();
+
+        if(!generatorList.isEmpty()) {
+            for(AtdfEvent event : generatorList) {
+                writeStringMacro(writer_,
+                                 "EVENT_ID_GEN_" + event.getName(),
+                                 "(" + event.getIndex() + ")",
+                                 "");
+            }
+        } else {
+            writer_.println("/* <No event generators provided for this device.> */");
+        }
+
+        writer_.println();
+
+        // Users
+        //
+        writeHeaderSectionHeading(writer_, "Device Event User Macros");
+        
+        List<AtdfEvent> userList = device.getEventUsers();
+
+        if(!userList.isEmpty()) {
+            for(AtdfEvent event : userList) {
+                writeStringMacro(writer_,
+                                 "EVENT_ID_USER_" + event.getName(),
+                                 "(" + event.getIndex() + ")",
+                                 "");
+            }
+        } else {
+            writer_.println("/* <No event uses provided for this device.> */");
         }
 
         writer_.println();
@@ -1196,6 +1203,13 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
         writer.println(fieldDecl);
     }
 
+    /* Write a blank bitfield declaration that would be used as part of a C struct to fill in gaps
+     * in the bitfield represented by the struct.  This writes the declaration as its own line 
+     * using PrintWriter::println().  The gap will be 'fieldWidth' bits wide.
+     */
+    private void writeBlankBitfieldDeclaration(PrintWriter writer, int fieldWidth, String c99type) {
+        writer.println("    " + c99type + "  :" + fieldWidth + ";");
+    }
 
     /* Write a list of C macros that are used to access the given bitfield with each macro on its
      * own line.  This can generate two sets of macros depending on the state of 'extendedMacros'.
@@ -1236,23 +1250,6 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
         }
     }
 
-    /* Add a blank CustomBitfield representing a gap to the given list if needed; that is, the start
-     * of the next bitfield (second param) is greater than what was expected (third param).  Return 
-     * True if a gap was added to the list or False otherwise.
-     */
-    private boolean addGapToBitfieldListIfNeeded(List<AtdfBitfield> list, int actualStart, int expectedStart) {
-        boolean result = false;
-
-        if(actualStart > expectedStart) {
-            long gap = actualStart - expectedStart;
-            long mask = ((1L << gap) - 1L) << expectedStart;
-            list.add(new CustomBitfield("", "" ,"", mask));
-            result = true;
-        }
-
-        return result;
-    }
-
     /* We don't want to generate header files and macros for Arm peripherals (like NVIC, ETM, etc.)
      * because those are already handled by the Arm CMSIS headers.  This will return True if the
      * given periphral is an Arm one instead of an Atmel one.
@@ -1287,91 +1284,127 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
     }
 
 
-    /* Create a name for the group suitable as a C variable name in the resulting header file.  The 
-     * result will be the group name with the first letter capitalized and the rest lower-case.
+    /* Create a name for the group suitable as a C type or struct name in the resulting header file.
+     * The type incorporates the owning peripheral name and the mode name if present.  The result
+     * will be either "OwnerModeGroup_t", "OwnerGroup_t" if 'mode' is null or empty, or just 
+     * "Owner" (no "_t") if the owner and group names are equal.  The latter is because such a
+     * type is presumably the name of a top-level peripheral struct/union, so no "_t" is added
+     * to keep somewhat compatible with Atmel header files.
      */
-    private String getCVariableNameForGroup(AtdfRegisterGroup group) {
+    private String getCTypeNameForGroup(AtdfRegisterGroup group, String mode) {
         String name = group.getName();
         String owner = group.getOwningPeripheralName();
 
-        // Some groups in the ATDF doc start with the owner name, so remove that.
-        if(name.startsWith(owner)) {
-            name = name.substring(owner.length());
-
-            // In case the name in the ATDF doc was something like "OWNER_REGISTER".
-            if(name.startsWith("_")) {
-                name = name.substring(1);
-            }
-        }
-
-        return Utils.makeOnlyFirstLetterUpperCase(name);
+        return createCGroupName(name, owner, mode, true);
     }
 
-    /* Create a name for the group suitable as a C type or struct name in the resulting header file.
-     * The type incorporates the owning peripheral name and the mode name if present.  The result
-     * will be either "OwnerModeGroup" or "OwnerGroup" if 'mode' is null or empty.
+    /* Create a name for the register suitable as a C variable name in the resulting header file
+     * as though it is a member of the mode with the given name.  The mode can also be empty or null
+     * in order to not include it in the name.  If this register is a group alias, the name will be 
+     * formatted like a group name; otherwise, it will be the register name in all caps.
      */
-    private String getCTypeNameForGroup(AtdfRegisterGroup group, String mode) {
-        String name = getCVariableNameForGroup(group);
-        String owner = group.getOwningPeripheralName();
-
-        owner = Utils.makeOnlyFirstLetterUpperCase(owner);
-
-        if(isModeNameDefault(mode)) {
-            return owner + name;            
-        } else {
-            mode = Utils.makeOnlyFirstLetterUpperCase(mode);
-            return owner + mode + name;
-        }
-    }
-
-    /* Create a name for the register suitable as a C variable name in the resulting header file.
-     * If this register is a group alias, the name will be formatted like a group name; otherwise, 
-     * it will be the register name in all caps.
-     */
-    private String getCVariableNameForRegister(AtdfRegister reg) {
+    private String getCVariableNameForRegister(AtdfRegister reg, String mode) {
         String name = reg.getName();
-        String owner = reg.getOwningPeripheralName();
-
-        // Some register in the ATDF doc start with the owner name, so remove that.
-        if(name.startsWith(owner)) {
-            name = name.substring(owner.length());
-
-            // In case the name in the ATDF doc was something like "OWNER_REGISTER".
-            if(name.startsWith("_")) {
-                name = name.substring(1);
-            }
-        }
 
         if(reg.isGroupAlias()) {
-            return Utils.makeOnlyFirstLetterUpperCase(name);
+            return createCGroupName(name, "", mode, false);
         } else {
             return name.toUpperCase();
         }
     }
 
     /* Create a name for the register suitable as a C type or struct name in the resulting header 
-     * file.  The type incorporates the owning peripheral name and the mode name if this register
-     * has one.  If this is a group alias, then the name will be formatted like a group name.  If
-     * this is not a group alias and does not have a mode, then the result will look like 
-     * "OWNER_REGISTER_Type".  If this does have a mode, the result will be formatted as
-     * "OWNER_MODE_REGISTER_Type".
+     * file as though it is a member of the mode with the given name.  The mode can also be empty or
+     * null in order to not include it in the name.  The type incorporates the owning peripheral 
+     * name and the mode name if this register has one.  If this is a group alias, then the name 
+     * will be formatted like a group name.  If this is not a group alias and does not have a mode,
+     * then the result will look like "OWNER_REGISTER_Type".  If this does have a mode, the result 
+     * will be formatted as "OWNER_MODE_REGISTER_Type".
      */
-    private String getCTypeNameForRegister(AtdfRegister reg) {
-        String name = getCVariableNameForRegister(reg);
+    private String getCTypeNameForRegister(AtdfRegister reg, String mode) {
+        String name = reg.getName();
         String owner = reg.getOwningPeripheralName();
 
         if(reg.isGroupAlias()) {
-            owner = Utils.makeOnlyFirstLetterUpperCase(owner);
-            return owner + name;
+            return createCGroupName(name, owner, mode, true);
         } else {
-            String mode = reg.getMode();
+            name = removeStartOfString(name, owner);
 
-            if(mode.isEmpty()) {
-                return owner.toUpperCase() + "_" + name + "_Type";
+            owner = owner.toUpperCase();
+            mode = mode.toUpperCase();
+            name = name.toUpperCase();
+
+            if(isModeNameDefault(mode)) {
+                return owner + "_" + name + "_Type";
             } else {
-                return owner.toUpperCase() + "_" + mode.toUpperCase() + "_" + name + "_Type";                
+                return owner + "_" + mode + "_" + name + "_Type";                
             }
         }
+    }
+
+    /* Create a name for a register group suitable to be used as a C type name or variable name.
+     * The result will be either "OwnerModeGroup_t", "OwnerGroup_t" if 'mode' is null or empty, 
+     * or just  "Owner" (no "_t") if the owner and group names are equal.  The latter is because
+     * such a type is presumably the name of a top-level peripheral struct/union, so no "_t" is
+     * added to keep somewhat compatible with Atmel header files.
+     */
+    private String createCGroupName(String groupName, String ownerName, String modeName,
+                                    boolean isType) {
+        groupName = removeStartOfString(groupName, ownerName);
+        groupName = Utils.underscoresToPascalCase(groupName);
+        ownerName = Utils.underscoresToPascalCase(ownerName);
+
+        String typeSuffix = (isType ? "_t" : "");
+
+        if(isModeNameDefault(modeName)) {
+            if(groupName.isEmpty()) {
+                return ownerName;      // no suffix here for top-level structure
+            } else {
+                return ownerName + groupName + typeSuffix;
+            }
+        } else {
+            modeName = Utils.underscoresToPascalCase(modeName);
+
+            if(groupName.startsWith(modeName)) {
+                return ownerName + groupName + typeSuffix;
+            } else {
+                return ownerName + modeName + groupName + typeSuffix;
+            }
+        }
+    }
+
+    /* Return a string with the starting portion removed if it is present.  This will also remove
+     * a separating underscore, so that a 'str' of "START_STR" and 'start' of "START" will return
+     * just "STR".
+     */
+    private String removeStartOfString(String str, String start) {
+        if(str.startsWith(start)) {
+            str = str.substring(start.length());
+
+            if(str.startsWith("_")) {
+                str = str.substring(1);
+            }
+        }
+        
+        return str;
+    }
+
+    /* Sort the given list of AtdfRegisters by their offset value, with lower offsets coming first.
+     */
+    private void sortAtdfRegistersByOffset(List<AtdfRegister> registerList) {
+        Collections.sort(registerList, new Comparator<AtdfRegister>() {
+            @Override
+            public int compare(AtdfRegister one, AtdfRegister two) {
+                long oneOffset = one.getBaseOffset();
+                long twoOffset = two.getBaseOffset();
+
+                if(oneOffset > twoOffset)
+                    return 1;
+                else if(oneOffset < twoOffset)
+                    return -1;
+                else
+                    return 0;
+                }
+        });
     }
 }

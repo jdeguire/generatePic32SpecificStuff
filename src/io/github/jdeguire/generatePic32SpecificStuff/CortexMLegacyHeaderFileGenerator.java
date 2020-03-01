@@ -45,58 +45,6 @@ import org.xml.sax.SAXException;
  */
 public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
-    /* This is here for convenience when we create custom fields that are "vectors" of adjacent 
-     * fields.  The Atmel header files called structs of these "vec", so that's where the name
-     * comes from.
-     */
-    private class VecField extends AtdfBitfield {
-        public String name_;
-        public String owner_;
-        public String caption_;
-        public long mask_;
-
-        VecField(String name, String owner, String caption, long mask) {
-            super(null, null, null);
-            name_ = name;
-            owner_ = owner;
-            caption_ = caption;
-            mask_ = mask;
-        }
-
-        VecField() {
-            this("", "", "", 0);
-        }
-
-        // Copy constructor
-        VecField(AtdfBitfield other) {
-            this(other.getName(), other.getOwningRegisterName(), other.getCaption(), other.getMask());
-        }
-
-        @Override
-        public String getName() { return name_; }
-        
-        @Override
-        public String getOwningRegisterName() { return owner_; }
-
-        @Override
-        public List<String> getModes() { 
-            List<String> modes = new ArrayList<>(1);
-            modes.add("DEFAULT");
-            return modes; 
-        }
-
-        @Override
-        public String getCaption() { return caption_; }
-        
-        @Override
-        public long getMask() { return mask_; }
-        
-        @Override
-        public List<AtdfValue> getFieldValues() { return Collections.<AtdfValue>emptyList(); }
-
-        public void updateMask(long update) { mask_ |= update; }
-    }
-
     private final HashSet<String> peripheralFiles_ = new HashSet<>(20);
 
 
@@ -115,7 +63,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
         AtdfDevice device = atdfDoc.getDevice();
         List<AtdfValue> basicDeviceParams = device.getBasicParameterValues();
 
-        outputLicenseHeader(writer_, true);
+        outputLicenseHeaderApache(writer_);
         outputIncludeGuardStart(target);
         outputExternCStart();
         outputPreamble();
@@ -363,7 +311,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
                 try(PrintWriter peripheralWriter = Utils.createUnixPrintWriter(filepath)) {
                     // Output top-of-file stuff like license and include guards.
-                    outputLicenseHeader(peripheralWriter, true);
+                    outputLicenseHeaderApache(peripheralWriter);
                     peripheralWriter.println();
                     peripheralWriter.println("#ifndef _" + peripheralMacro + "_COMPONENT_");
                     peripheralWriter.println("#define _" + peripheralMacro + "_COMPONENT_");
@@ -790,7 +738,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
         try(PrintWriter instancesWriter = Utils.createUnixPrintWriter(filepath)) {
             // Output top-of-file stuff like license and include guards.
-            outputLicenseHeader(instancesWriter, true);
+            outputLicenseHeaderApache(instancesWriter);
             instancesWriter.println();
             instancesWriter.println("#ifndef " + instancesMacro);
             instancesWriter.println("#define " + instancesMacro);
@@ -944,7 +892,8 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                     int id = instance.getInstanceId();
 
                     if(id >= 0) {
-                        writeStringMacro(writer_, "ID_" + instance.getName(), Integer.toString(id), null);
+                        String idStr = "(" + Integer.toString(id) + ")";
+                        writeStringMacro(writer_, "ID_" + instance.getName(), idStr, null);
 
                         if(id > maxId)
                             maxId = id;
@@ -956,7 +905,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
             }
         }
 
-        writeStringMacro(writer_, "ID_PERIPH_COUNT", Integer.toString(maxId+1), null);
+        writeStringMacro(writer_, "ID_PERIPH_COUNT", "(" + Integer.toString(maxId+1) + ")", null);
         writer_.println();
     }
 
@@ -1393,8 +1342,8 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
     private String createCGroupName(String groupName, String ownerName, String modeName,
                                     boolean isType) {
         groupName = removeStartOfString(groupName, ownerName);
-        groupName = underscoresToPascalCase(groupName);
-        ownerName = underscoresToPascalCase(ownerName);
+        groupName = Utils.underscoresToPascalCase(groupName);
+        ownerName = Utils.underscoresToPascalCase(ownerName);
 
         String typeSuffix = (isType ? "_t" : "");
 
@@ -1405,7 +1354,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                 return ownerName + groupName + typeSuffix;
             }
         } else {
-            modeName = underscoresToPascalCase(modeName);
+            modeName = Utils.underscoresToPascalCase(modeName);
 
             if(groupName.startsWith(modeName)) {
                 return ownerName + groupName + typeSuffix;
@@ -1413,22 +1362,6 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                 return ownerName + modeName + groupName + typeSuffix;
             }
         }
-    }
-
-    /* Split the given string at its underscores and remove them.  Each split portion of the string
-     * is then changed such that the first letter is upper-case and the rest are lower-case (this
-     * is often called Pascal Case).  For example, the string "AN_EXAMPLE_STR" would be returned as
-     * "AnExampleStr".
-     */
-    private String underscoresToPascalCase(String str) {
-        String result = "";
-
-        String[] parts = str.split("_");
-        for(String p : parts) {
-            result += Utils.makeOnlyFirstLetterUpperCase(p);
-        }
-
-        return result;
     }
 
     /* Return a string with the starting portion removed if it is present.  This will also remove

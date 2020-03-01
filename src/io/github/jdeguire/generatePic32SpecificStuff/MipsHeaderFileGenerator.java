@@ -57,7 +57,7 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
         List<DCR> dcrList = target.getDCRs();
 
         createNewHeaderFile(target);
-        outputLicenseHeader(writer_, false);
+        outputLicenseHeaderBsd(writer_);
         outputIncludeGuardStart(target);
 
         // Stuff for C/C++ only

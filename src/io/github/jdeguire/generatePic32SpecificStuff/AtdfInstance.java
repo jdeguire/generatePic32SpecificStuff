@@ -125,7 +125,7 @@ public class AtdfInstance {
     }
 
     /* Get a list of signals for this peripheral instance.  Signals provide info about the pins on 
-     * the device this instance can use.  This returns an empty string if this instance has no
+     * the device this instance can use.  This returns an empty array if this instance has no
      * external signals.
      */
     public List<AtdfSignal> getSignals() {

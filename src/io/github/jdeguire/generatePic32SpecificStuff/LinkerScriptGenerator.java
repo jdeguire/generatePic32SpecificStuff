@@ -147,7 +147,7 @@ public abstract class LinkerScriptGenerator {
                          "                                               ******\n\n" + 
                          "This file is generated based on sources files included with Microchip " +
                          "Technology's XC32 toolchain.  Microchip's license is reproduced below:\n\n" +
-                         Utils.microchipLicenseString());
+                         Utils.microchipBsdLicenseString());
 
         Utils.writeMultilineCComment(writer_, 0, header);
         writer_.println();

@@ -151,4 +151,43 @@ public class AtdfDevice {
 
         return memories;
     }
+
+    /* Get a list of event generators or an empty list of this device does not support events.
+     */
+    public List<AtdfEvent> getEventGenerators() {
+        ArrayList<AtdfEvent> events = new ArrayList<>(16);
+
+        Node eventsNode = Utils.filterFirstChildNode(deviceNode_, "events", null, null);
+        Node generatorsNode = Utils.filterFirstChildNode(eventsNode, "generators", null, null);
+
+        if(null != generatorsNode) {
+            List<Node> eventList = Utils.filterAllChildNodes(generatorsNode, "generator", null, null);
+            
+            for(Node event : eventList) {
+                events.add(new AtdfEvent(event));
+            }
+        }
+
+        return events;
+    }
+
+    /* Get a list of event users or an empty list of this device does not support events.
+     */
+    public List<AtdfEvent> getEventUsers() {
+        ArrayList<AtdfEvent> events = new ArrayList<>(16);
+
+        Node eventsNode = Utils.filterFirstChildNode(deviceNode_, "events", null, null);
+        Node usersNode = Utils.filterFirstChildNode(eventsNode, "users", null, null);
+
+        if(null != usersNode) {
+            List<Node> eventList = Utils.filterAllChildNodes(usersNode, "user", null, null);
+            
+            for(Node event : eventList) {
+                events.add(new AtdfEvent(event));
+            }
+        }
+
+        return events;
+    }
 }
+
