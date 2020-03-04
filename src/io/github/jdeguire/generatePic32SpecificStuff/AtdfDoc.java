@@ -32,8 +32,10 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -158,7 +160,39 @@ public class AtdfDoc {
         return null;
     }
  
- 
+    /* Get a list of the names of all of the port pins that on all variants of this device.  Port
+     * pins are ones whose names are of the form "PxNN", where 'x' is a letter and 'NN' is a pin
+     * number.
+     */
+    public List<String> getPortPinNames() {
+        HashSet<String> pinset = new HashSet<>(32);
+
+        Node pinoutsNode = Utils.filterFirstChildNode(rootNode_, "pinouts", null, null);
+        List<Node> pinoutNodeList = Utils.filterAllChildNodes(pinoutsNode, "pinout", null, null);
+
+        // There are multiple possible pinouts because this device can have multiple packages.  Just
+        // get all the possible pins for everything.
+        for(Node pinoutNode : pinoutNodeList) {
+            List<Node> pinNodeList = Utils.filterAllChildNodes(pinoutNode, "pin", null, null);
+
+            for(Node pinNode : pinNodeList) {
+                // Find only pins that look like port pins.
+                String pinName = Utils.getNodeAttribute(pinNode, "pad", "").toUpperCase();
+
+                if(4 == pinName.length()  &&
+                   'P' == pinName.charAt(0)  &&
+                   Character.isLetter(pinName.charAt(1))  &&
+                   Character.isDigit(pinName.charAt(2))  &&
+                   Character.isDigit(pinName.charAt(3))) {
+                    pinset.add(pinName);
+                }
+            }
+        }
+        
+        return new ArrayList<>(pinset);
+    }
+
+
     /* Walk the directory tree at which the MPLAB X packs are located to find all of the ATDF files
      * and fill our cache with them.  This is a long operation and so we should do it only once.
      */

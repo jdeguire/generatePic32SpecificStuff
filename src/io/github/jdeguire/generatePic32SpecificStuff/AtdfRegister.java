@@ -50,6 +50,7 @@ public class AtdfRegister {
     private final Node regNode_;
     private final ArrayList<AtdfBitfield> bitfields_ = new ArrayList<>(32);
     private String modeName_ = null;
+    private final boolean isGroupAlias_;
 
     /* Create a new AtdfRegister based on the given nodes from an ATDF document.  The 'moduleNode' 
      * is a Node that refers to the "module" XML node that contains the desired register indicated
@@ -59,6 +60,8 @@ public class AtdfRegister {
     public AtdfRegister(Node moduleNode, Node regNode) {
         moduleNode_ = moduleNode;
         regNode_ = regNode;
+
+        isGroupAlias_ = regNode_.getNodeName().equals("register-group");
     }
 
 
@@ -86,13 +89,6 @@ public class AtdfRegister {
 
         return modeName_;
     }
-
-    /* Set the name of the register mode.
-     */
-    public void setMode(String mode) {
-        modeName_ = mode;
-    }
-
 
     /* Get descriptive text for this register.
      */
@@ -176,7 +172,7 @@ public class AtdfRegister {
      * two.  A group will of course have no bitfields on its own.
      */
     public boolean isGroupAlias() {
-        return regNode_.getNodeName().equals("register-group");
+        return isGroupAlias_;
     }
 
     /* Get all of the modes used by the member bitfields.  Modes allow a register to act differently

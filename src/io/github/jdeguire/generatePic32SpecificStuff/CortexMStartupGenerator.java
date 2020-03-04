@@ -244,7 +244,7 @@ public class CortexMStartupGenerator {
         Utils.writeMultilineCComment(writer, 0, "Enable the FPU for devices that have one.");
         writer.println("void __attribute__((weak)) _EnableFpu(void)");
         writer.println("{");
-        writer.println("#if defined(__ARM_FP) && (4 == __ARM_FP || 14 == __ARM_FP)");
+        writer.println("#if defined(__ARM_FP) && (0 != __ARM_FP)");
         writer.println("    SCB->CPACR |= 0x00F00000;");
         writer.println("    __DSB();");
         writer.println("    __ISB();");
@@ -264,7 +264,7 @@ public class CortexMStartupGenerator {
         writer.println("void __attribute__((weak)) _EnableCmccCache(void)");
         writer.println("{");
         writer.println("#if defined(ID_CMCC)");
-        writer.println("    CMCC->CTRL.bit.CEN = 1;");
+        writer.println("    CMCC_REGS->CMCC_CTRL |= CMCC_CTRL_CEN_Msk;");
         writer.println("#endif");
         writer.println("}");
         writer.println();

@@ -60,6 +60,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
         createNewHeaderFile(target);
 
         List<AtdfPeripheral> peripherals = atdfDoc.getAllPeripherals();
+        List<String> pinNames = atdfDoc.getPortPinNames();
         AtdfDevice device = atdfDoc.getDevice();
         List<AtdfValue> basicDeviceParams = device.getBasicParameterValues();
 
@@ -74,6 +75,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
         outputPeripheralInstancesHeader(target, peripherals);
         outputPeripheralModuleIdMacros(peripherals);
         outputBaseAddressMacros(peripherals);
+        outputPioDefinitionHeader(target, pinNames, peripherals);
         outputMemoryMapMacros(atdfDoc.getDevice());
         outputDeviceSignatureMacros(device);
         outputElectricalParameterMacros(device);
@@ -359,7 +361,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
         List<AtdfBitfield> vecfieldList = Collections.<AtdfBitfield>emptyList();
         String peripheralName = register.getOwningPeripheralName();
         String qualifiedRegName;
-        String regNameAsC = getCVariableNameForRegister(register, null);
+        String regNameAsC = getCVariableNameForRegister(register);
 
         regNameAsC = removeStartOfString(regNameAsC, peripheralName);
 
@@ -500,9 +502,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
             writer.println();
 
             for(AtdfBitfield vec : vecfieldList) {
-                if(!vec.getName().isEmpty()) {
-                    writeBitfieldMacros(writer, vec, null, qualifiedRegName, true);
-                }
+                writeBitfieldMacros(writer, vec, null, qualifiedRegName, true);
             }
         }
 
@@ -548,9 +548,9 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
                 if(startNewVecfield) {
                     vecfield = new VecField(bfBasename,
-                                                  bitfield.getOwningRegisterName(),
-                                                  bitfield.getCaption().replaceAll("\\d", "x"),
-                                                  bitfield.getMask());
+                                            bitfield.getOwningRegisterName(),
+                                            bitfield.getCaption().replaceAll("\\d", "x"),
+                                            bitfield.getMask());
                 } else {
                     vecfield = null;
                 }
@@ -619,6 +619,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                 }
 
                 if(!defaultRegs.isEmpty()) {
+                    members = new ArrayList<>(members);
                     members.addAll(defaultRegs);
                     sortAtdfRegistersByOffset(members);
                 }
@@ -652,7 +653,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                 regStr += getCTypeNameForRegister(reg, regMode);
                 regStr = Utils.padStringWithSpaces(regStr, 36, 4);
 
-                regStr += getCVariableNameForRegister(reg, null);
+                regStr += getCVariableNameForRegister(reg);
                 int count = reg.getNumRegisters();
                 if(count > 1) {
                     regStr += "[" + count + "]";
@@ -744,6 +745,8 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
             instancesWriter.println("#define " + instancesMacro);
             instancesWriter.println();
 
+            outputPeripheralInstanceWrapperMacroDefinitions(instancesWriter);
+
             for(AtdfPeripheral peripheral : peripheralList) {
                 if(isArmInternalPeripheral(peripheral)) {
                     continue;
@@ -774,6 +777,34 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
     }
 
+    /* Output macros that can be used to allow the peripheral instance macros to be used in either
+     * C or assembly without having to duplicate them in the file
+     */
+    private void outputPeripheralInstanceWrapperMacroDefinitions(PrintWriter writer) {
+        writeNoAssemblyStart(writer);
+        writeStringMacro(writer, "_RoReg32_(x)", "(*(RoReg *)x##UL)", null);
+        writeStringMacro(writer, "_RoReg16_(x)", "(*(RoReg16 *)x##UL)", null);
+        writeStringMacro(writer, "_RoReg8_(x)", "(*(RoReg8 *)x##UL)", null);
+        writeStringMacro(writer, "_WoReg32_(x)", "(*(WoReg *)x##UL)", null);
+        writeStringMacro(writer, "_WoReg16_(x)", "(*(WoReg16 *)x##UL)", null);
+        writeStringMacro(writer, "_WoReg8_(x)", "(*(WoReg8 *)x##UL)", null);
+        writeStringMacro(writer, "_RwReg32_(x)", "(*(RwReg *)x##UL)", null);
+        writeStringMacro(writer, "_RwReg16_(x)", "(*(RwReg16 *)x##UL)", null);
+        writeStringMacro(writer, "_RwReg8_(x)", "(*(RwReg8 *)x##UL)", null);
+        writer.println("#else /* Assembly */");
+        writeStringMacro(writer, "_RoReg32_(x)", "(x)", null);
+        writeStringMacro(writer, "_RoReg16_(x)", "(x)", null);
+        writeStringMacro(writer, "_RoReg8_(x)", "(x)", null);
+        writeStringMacro(writer, "_WoReg32_(x)", "(x)", null);
+        writeStringMacro(writer, "_WoReg16_(x)", "(x)", null);
+        writeStringMacro(writer, "_WoReg8_(x)", "(x)", null);
+        writeStringMacro(writer, "_RwReg32_(x)", "(x)", null);
+        writeStringMacro(writer, "_RwReg16_(x)", "(x)", null);
+        writeStringMacro(writer, "_RwReg8_(x)", "(x)", null);
+        writeNoAssemblyEnd(writer);
+        writer.println();
+    }
+
     /* Output macros representing all of the registers belonging to the given peripheral and whose
      * addresses are relative to the given instance.  The macros will be named for the instance, 
      * which in most cases is either the peripheral name or the name plus an instance number.
@@ -789,11 +820,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
         writer.print("/* ========== ");
         writer.print("Register definition for " + instance.getName() + " peripheral instance");
         writer.println(" ========== */");
-        writeAssemblyStart(writer);
-        outputRegisterGroupMacros(writer, baseGroup, 1, 0, peripheral, instance, true);
-        writer.println("#else");
-        outputRegisterGroupMacros(writer, baseGroup, 1, 0, peripheral, instance, false);
-        writeAssemblyEnd(writer);
+        outputRegisterGroupMacros(writer, baseGroup, 1, 0, peripheral, instance);
     }
 
     /* Output register macros for all registers belonging to the given group.  This will be
@@ -801,8 +828,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
      * output simpler macros that do not include a type.
      */
     private void outputRegisterGroupMacros(PrintWriter writer, AtdfRegisterGroup group, int numGroups,
-                                           long groupOffset, AtdfPeripheral peripheral, AtdfInstance instance, 
-                                           boolean isAssembler) {
+                                           long groupOffset, AtdfPeripheral peripheral, AtdfInstance instance) {
         for(String mode : group.getNonduplicateModes()) {
             for(int g = 0; g < numGroups; ++g) {
                 for(AtdfRegister register : group.getMembersByMode(mode)) {
@@ -813,7 +839,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                         AtdfRegisterGroup subgroup = peripheral.getRegisterGroupByName(register.getName());
                         if(null != subgroup) {
                             outputRegisterGroupMacros(writer, subgroup, numRegs, regOffset, peripheral,
-                                                      instance, isAssembler);
+                                                      instance);
                         }
                     } else {
                         long baseAddr = instance.getBaseAddress();
@@ -826,7 +852,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                                 name += mode + "_";
                             }
 
-                            String regNameAsC = getCVariableNameForRegister(register, null);
+                            String regNameAsC = getCVariableNameForRegister(register);
                             regNameAsC = removeStartOfString(regNameAsC, peripheral.getName());
                             name += regNameAsC;
 
@@ -845,19 +871,41 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                             }
 
                             long fullAddr = baseAddr + groupOffset + regOffset + (i * regSize) + (g * groupSize);
-                            String addrStr;
-                            if(isAssembler) {
-                                addrStr = String.format("(0x%08X)", fullAddr);
-                            } else {
-                                String typeStr = getAtmelRegTypeFromRegister(register);
-                                addrStr = String.format("(*(%-7s*)0x%08XUL)", typeStr, fullAddr);
-                            }
+                            String macroStr = getPeripheralInstanceWrapperMacro(register);
+                            String addrStr = String.format("(0x%08X)", fullAddr);
 
-                            writeStringMacro(writer, name, addrStr, register.getCaption());
+                            writeStringMacro(writer, name, macroStr+addrStr, register.getCaption());
                         }
                     }
                 }
             }
+        }
+    }
+
+    /* Return the wrapper macro to use for the given register based on its size and accessibility.
+     */
+    private String getPeripheralInstanceWrapperMacro(AtdfRegister reg) {
+        String macroStr;
+
+        switch(reg.getRwAsInt()) {
+            case AtdfRegister.REG_READ:
+                macroStr = "_RoReg";
+                break;
+            case AtdfRegister.REG_WRITE:
+                macroStr = "_WoReg";
+                break;
+            default:
+                macroStr = "_RwReg";
+                break;
+        }
+
+        switch(reg.getSizeInBytes()) {
+            case 1:
+                return macroStr + "8_";
+            case 2:
+                return macroStr + "16_";
+            default:
+                return macroStr + "32_";
         }
     }
 
@@ -1002,6 +1050,131 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
     }
 
 
+    /* Output a header file that contains information on all of the peripheral instances on the 
+     * device, such as some basic instance-specific macros and register addresses.
+     */
+    private void outputPioDefinitionHeader(TargetDevice target, List<String> pinNames, 
+                                           List<AtdfPeripheral> peripheralList) 
+                                                throws java.io.FileNotFoundException {
+        writeHeaderSectionHeading(writer_, "Device-specific Port IO Definitions");
+
+        String deviceName = getDeviceNameForHeader(target);
+        String pioMacro = "_" + deviceName.toUpperCase() + "_PIO_";
+        String pioFilename = "pio/" + deviceName + ".h";
+        String filepath = basepath_ + "/" + pioFilename;
+
+        try(PrintWriter pioWriter = Utils.createUnixPrintWriter(filepath)) {
+            // Output top-of-file stuff like license and include guards.
+            outputLicenseHeaderApache(pioWriter);
+            pioWriter.println();
+            pioWriter.println("#ifndef " + pioMacro);
+            pioWriter.println("#define " + pioMacro);
+            pioWriter.println();
+
+            sortPortPinNames(pinNames);
+
+            for(String pin : pinNames) {
+                outputPioPortPinMacros(pioWriter, pin);
+            }
+
+            for(AtdfPeripheral peripheral : peripheralList) {
+                try {
+                    for(AtdfInstance instance : peripheral.getAllInstances()) {
+                        pioWriter.println();
+                        outputPioPeripheralInstanceMacros(pioWriter, instance);
+                    }
+                } catch(SAXException ex) {
+                    // Do nothing because this just might be an odd peripheral (see the constructor
+                    // of AtdfInstance).
+                }
+            }
+
+            // End-of-file stuff
+            pioWriter.println();
+            pioWriter.println("#endif /* " + pioMacro + "*/");
+        }
+
+        // Include our new instances header in our main header file.
+        writer_.println("#include \"" + pioFilename + "\"");
+        writer_.println();
+
+    }
+
+    /* Output macros that can be used to conveniently access the given port pin.
+     */
+    private void outputPioPortPinMacros(PrintWriter writer, String pin) {
+        int portNum = (int)pin.charAt(1) - (int)'A';
+        int pinNum = Integer.parseInt(pin.substring(2));
+
+        writeStringMacro(writer, 
+                         "PIN_" + pin,
+                         "(" + (32*portNum + pinNum) + ")",
+                         "Pin number for " + pin);
+        writeStringMacro(writer,
+                         "PORT_" + pin,
+                         "(_UL_(1) << " + pinNum + ")",
+                         "Port mask for " + pin);
+    }
+
+    /* Output macros that seem to indicate what device pins can be used by the given peripheral 
+     * instance and might be used to set up pin muxes.
+     */
+    private void outputPioPeripheralInstanceMacros(PrintWriter writer, AtdfInstance instance) {
+        String instName = instance.getName();
+
+        writer.println("/*********** Pio macros for peripheral instance " + instance.getName() + 
+                        " ***********/");
+
+        for(AtdfSignal signal : instance.getSignals()) {
+            String pad = signal.getPad();
+            String function = signal.getFunction();
+            String sigGroup = signal.getGroup();
+            String sigIndex = signal.getIndex();
+
+            // This comes up in the GPIO peripherals because they're always active--no mux setting
+            // needed.  Just skip over these.
+            if(function.equalsIgnoreCase("default")) {
+                continue;
+            }
+
+            try {
+                int pinNum = Integer.parseInt(pad.substring(2));
+                int portNum = (int)pad.charAt(1) - (int)'A';
+                int pinMux = (int)function.charAt(0) - (int)'A';
+
+                String macroSuffix = pad + function + "_" + instName + "_" + sigGroup + sigIndex;
+                String pinMacro = "PIN_" + macroSuffix;
+                String muxMacro = "MUX_" + macroSuffix;
+                String caption = instName + " signal: " + sigGroup + " on " + pad + " mux " + function;
+
+                writeStringMacro(writer,
+                                 pinMacro,
+                                 "_L_(" + (32*portNum + pinNum) + ")",
+                                 caption);
+                writeStringMacro(writer,
+                                 muxMacro,
+                                 "_L_(" + pinMux + ")",
+                                 null);
+                writeStringMacro(writer,
+                                 "PINMUX_" + macroSuffix,
+                                 "((" + pinMacro + " << 16) | " + muxMacro + ")",
+                                 null);
+                writeStringMacro(writer,
+                                 "PORT_" + macroSuffix,
+                                 "(_UL_(1) << " + pinNum + ")",
+                                 null);
+                writeStringMacro(writer,
+                                 "PIO_" + macroSuffix,
+                                 "(_UL_(1) << " + pinNum + ")",
+                                 null);
+                writer.println();
+            } catch(NumberFormatException nfe) {
+                // This can happen because non-ports, like RESET, might be called out in a signal.
+                // In this case, just skip over that signal.
+            }
+        }
+    }
+
     /* Write out macros that provide information on how the memory map is laid out on the device,
      * such as page size and the location of different memory spaces/
      */
@@ -1047,7 +1220,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
         List<AtdfValue> sigList = device.getSignatureParameterValues();
 
-        if(sigList.size() > 0) {
+        if(!sigList.isEmpty()) {
             for(AtdfValue sig : sigList) {
                 writeStringMacro(writer_, sig.getName(), "_UL_(" + sig.getValue() + ")", sig.getCaption());
             }
@@ -1066,7 +1239,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
 
         List<AtdfValue> paramList = device.getElectricalParameterValues();
 
-        if(paramList.size() > 0) {
+        if(!paramList.isEmpty()) {
             for(AtdfValue param : paramList) {
                 writeStringMacro(writer_, param.getName(), "_UL_(" + param.getValue() + ")", param.getCaption());
             }
@@ -1294,11 +1467,11 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
      * in order to not include it in the name.  If this register is a group alias, the name will be 
      * formatted like a group name; otherwise, it will be the register name in all caps.
      */
-    private String getCVariableNameForRegister(AtdfRegister reg, String mode) {
+    private String getCVariableNameForRegister(AtdfRegister reg) {
         String name = reg.getName();
 
         if(reg.isGroupAlias()) {
-            return createCGroupName(name, "", mode, false);
+            return createCGroupName(name, "", null, false);
         } else {
             return name.toUpperCase();
         }
@@ -1395,7 +1568,30 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
                     return -1;
                 else
                     return 0;
+            }
+        });
+    }
+    
+    private void sortPortPinNames(List<String> pinNames) {
+        Collections.sort(pinNames, new Comparator<String>() {
+            @Override
+            public int compare(String one, String two) {
+                // For this we can assume that the pin names are all of the form "PA00", "PB01",
+                // since that is checked when we get the list from AtdfDoc::getPortPinNames().
+
+                // Compare the port letters "A", "B", etc. first.
+                int portDiff = (int)one.charAt(1) - (int)two.charAt(1);
+
+                if(0 == portDiff) {
+                    // Same port, so we have to compare the numbers.
+                    int pinOne = Integer.parseInt(one.substring(2));
+                    int pinTwo = Integer.parseInt(two.substring(2));
+
+                    return pinOne - pinTwo;
+                } else {
+                    return portDiff;
                 }
+            }
         });
     }
 }

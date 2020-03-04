@@ -144,16 +144,18 @@ public class AtdfRegisterGroup {
             populateMemberMap();
         }
 
-        if(nonduplicateModes_.isEmpty()) {
-            populateNonduplicateMap();
-        }
-
         if(members_.containsKey(modeName)) {
             return members_.get(modeName);
-        } else if(nonduplicateModes_.containsKey(modeName)) {
-            return members_.get(nonduplicateModes_.get(modeName));
         } else {
-            return Collections.<AtdfRegister>emptyList();
+            if(nonduplicateModes_.isEmpty()) {
+                populateNonduplicateMap();
+            }
+
+            if(nonduplicateModes_.containsKey(modeName)) {
+                return members_.get(nonduplicateModes_.get(modeName));
+            } else {
+                return Collections.<AtdfRegister>emptyList();
+            }
         }
     }
 
