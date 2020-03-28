@@ -37,6 +37,7 @@ import com.microchip.crownking.mplabinfo.DeviceSupport;
 import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
 import com.microchip.crownking.mplabinfo.DeviceSupportException;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import javax.xml.parsers.ParserConfigurationException;
 import org.xml.sax.SAXException;
@@ -59,6 +60,8 @@ public class StuffGenerator {
     MipsLinkerScriptGenerator mipsLinkerGen_;
     MipsHeaderFileGenerator mipsHeaderGen_;
     TargetConfigGenerator targetConfigGen_;
+    XcHeaderGenerator cortexmXcGen_;
+    XcHeaderGenerator mipsXcGen_;
 
     /**
      * Constructor for the Stuff Generator.
@@ -70,15 +73,28 @@ public class StuffGenerator {
     public StuffGenerator(String outputDir) {
         outputDirBase_ = outputDir + "/target/";
 
-        cortexmLinkerGen_ = new CortexMLinkerScriptGenerator(outputDirBase_ + "cortex-m/lib/proc");
-        cortexmLegacyHeaderGen_ = new CortexMLegacyHeaderFileGenerator(outputDirBase_ + "cortex-m/include/proc_legacy");
-        cortexmHeaderGen_ = new CortexMHeaderFileGenerator(outputDirBase_ + "cortex-m/include/proc");
-        cortexmStartupGen_ = new CortexMStartupGenerator(outputDirBase_ + "cortex-m/lib/proc");
+        String cortexmLinkerDir = outputDirBase_ + "cortex-m/lib/proc";
+        String cortexmLegacyHeaderDir = outputDirBase_ + "cortex-m/include/proc_legacy";
+        String cortexmHeaderDir = outputDirBase_ + "cortex-m/include/proc";
+        String cortexmStartupDir = outputDirBase_ + "cortex-m/lib/proc";
+        String mipsLinkerDir = outputDirBase_ + "mips32/lib/proc";
+        String mipsHeaderDir = outputDirBase_ + "mips32/include/proc";
+        String targetConfigDir = outputDirBase_ + "config";
+        String cortexmXcDir = outputDirBase_ + "cortex-m/include";
+        String mipsXcDir = outputDirBase_ + "mips32/include";
 
-        mipsLinkerGen_ = new MipsLinkerScriptGenerator(outputDirBase_ + "mips32/lib/proc");
-        mipsHeaderGen_ = new MipsHeaderFileGenerator(outputDirBase_ + "mips32/include/proc");
+        cortexmLinkerGen_ = new CortexMLinkerScriptGenerator(cortexmLinkerDir);
+        cortexmLegacyHeaderGen_ = new CortexMLegacyHeaderFileGenerator(cortexmLegacyHeaderDir);
+        cortexmHeaderGen_ = new CortexMHeaderFileGenerator(cortexmHeaderDir);
+        cortexmStartupGen_ = new CortexMStartupGenerator(cortexmStartupDir);
 
-        targetConfigGen_ = new TargetConfigGenerator(outputDirBase_ + "config");
+        mipsLinkerGen_ = new MipsLinkerScriptGenerator(mipsLinkerDir);
+        mipsHeaderGen_ = new MipsHeaderFileGenerator(mipsHeaderDir);
+
+        targetConfigGen_ = new TargetConfigGenerator(targetConfigDir);
+
+        cortexmXcGen_ = new XcHeaderGenerator(cortexmXcDir, cortexmHeaderDir, cortexmLegacyHeaderDir);
+        mipsXcGen_ = new XcHeaderGenerator(mipsXcDir, mipsHeaderDir, "");
     }
 
     
@@ -103,6 +119,15 @@ public class StuffGenerator {
         return resultList;
     }
 
+    /** 
+     * Call this once before calling <code>generate()</code> for each device to allow this class to
+     * do any needed operations before actually generating code.
+     */
+    public void startGenerate() {
+        cortexmXcGen_.reset();
+        mipsXcGen_.reset();
+    }
+
     /**
      * Generate the files needed for this particular device.  This will generate a Clang config file
      * for the device, its device-specific header files, and a default linker script.  This will also
@@ -123,19 +148,48 @@ public class StuffGenerator {
             throws Anomaly, SAXException, IOException, ParserConfigurationException {
         TargetDevice target = new TargetDevice(device);
 
-        if(target.isArm()) {
-            // TODO:  We'll need to target Cortex-A devices in the future.
-            if(!target.supportsArmIsa()) {
-                cortexmLinkerGen_.generate(target);
-                cortexmLegacyHeaderGen_.generate(target);
-                cortexmHeaderGen_.generate(target); 
-                cortexmStartupGen_.generate(target);
-            }
-        } else {
-            mipsLinkerGen_.generate(target);
-            mipsHeaderGen_.generate(target);
-        }
+        // Generate the full output for just a few devices for now so we can more easily 
+        // troubleshoot and verify output.
+        if("PIC32MX795F512L".equalsIgnoreCase(device.getName())  ||
+           "ATSAME54P20A".equalsIgnoreCase(device.getName()) ||
+           "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
+           "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
 
-        targetConfigGen_.generate(target);
+            if(target.isArm()) {
+                // TODO:  We'll need to target Cortex-A devices in the future.
+                if(!target.supportsArmIsa()) {
+                    cortexmLinkerGen_.generate(target);
+                    cortexmLegacyHeaderGen_.generate(target);
+                    cortexmHeaderGen_.generate(target); 
+                    cortexmStartupGen_.generate(target);
+                    cortexmXcGen_.add(target);
+                }
+            } else {
+                mipsLinkerGen_.generate(target);
+                mipsHeaderGen_.generate(target);
+                mipsXcGen_.add(target);
+            }
+
+            targetConfigGen_.generate(target);
+        } else {
+            // We'll add everything to the XC files because that will let us verify that those are
+            // being generated correctly.
+            if(target.isArm()) {
+                if(!target.supportsArmIsa()) {
+                    cortexmXcGen_.add(target);
+                }
+            } else {
+                mipsXcGen_.add(target);
+            }
+        }
+    }
+
+    /** 
+     * Call this once after calling <code>generate()</code> for each device to allow this class to
+     * do any needed cleanup or finishing tasks after the code has been generated.
+     */
+    public void finishGenerate() throws FileNotFoundException {
+        cortexmXcGen_.generate();
+        mipsXcGen_.generate();
     }
 }

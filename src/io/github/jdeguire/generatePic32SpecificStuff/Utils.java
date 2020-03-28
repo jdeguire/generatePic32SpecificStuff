@@ -31,6 +31,8 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.io.File;
 import java.io.PrintWriter;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -398,6 +400,17 @@ public class Utils {
         }
 
         return result;
+    }
+
+    /* Get the relative path from the given base path to the target path if possible.  This will
+     * throw an IllegalArgumentException if two paths are unrelated and thus a relative path cannot 
+     * be formed.
+     */
+    public static String getRelativePath(String basepath, String targetpath) {
+        Path pathBase = Paths.get(basepath);
+        Path pathTarget = Paths.get(targetpath);
+
+        return pathBase.relativize(pathTarget).toString();
     }
 
 

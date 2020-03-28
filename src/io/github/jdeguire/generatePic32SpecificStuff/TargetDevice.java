@@ -141,6 +141,26 @@ public class TargetDevice {
         }
     }
 
+    /* Return a string that can be used as a device series, such as "PIC32MX", "SAMD", and so on.
+     * For MIPS devices, this uses the device name to determine the series and will handle non-PIC32
+     * devices as well.  For Arm devices, this is equivalent to calling getAtdfFamily().
+     */
+    public String getDeviceSeriesName() {
+        if(isMips32()) {
+            String devname = getDeviceName();
+
+            if(devname.startsWith("M")) {
+                return devname.substring(0, 3);
+            } else if(devname.startsWith("USB")) {
+                return devname.substring(0, 5);
+            } else {
+                return devname.substring(0, 7);
+            }
+        } else {
+            return getAtdfFamily();
+        }
+    }
+
     /* Get the device family of the target, which is used to determine its features.
      */
 	public Family getFamily() {

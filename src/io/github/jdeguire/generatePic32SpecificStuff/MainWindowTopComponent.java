@@ -198,14 +198,14 @@ public final class MainWindowTopComponent extends TopComponent {
         public Void doInBackground() {
             StuffGenerator gen = new StuffGenerator(outputpath);
 
-            try {
+            try{
+                gen.startGenerate();
                 List<Device> deviceList = gen.getDeviceList();
-                for(Device device : deviceList) {
-                    // Generate for only a few processors for now to make it easier to verify output.
-                    if("PIC32MX795F512L".equalsIgnoreCase(device.getName())  ||  
-                       "ATSAME54P20A".equalsIgnoreCase(device.getName()) ||
-                       "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
-                       "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
+
+                for(Device device : deviceList) { 
+                    // Catch and report these separately so that we can just continue on if one
+                    // device has an issue.
+                    try {
                         long startTime = System.currentTimeMillis();
                         gen.generate(device);
                         long genTime = System.currentTimeMillis() - startTime;
@@ -213,14 +213,28 @@ public final class MainWindowTopComponent extends TopComponent {
                         publish("----------");
                         publish(device.getName());
                         publish(genTime + "ms");
+                    } catch(Exception ex) {
+                        publish(ex.toString());
+                        for(StackTraceElement elm : ex.getStackTrace()) {
+                            publish(elm.toString());
+                        }
                     }
                 }
+
+                long startTime = System.currentTimeMillis();
+                gen.finishGenerate();
+                long genTime = System.currentTimeMillis() - startTime;
+
+                publish("----------");
+                publish("Finishing up");
+                publish(genTime + "ms");
             } catch(Exception ex) {
                 publish(ex.toString());
                 for(StackTraceElement elm : ex.getStackTrace()) {
                     publish(elm.toString());
                 }
             }
+
 
             return null;
         }

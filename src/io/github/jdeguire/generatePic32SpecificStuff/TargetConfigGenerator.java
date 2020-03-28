@@ -197,9 +197,9 @@ public class TargetConfigGenerator {
             writer.println("-D__" + devmacroname);
             writer.println("-D__" + devmacroname + "__");
 
-            String atdfFamily = target.getAtdfFamily();
-            writer.println("-D__" + atdfFamily);
-            writer.println("-D__" + atdfFamily + "__");
+            String series = target.getDeviceSeriesName();
+            writer.println("-D__" + series);
+            writer.println("-D__" + series + "__");
 
             // These next macros are probably not in XC32, but might be handy for cross-arch code.
             //

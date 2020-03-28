@@ -157,7 +157,6 @@ public class MipsCommon {
      */
     public static List<Pair<String, String>> getMipsFeatureMacros(TargetDevice target) {
         ArrayList<Pair<String, String>> macroList = new ArrayList<>(32);
-        String devname = target.getDeviceName();
         String devmacroname = target.getDeviceNameForMacro();
 
         // Provide macros indicating the name of the device in use.
@@ -166,14 +165,7 @@ public class MipsCommon {
 
         // Provide a macro to indicate device series, which is the first few character of the name.
         // The MGCxxx and MECxxx devices are a bit different here.
-        String series;
-        if(devname.startsWith("M")) {
-            series = devname.substring(0, 3);
-        } else if(devname.startsWith("USB")) {
-            series = devname.substring(0, 5);
-        } else {
-            series = devname.substring(0, 7);
-        }
+        String series = target.getDeviceSeriesName();
         macroList.add(new Pair<>("__" + series, ""));
         macroList.add(new Pair<>("__" + series + "__", ""));
 
