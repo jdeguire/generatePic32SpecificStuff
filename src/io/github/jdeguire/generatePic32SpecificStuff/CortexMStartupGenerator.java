@@ -65,10 +65,10 @@ public class CortexMStartupGenerator {
                 outputPreamble(writer);
                 outputInterruptHandlerDeclarations(writer, target);
                 outputInterruptTable(writer, target);
+// TODO:  Most of the functions defined here should probably be defined in the part support library
+//        and called from here instead.
                 outputDummyHandler(writer);
                 outputCmsisInitFunctions(writer);
-// TODO:  These next three functions and the default interrupt handler should be declared and called here,
-//        but probably defined in a library.
                 outputFpuEnableFunction(writer);
                 outputCmccCacheEnableFunction(writer);
                 outputCpuCacheEnableFunction(writer);

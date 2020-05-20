@@ -108,21 +108,23 @@ public class TargetConfigGenerator {
     /* Output options telling the compiler what FPU the device uses, if any.
      */
     private void outputFpuOptions(PrintWriter writer, TargetDevice target) {
-        String fpuComment = "# Device uses software floating-point.";
-        String fpuOpts = "-msoft-float -mfloat-abi=soft";
-
         if(target.hasFpu()) {
             if(target.isMips32()) {
-                fpuComment = "# Device has a 64-bit FPU.";
-                fpuOpts = "-mhard-float -mfloat-abi=hard -mfp64";
+                writer.println("# Device has a 64-bit FPU.");
+                writer.println("-mhard-float");
+                writer.println("-mfloat-abi=hard");
+                writer.println("-mfp64");
             } else if(target.isArm()) {
-                fpuComment = "# Device has an FPU.";
-                fpuOpts = "-mfpu=" + target.getArmFpuName() + " -mfloat-abi=hard";
+                writer.println("# Device has an FPU.");
+                writer.println("-mfpu=" + target.getArmFpuName());
+                writer.println("-mfloat-abi=hard");
             }
+        } else {
+            writer.println("# Device uses software floating-point.");
+            writer.println("-msoft-float");
+            writer.println("-mfloat-abi=soft");
         }
 
-        writer.println(fpuComment);
-        writer.println(fpuOpts);
         writer.println();
     }
 
