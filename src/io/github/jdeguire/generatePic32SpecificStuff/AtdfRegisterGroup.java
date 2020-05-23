@@ -31,7 +31,7 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -45,8 +45,8 @@ import org.w3c.dom.NodeList;
 public class AtdfRegisterGroup {
     private final Node moduleNode_;
     private final Node groupNode_;
-    private final HashMap<String, ArrayList<AtdfRegister>> members_ = new HashMap<>(8);
-    private final HashMap<String, String> nonduplicateModes_ = new HashMap<>(8);
+    private final LinkedHashMap<String, ArrayList<AtdfRegister>> members_ = new LinkedHashMap<>(8);
+    private final LinkedHashMap<String, String> nonduplicateModes_ = new LinkedHashMap<>(8);
     
     /* Create a new AtdfRegisterGroup based on the given nodes from an ATDF document.  The 
      * 'moduleNode' is a Node that refers to the "module" XML node that contains the desired group
@@ -74,6 +74,35 @@ public class AtdfRegisterGroup {
      */
     public String getCaption() {
         return Utils.getNodeAttribute(groupNode_, "caption", "");
+    }
+
+    /* Some devices, such as the SAME70, name registers in a peripheral with a commong prefix such
+     * as "MCAN_REG1" and "MCAN_REG2".  This prefix is usually the name of the peripheral, but not
+     * always.  This will look for such a prefix and return it or an empty string if no such prefix
+     * appears to be used (such as on the SAME54).  The register names must have an underscore that
+     * separates a potential prefix from its name in order to count.
+    */
+    public String getMemberNamePrefix() {
+        String prefix = "";
+
+        List<AtdfRegister> members = getAllMembers();        
+
+        AtdfRegister first = members.get(0);
+        int index = first.getName().indexOf('_');
+
+        // >0 so that we don't end up with something like "_REG" returning just "_".
+        if(index > 0) {
+            prefix = first.getName().substring(0, index+1);     // +1 to include '_'
+
+            for(AtdfRegister reg : members) {
+                if(!reg.getName().startsWith(prefix)) {
+                    prefix = "";
+                    break;
+                }
+            }
+        }
+
+        return prefix;
     }
 
     /* Get the alignment of this group, which indicates the byte boundary upon which the group must
@@ -122,11 +151,11 @@ public class AtdfRegisterGroup {
         return new ArrayList<>(members_.keySet());
     }
 
-    /* Like <code>getMemberModes()</code>, but returns a list of mode names that contain unique
-     * members.  These will usually be similar to normal mode names, but may have part of the end
-     * of the name removed.  For example, if there were two duplicate modes "MODE1" and "MODE2",
-     * this would return just "MODE" as one of the modes.
-    */
+    /* Like getMemberModes(), but returns a list of mode names that contain unique members.  These 
+     * will usually be similar to normal mode names, but may have part of the end of the name removed.
+     * For example, if there were two duplicate modes "MODE1" and "MODE2", this would return just 
+     * "MODE" as one of the modes.
+     */
     public List<String> getNonduplicateModes() {
         if(nonduplicateModes_.isEmpty()) {
             populateNonduplicateMap();
@@ -189,6 +218,7 @@ public class AtdfRegisterGroup {
         // First, we need to find all of the mode names and initialize the map with them.
         // There is always a "DEFAULT" mode, which is the mode used when a register does not give
         // a mode.
+// TODO:  This may not actually be true; try removing this at some point and seeing what happens.
         members_.put("DEFAULT", new ArrayList<AtdfRegister>(16));
 
         for(int i = 0; i < children.getLength(); ++i) {

@@ -156,11 +156,11 @@ public abstract class HeaderFileGenerator {
         String macro = "#define " + name;
 
         if(null != value  &&  !value.isEmpty()) {
-            macro = Utils.padStringWithSpaces(macro, 36, 4);            
+            macro = Utils.padStringWithSpaces(macro, 44, 4);
             macro += value;
 
             if(null != desc  &&  !desc.isEmpty()) {
-                macro = Utils.padStringWithSpaces(macro, 48, 4);            
+                macro = Utils.padStringWithSpaces(macro, 64, 4);
                 macro += "/* " + desc + " */";
             }
         }

@@ -31,7 +31,7 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Iterator;
 import java.util.List;
 
@@ -52,7 +52,7 @@ public class XcHeaderGenerator {
     private final String baseXcPath_;
     private final String relativeHeaderPath_;
     private final String relativeLegacyHeaderPath_;
-    private final HashMap<String, ArrayList<DeviceInfo>> deviceMap_;
+    private final LinkedHashMap<String, ArrayList<DeviceInfo>> deviceMap_;
 
     /* Create a new generator object with the given paths, which should all be directories.  The
      * first paramter is where to put the "xc.h" header itself.  The second parameter is the location
@@ -71,7 +71,7 @@ public class XcHeaderGenerator {
             relativeLegacyHeaderPath_ = "";
         }
 
-        deviceMap_ = new HashMap<>();
+        deviceMap_ = new LinkedHashMap<>();
     }
 
     /* Reset this instance's internal data to prepare to receive a new set of target devices for XC

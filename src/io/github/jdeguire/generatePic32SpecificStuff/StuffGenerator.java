@@ -146,14 +146,14 @@ public class StuffGenerator {
      */
     public void generate(Device device)
             throws Anomaly, SAXException, IOException, ParserConfigurationException {
-        TargetDevice target = new TargetDevice(device);
-
         // Generate the full output for just a few devices for now so we can more easily 
         // troubleshoot and verify output.
         if("PIC32MX795F512L".equalsIgnoreCase(device.getName())  ||
            "ATSAME54P20A".equalsIgnoreCase(device.getName()) ||
            "ATSAME70Q21B".equalsIgnoreCase(device.getName()) ||
            "PIC32MZ2048EFH144".equalsIgnoreCase(device.getName())) {
+
+            TargetDevice target = new TargetDevice(device);
 
             if(target.isArm()) {
                 // TODO:  We'll need to target Cortex-A devices in the future.
@@ -174,6 +174,9 @@ public class StuffGenerator {
         } else {
             // We'll add everything to the XC files because that will let us verify that those are
             // being generated correctly.
+/*  Actually, do nothing for now to speed up debugging. 
+            TargetDevice target = new TargetDevice(device);
+
             if(target.isArm()) {
                 if(!target.supportsArmIsa()) {
                     cortexmXcGen_.add(target);
@@ -181,6 +184,7 @@ public class StuffGenerator {
             } else {
                 mipsXcGen_.add(target);
             }
+*/
         }
     }
 

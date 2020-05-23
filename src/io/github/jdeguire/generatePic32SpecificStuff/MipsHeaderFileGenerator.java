@@ -281,12 +281,13 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
             writer_.println(" */");
 
             String dcrName = dcr.getName();
+            String dcrDefault = String.format("0x%08X", dcr.getDefault());
             String dcrMemSection = "." + MipsCommon.getDcrMemorySectionName(dcr);
             String dcrAttribs = "__attribute__((unused, section(\"" + dcrMemSection + "\")))";
             String dcrSetMacroName = "__set" + dcrName + "(f)";
-            String dcrSetMacroValue = "const volatile uint32_t " + dcrAttribs + " __" + dcrName + " = (f)";
+            String dcrSetMacroValue = "const volatile uint32_t " + dcrAttribs + " __" + dcrName + " = (" + dcrDefault + " & (f))";
             String dcrDefaultMacroName = "__" + dcrName + "_default";
-            String dcrDefaultMacroValue = String.format("(0x%08X)", dcr.getDefault());
+            String dcrDefaultMacroValue = "(" + dcrDefault + ")";
             String dcrDefaultMacroDesc = "Default value for " + dcrName;
 
             writeStringMacro(writer_, dcrSetMacroName, dcrSetMacroValue, null);
@@ -595,7 +596,7 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
      */
     private void writeLengthyHexMacro(PrintWriter writer, String macroName, long value) {
         String macro = "#define " + macroName;
-        macro = Utils.padStringWithSpaces(macro, 56, 4);
+        macro = Utils.padStringWithSpaces(macro, 60, 4);
         macro += String.format("(0x%08X)", value);
 
         writer.println(macro);
@@ -606,7 +607,7 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
      */
     private void writeLengthyDecimalMacro(PrintWriter writer, String macroName, long value) {
         String macro = "#define " + macroName;
-        macro = Utils.padStringWithSpaces(macro, 56, 4);
+        macro = Utils.padStringWithSpaces(macro, 60, 4);
         macro += "(" + value + ")";
 
         writer.println(macro);
@@ -623,7 +624,7 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
         String macro = "#  define " + macroName;
 
         if(null != value  &&  !value.isEmpty()) {
-            macro = Utils.padStringWithSpaces(macro, 40, 4);
+            macro = Utils.padStringWithSpaces(macro, 48, 4);
             macro += value;
         }
 

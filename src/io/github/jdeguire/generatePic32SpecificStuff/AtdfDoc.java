@@ -34,7 +34,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import javax.xml.parsers.DocumentBuilder;
@@ -55,7 +55,7 @@ import org.xml.sax.SAXException;
  * and then, if needed, use that object to drill down further.
  */
 public class AtdfDoc {
-    private static final HashMap<String, String> DOC_CACHE_ = new HashMap<>(100);
+    private static final LinkedHashMap<String, String> DOC_CACHE_ = new LinkedHashMap<>(100);
     private final Node deviceNode_;
     private final Node modulesNode_;
     private final Node rootNode_;

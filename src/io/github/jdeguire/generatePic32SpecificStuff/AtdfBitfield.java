@@ -32,6 +32,7 @@ package io.github.jdeguire.generatePic32SpecificStuff;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import org.w3c.dom.Node;
 import org.xml.sax.SAXException;
 
@@ -73,7 +74,8 @@ public class AtdfBitfield {
 
     /* Get a list of modes to which this bitfield applies.  Some registers can operate differently
      * under different circumstances and that may affect the bitfield available in the register.
-     * The default mode name is "DEFAULT", so this list will always have that.
+     * The default mode name is "DEFAULT", so any bitfield that does not list any modes will have
+     * that mode returned.
      */
     public List<String> getModes() {
         List<String> modes = new ArrayList<>(3);
@@ -82,7 +84,7 @@ public class AtdfBitfield {
         if(!modesString.isEmpty()) {
             Collections.addAll(modes, modesString.split(" "));
         } else {
-            // We'll always have a default mode.
+            // Ensure we at least have the default mode if no others are present.
             modes.add("DEFAULT");
         }
 
@@ -160,5 +162,24 @@ public class AtdfBitfield {
      */
     public boolean equals(AtdfBitfield other) {
         return (getName().equals(other.getName())  &&  getMask() == other.getMask());
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if(other instanceof AtdfBitfield) {
+            return equals((AtdfBitfield)other);
+        } else {
+            return false;
+        }
+    }
+
+    /* Netbeans suggested I add this and generated it for me when I made equals(Object). */
+    @Override
+    public int hashCode() {
+        int hash = 3;
+        hash = 89 * hash + Objects.hashCode(this.moduleNode_);
+        hash = 89 * hash + Objects.hashCode(this.regNode_);
+        hash = 89 * hash + Objects.hashCode(this.bfNode_);
+        return hash;
     }
 }

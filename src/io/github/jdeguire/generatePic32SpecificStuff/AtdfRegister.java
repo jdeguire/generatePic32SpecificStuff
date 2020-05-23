@@ -30,7 +30,9 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 import org.w3c.dom.Node;
 
 
@@ -48,9 +50,11 @@ public class AtdfRegister {
 
     private final Node moduleNode_;
     private final Node regNode_;
-    private final ArrayList<AtdfBitfield> bitfields_ = new ArrayList<>(32);
+    private final LinkedHashMap<String, ArrayList<AtdfBitfield>> bitfieldMap_ = new LinkedHashMap<>();
+    private final LinkedHashMap<String, ArrayList<AtdfBitfield>> coalescedMap_ = new LinkedHashMap<>();
     private String modeName_ = null;
     private final boolean isGroupAlias_;
+
 
     /* Create a new AtdfRegister based on the given nodes from an ATDF document.  The 'moduleNode' 
      * is a Node that refers to the "module" XML node that contains the desired register indicated
@@ -158,9 +162,36 @@ public class AtdfRegister {
     /* Return a mask in which bits set to 1 are actually used by the register.
      */
     public long getMask() {
+        if(isGroupAlias()) {
+            return 0;
+        } else {
+            List<AtdfBitfield> allBitfields = getAllBitfields();
+
+            if(allBitfields.isEmpty()) {
+                // This seems to be a special case for registers that have no bitfields to imply
+                // that the entire register is one field.
+                return (1L << (8 * getSizeInBytes())) - 1L;
+            } else {
+                long mask = 0;
+
+                for(AtdfBitfield bf : getAllBitfields()) {
+                    mask |= bf.getMask();
+                }
+
+                return mask;
+            }
+        }
+    }
+
+    /* Return a mask in which bits set to 1 are used by the register when in the given bitfield mode.
+     * For example, some bits may be used by a SERCOM peripheral while in SPI mode, but not while in
+     * UART mode.
+     */
+    public long getMaskByBitfieldMode(String mode) {
+        List<AtdfBitfield> bitfields = getBitfieldsByMode(mode);
         long mask = 0;
-        
-        for(AtdfBitfield bf : getAllBitfields()) {
+
+        for(AtdfBitfield bf : bitfields) {
             mask |= bf.getMask();
         }
 
@@ -177,59 +208,132 @@ public class AtdfRegister {
 
     /* Get all of the modes used by the member bitfields.  Modes allow a register to act differently
      * and even have a different layout based on the operating mode of its owning peripheral.  The
-     * default mode name for bitfields is "DEFAULT" and so this list will always contain that.
+     * default mode name for bitfields is "DEFAULT" and so any bitfield that does not belong to
+     * any particular mode will use that one.
      */
     public List<String> getBitfieldModes() {
-        ArrayList<String> modes = new ArrayList<>(5);
-        List<Node> modeNodes = Utils.filterAllChildNodes(regNode_, "mode", null, null);
-        
-        if(!modeNodes.isEmpty()) {
-            for(Node node : modeNodes) {
-                modes.add(Utils.getNodeAttribute(node, "name", ""));
-            }
-        } else {
-            // We'll always have a default mode.
-            modes.add("DEFAULT");
+        if(bitfieldMap_.isEmpty()) {
+            populateBitfieldMap();
         }
 
-        return modes;
+        return new ArrayList<>(bitfieldMap_.keySet());
     }
 
-    /* Get a list of all of the instances for this peripheral.
+    /* Get all of the modes used by the member bitfields after bitfields common to all non-default
+     * modes have been coalesced into the default mode.
      */
-    public List<AtdfBitfield> getAllBitfields() {
-        if(bitfields_.isEmpty()) {
-            List<Node> bfList = Utils.filterAllChildNodes(regNode_, "bitfield", null, null);
-
-            for(Node bfNode : bfList) {
-                bitfields_.add(new AtdfBitfield(moduleNode_, regNode_, bfNode));
-            }
+    public List<String> getCoalescedBitfieldModes() {
+        if(coalescedMap_.isEmpty()) {
+            populateCoalescedMap();
         }
 
-        return bitfields_;
+        return new ArrayList<>(coalescedMap_.keySet());
+    }
+
+    /* Get a list of all of the bitfields for this peripheral regardless of mode.  Note that multiple
+     * bitfields with the same name and mask, and thus are therefore equivalent, can be present in
+     * this list because an AtdfBitfield represents a single entry in an ATDF document and whether
+     * there are duplicates depends on how the document was created.
+     */
+    public List<AtdfBitfield> getAllBitfields() {
+        if(bitfieldMap_.isEmpty()) {
+            populateBitfieldMap();
+        }
+        
+        ArrayList<AtdfBitfield> allBitfields = new ArrayList<>();
+        for(ArrayList<AtdfBitfield> fields : bitfieldMap_.values()) {
+            allBitfields.addAll(fields);
+        }
+
+        return allBitfields;
+   }
+
+    /* Get a list of all bitfields after all of the bitfields common to the non-default modes have
+     * been coalesced into the default mode.  Note that these bitfields will still provide their
+     * original modes when using AtdfBitfield::getModes().
+     * 
+     * If you want to categorize bitfields by their coalesced modes, use getCoalescedBitfieldModes()
+     * to get a list of the modes and then call getCoalescedBitfieldsByMode() to get the bitfields 
+     * by their coalesced modes.
+     */
+    public List<AtdfBitfield> getAllCoalescedBitfields() {
+        if(coalescedMap_.isEmpty()) {
+            populateCoalescedMap();
+        }
+
+        ArrayList<AtdfBitfield> allBitfields = new ArrayList<>();
+        for(ArrayList<AtdfBitfield> fields : coalescedMap_.values()) {
+            allBitfields.addAll(fields);
+        }
+
+        return allBitfields;        
     }
 
     /* Get a list of all bitfields that are applicable with the given mode.  Returns an empty list
-     * if the given mode name is not applicable to any bitfields.
+     * if the given mode name is not applicable to any bitfields.  Use "DEFAULT" to get the default
+     * mode, which contains any bitfields that do not belong to a particular mode.
      */
     public List<AtdfBitfield> getBitfieldsByMode(String mode) {
-        ArrayList<AtdfBitfield> fields = new ArrayList<>(8);
-
-        for(AtdfBitfield bf : getAllBitfields()) {
-            for(String bfModeName : bf.getModes()) {
-                if(bfModeName.equals(mode)) {
-                    fields.add(bf);
-                }
-            }
+        if(bitfieldMap_.isEmpty()) {
+            populateBitfieldMap();
         }
-        
-        return fields;
+
+        return bitfieldMap_.getOrDefault(mode, new ArrayList<AtdfBitfield>());
     }
 
-    /* Get a single bitfield by name or null if a bitfield by that name canot be found.
+    /* Get a list of all bitfields that are applicable with the given coalesced mode.  That is, this
+     * will return a list of bitfields in which any bitfields common to all non-default modes are
+     * moved to the default mode.  Returns an empty list if the given mode name is not applicable to
+     * any bitfields.  Use "DEFAULT" to get the default mode, which contains any bitfields that do 
+     * not belong to a particular mode.
+     */
+    public List<AtdfBitfield> getBitfieldsByCoalescedMode(String mode) {
+        if(coalescedMap_.isEmpty()) {
+            populateCoalescedMap();
+        }
+
+        return coalescedMap_.getOrDefault(mode, new ArrayList<AtdfBitfield>());
+    }
+
+    /* Get a single bitfield by name or null if a bitfield by that name canot be found.  It is
+     * possible for multiple bitfields to have the name, particularly if they're in different modes.
+     * This will return the first one found.  Generally, fields with the same name also have the 
+     * same mask and so they're usually equivalent, but there is no guarantee of that.
      */
     public AtdfBitfield getBitfield(String name) {
-        for(AtdfBitfield bf : getAllBitfields()) {
+        List<AtdfBitfield> allBitfields = getAllBitfields();
+
+        for(AtdfBitfield bf : allBitfields) {
+            if(name.equals(bf.getName()))
+                return bf;
+        }
+
+        return null;
+    }
+
+    /* Get a single bitfield by name that belongs to the given mode.  Use getBitfieldModes() to see
+     * what modes are available to select.  Returns null if the given mode or a bitfield by the
+     * given name does not exist.
+     */
+    public AtdfBitfield getBitfieldByMode(String name, String mode) {
+        List<AtdfBitfield> modeBitfields = getBitfieldsByMode(mode);
+
+        for(AtdfBitfield bf : modeBitfields) {
+            if(name.equals(bf.getName()))
+                return bf;
+        }
+
+        return null;
+    }
+
+    /* Get a single bitfield by name that belongs to the given coalesced mode.  Use 
+     * getCoalescedBitfieldModes() to see what modes are available to select.  Returns null if the 
+     * given mode or a bitfield by the given name does not exist.
+     */
+    public AtdfBitfield getBitfieldByCoalescedMode(String name, String mode) {
+        List<AtdfBitfield> modeBitfields = getBitfieldsByCoalescedMode(mode);
+
+        for(AtdfBitfield bf : modeBitfields) {
             if(name.equals(bf.getName()))
                 return bf;
         }
@@ -260,5 +364,159 @@ public class AtdfRegister {
         }
 
         return equal;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if(other instanceof AtdfRegister) {
+            return equals((AtdfRegister)other);
+        } else {
+            return false;
+        }
+    }
+
+    /* Netbeans suggested I add this and generated it for me when I made equals(Object). */
+    @Override
+    public int hashCode() {
+        int hash = 7;
+        hash = 61 * hash + Objects.hashCode(this.moduleNode_);
+        hash = 61 * hash + Objects.hashCode(this.regNode_);
+        return hash;
+    }
+
+
+    /* Populate the object's map of AtdfBitfields by simply add bitfields as they are presented in 
+     * the ATDF document.
+     */
+    private void populateBitfieldMap() {
+        if(isGroupAlias()) {
+            // Group aliases don't have bitfields of their own since they represent a group of
+            // other registers.
+            return;
+        }
+
+        bitfieldMap_.clear();
+        List<AtdfBitfield> allBitfields = getBitfieldsFromDoc();
+
+        for(AtdfBitfield bf : allBitfields) {
+            List<String> bfModeList = bf.getModes();
+
+            for(String bfMode : bfModeList) {
+                addBitfieldToMap(bitfieldMap_, bf, bfMode);
+            }
+        }
+    }
+
+    /* Populate the object's coalesced map of AtdfBitfields, which consists of bitfields in which
+     * ones common to all non-default modes are moved to the default mode.
+     */
+    private void populateCoalescedMap() {
+        if(isGroupAlias()) {
+            // Group aliases don't have bitfields of their own since they represent a group of
+            // other registers.
+            return;
+        }
+
+        coalescedMap_.clear();
+        List<AtdfBitfield> allBitfields = getBitfieldsFromDoc();
+        List<String> allModes = getBitfieldModesFromDoc();
+
+        for(AtdfBitfield bf : allBitfields) {
+            List<String> bfModeList = findModesForBitfield(bf, allBitfields);
+            boolean isCommonBitfield = true;
+
+            // This is a common bitfield if it is a member of all of the possible modes for this field.
+            for(String mode : allModes) {
+                if(!bfModeList.contains(mode)) {
+                    isCommonBitfield = false;
+                    break;
+                }
+            }
+
+            if(isCommonBitfield) {
+                addBitfieldToMap(coalescedMap_, bf, "DEFAULT");
+            } else {
+                for(String bfMode : bfModeList) {
+                    addBitfieldToMap(coalescedMap_, bf, bfMode);
+                }
+            }
+        }
+    }
+
+    /* Get all of the bitfields that are a part of this register by reading them from XML nodes in
+     * the ATDF document that describe them.
+     */
+    private List<AtdfBitfield> getBitfieldsFromDoc() {
+        ArrayList<AtdfBitfield> allBitfields = new ArrayList<>();
+
+        // Read all of the bitfield nodes from the ATDF document.
+        List<Node> bfList = Utils.filterAllChildNodes(regNode_, "bitfield", null, null);
+        for(Node bfNode : bfList) {
+            allBitfields.add(new AtdfBitfield(moduleNode_, regNode_, bfNode));
+        }
+
+        return allBitfields;
+    }
+
+    /* Get all of the modes the bitfields can populate by reading XML nodes in the ATDF document
+     * that call them out.  Bitfield modes let a register have different bitfields based on how a
+     * peripheral is configured.  For example, the TC (timer/counter) peripheral has bitfield modes
+     * for outputting a waveform vs. capturing an incoming one.
+     */
+    private List<String> getBitfieldModesFromDoc() {
+        ArrayList<String> allModes = new ArrayList<>();
+
+        // Read all of the bitfield nodes from the ATDF document.
+        List<Node> bfList = Utils.filterAllChildNodes(regNode_, "mode", null, null);
+        for(Node bfNode : bfList) {
+            String modeName = Utils.getNodeAttribute(bfNode, "name", "DEFAULT");
+
+            if(!allModes.contains(modeName)) {
+                allModes.add(modeName);
+            }
+        }
+
+        return allModes;
+    }
+
+    /* Given a single AtdfBitfield and a list of them, search through the list for all equivalent
+     * bitfields and use them all to build up a list of the modes that the given bitfield can have.
+     *
+     * The ATDF doc can either have a single bitfield that lists all of its modes or have duplicate
+     * bitfields with each one having a different mode.  This function exists because of the latter.
+     */
+    private List<String> findModesForBitfield(AtdfBitfield bf, List<AtdfBitfield> bfList) {
+        ArrayList<String> possibleModes = new ArrayList<>();
+
+        for(AtdfBitfield other : bfList) {
+            if(bf.equals(other)) {
+                // This will always retutrn something, so no need to check for an empty list.
+                List<String> otherModeList = other.getModes();
+
+                for(String otherMode : otherModeList) {
+                    if(!possibleModes.contains(otherMode)) {
+                        possibleModes.add(otherMode);
+                    }
+                }
+            }
+        }
+        
+        return possibleModes;
+    }
+
+    /* Just a simple convenience method to add the given bitfield to our map with the given mode.
+     * This will create a new array for the given mode if needed and will not add the bitfield if
+     * an equivalent one is already in the list for the given mode.
+     */
+    private void addBitfieldToMap(LinkedHashMap<String, ArrayList<AtdfBitfield>> bfMap,
+                                  AtdfBitfield bf,
+                                  String mode) {
+        if(!bfMap.containsKey(mode)) {
+            bfMap.put(mode, new ArrayList<AtdfBitfield>());
+        }
+
+        if(!bfMap.get(mode).contains(bf)) {
+            bfMap.get(mode).add(bf);
+        }
     }
 }
