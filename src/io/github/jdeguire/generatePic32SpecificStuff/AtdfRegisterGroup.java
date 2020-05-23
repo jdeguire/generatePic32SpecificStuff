@@ -218,7 +218,6 @@ public class AtdfRegisterGroup {
         // First, we need to find all of the mode names and initialize the map with them.
         // There is always a "DEFAULT" mode, which is the mode used when a register does not give
         // a mode.
-// TODO:  This may not actually be true; try removing this at some point and seeing what happens.
         members_.put("DEFAULT", new ArrayList<AtdfRegister>(16));
 
         for(int i = 0; i < children.getLength(); ++i) {
