@@ -70,7 +70,6 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         outputDebugDataSection(target.hasFpu(), target.supportsDspR2Ase());
         outputDataSections(target.hasL1Cache());
         outputRuntimeMemorySections();
-        outputElfDebugSections();
 
         // We output this after other code sections because we need the linker to have 
         // allocated the interrupt handlers before trying to allocate the table.  The 
@@ -78,6 +77,8 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         // will not work unless the linker already knows where those sections are.
         if(!intList.usesVariableOffsets())
             outputFixedOffsetVectors(intList, target);
+
+        outputElfDebugSections();
 
         writer_.println("}");
 
@@ -421,9 +422,124 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         else
             dataRegion = "kseg1_data_mem";
 
-// TODO: Do we want to move the persist section?
 // TODO: Can we add a coherent section like in the Cortex-M script?
-// TODO: Do we need _etext to help with data initialization like in the Cortex-M script?
+        Utils.writeMultilineCComment(writer_, 0, 
+                "Keep sections with data that needs to be copied from flash at startup between "
+              + "this symbol and its corresponding _erelocate symbol so that the startup code "
+              + "can properly initialize them.");
+        writer_.println("  _srelocate = .;");
+        writer_.println();
+
+        writer_.println("  .jcr   :");
+        writer_.println("  {");
+        writer_.println("    KEEP (*(.jcr))");
+        writer_.println("    . = ALIGN(4) ;");
+        writer_.println("  } >" + dataRegion + " AT>kseg0_program_mem");
+        writer_.println();
+
+        writer_.println("  .eh_frame    : ONLY_IF_RW");
+        writer_.println("  {");
+        writer_.println("    KEEP (*(.eh_frame))");
+        writer_.println("    . = ALIGN(4) ;");
+        writer_.println("  } >" + dataRegion + " AT>kseg0_program_mem");
+        writer_.println();
+
+        writer_.println("  .gcc_except_table    : ONLY_IF_RW");
+        writer_.println("  {");
+        writer_.println("    *(.gcc_except_table .gcc_except_table.*)");
+        writer_.println("    . = ALIGN(4) ;");
+        writer_.println("  } >" + dataRegion + " AT>kseg0_program_mem");
+        writer_.println();
+
+        writer_.println("  __data_start__ = .;");
+        writer_.println();
+
+        writer_.println("  .data   :");
+        writer_.println("  {");
+        writer_.println("    *(.data)");
+        writer_.println("    *(.data.*)");
+        writer_.println("    *( .gnu.linkonce.d.*)");
+        writer_.println("    SORT(CONSTRUCTORS)");
+        writer_.println("    *(.data1)");
+        writer_.println("    . = ALIGN(4) ;");
+        writer_.println("  } >" + dataRegion + " AT>kseg0_program_mem");
+        writer_.println();
+
+        writer_.println("  . = .;");
+        writer_.println("  _gp = ALIGN(16) + 0x7ff0;");
+        writer_.println();
+
+        writer_.println("  .got ALIGN(4) :");
+        writer_.println("  {");
+        writer_.println("    *(.got.plt) *(.got)");
+        writer_.println("    . = ALIGN(4) ;");
+        writer_.println("  } >" + dataRegion + " AT>kseg0_program_mem");
+        writer_.println();
+
+        Utils.writeMultilineCComment(writer_, 2, 
+                ("We want the small data sections together, so single-instruction offsets can " +
+                 "access them all, and initialized data all before uninitialized, so we can " + 
+                 "shorten the on-disk segment size."));
+        writer_.println("  .sdata ALIGN(4) :");
+        writer_.println("  {");
+        writer_.println("    _sdata_begin = . ;");
+        writer_.println("    *(.sdata .sdata.* .gnu.linkonce.s.*)");
+        writer_.println("    . = ALIGN(4) ;");
+        writer_.println("    _sdata_end = . ;");
+        writer_.println("  } >" + dataRegion + " AT>kseg0_program_mem");
+        writer_.println();
+
+        writer_.println("  .lit8 :");
+        writer_.println("  {");
+        writer_.println("    *(.lit8)");
+        writer_.println("  } >" + dataRegion + " AT>kseg0_program_mem");
+        writer_.println("  .lit4 :");
+        writer_.println("  {");
+        writer_.println("    *(.lit4)");
+        writer_.println("  } >" + dataRegion + " AT>kseg0_program_mem");
+        writer_.println();
+
+        writer_.println("  . = ALIGN (4) ;");
+        writer_.println("  _erelocate = .;");
+        writer_.println("  _data_end = . ;");
+        writer_.println("  __data_end__ = .;");
+        writer_.println();
+
+        Utils.writeMultilineCComment(writer_, 0, 
+                "Keep sections with data that needs to be zeroed out at startup between this symbol "
+              + "and its corresponding _ezero symbol so that the startup code can properly clear them.");
+        writer_.println("  _szero = .;");
+        writer_.println();
+
+        writer_.println("  .sbss ALIGN(4) :");
+        writer_.println("  {");
+        writer_.println("    _sbss_begin = .;");
+        writer_.println("    *(.dynsbss)");
+        writer_.println("    *(.sbss .sbss.* .gnu.linkonce.sb.*)");
+        writer_.println("    *(.scommon)");
+        writer_.println("    _sbss_end = .;");
+        writer_.println("    . = ALIGN(4) ;");
+        writer_.println("  } >" + dataRegion);
+        writer_.println();
+
+        writer_.println("  .bss :");
+        writer_.println("  {");
+        writer_.println("    _bss_begin = .;");
+        writer_.println("    __bss_start__ = .;");
+        writer_.println("    *(.bss)");
+        writer_.println("    *(.bss.*)");
+        writer_.println("    *(.dynbss)");
+        writer_.println("    *(.gnu.linkonce.b.*)");
+        writer_.println("    *(COMMON)");
+        writer_.println("    _bss_end = .;");
+        writer_.println("    __bss_end__ = .;");
+        writer_.println("   . = ALIGN(4);");
+        writer_.println("  } >" + dataRegion);
+        writer_.println();
+
+        writer_.println("  _ezero = .;");
+        writer_.println();
+
         Utils.writeMultilineCComment(writer_, 2, 
                 ("Use the \'section\' attribute to put data in this section that you want to " +
                  "persist through software resets."));
@@ -447,113 +563,9 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println("  } >" + dataRegion);
         writer_.println();
 
-// TODO: Can we merge some of these sections?
-        writer_.println("  .jcr   :");
-        writer_.println("  {");
-        writer_.println("    KEEP (*(.jcr))");
-        writer_.println("    . = ALIGN(4) ;");
-        writer_.println("  } >" + dataRegion);
-        writer_.println();
-
-        writer_.println("  .eh_frame    : ONLY_IF_RW");
-        writer_.println("  {");
-        writer_.println("    KEEP (*(.eh_frame))");
-        writer_.println("  } >" + dataRegion);
-        writer_.println("    . = ALIGN(4) ;");
-        writer_.println();
-
-        writer_.println("  .gcc_except_table    : ONLY_IF_RW");
-        writer_.println("  {");
-        writer_.println("    *(.gcc_except_table .gcc_except_table.*)");
-        writer_.println("  } >" + dataRegion);
-        writer_.println("    . = ALIGN(4) ;");
-        writer_.println();
-
-        writer_.println("  __data_start__ = .;");
-        writer_.println();
-
-        writer_.println("  .data   :");
-        writer_.println("  {");
-        writer_.println("    *(.data)");
-        writer_.println("    *(.data.*)");
-        writer_.println("    *( .gnu.linkonce.d.*)");
-        writer_.println("    SORT(CONSTRUCTORS)");
-        writer_.println("    *(.data1)");
-        writer_.println("    . = ALIGN(4) ;");
-        writer_.println("  } >" + dataRegion);
-        writer_.println();
-
-        writer_.println("  . = .;");
-        writer_.println("  _gp = ALIGN(16) + 0x7ff0;");
-        writer_.println();
-
-        writer_.println("  .got ALIGN(4) :");
-        writer_.println("  {");
-        writer_.println("    *(.got.plt) *(.got)");
-        writer_.println("    . = ALIGN(4) ;");
-        writer_.println("  } >" + dataRegion);
-        writer_.println();
-
-        Utils.writeMultilineCComment(writer_, 2, 
-                ("We want the small data sections together, so single-instruction offsets can " +
-                 "access them all, and initialized data all before uninitialized, so we can " + 
-                 "shorten the on-disk segment size."));
-        writer_.println("  .sdata ALIGN(4) :");
-        writer_.println("  {");
-        writer_.println("    _sdata_begin = . ;");
-        writer_.println("    *(.sdata .sdata.* .gnu.linkonce.s.*)");
-        writer_.println("    . = ALIGN(4) ;");
-        writer_.println("    _sdata_end = . ;");
-        writer_.println("  } >" + dataRegion);
-        writer_.println();
-
-        writer_.println("  .lit8           :");
-        writer_.println("  {");
-        writer_.println("    *(.lit8)");
-        writer_.println("  } >" + dataRegion);
-        writer_.println("  .lit4           :");
-        writer_.println("  {");
-        writer_.println("    *(.lit4)");
-        writer_.println("  } >" + dataRegion);
-        writer_.println();
-
-        writer_.println("  . = ALIGN (4) ;");
-        writer_.println("  _data_end = . ;");
-        writer_.println("  __data_end__ = .;");
-        writer_.println("  _bss_begin = . ;");
-        writer_.println("  __bss_start__ = .;");
-        writer_.println();
-
-        writer_.println("  .sbss ALIGN(4) :");
-        writer_.println("  {");
-        writer_.println("    _sbss_begin = . ;");
-        writer_.println("    *(.dynsbss)");
-        writer_.println("    *(.sbss .sbss.* .gnu.linkonce.sb.*)");
-        writer_.println("    *(.scommon)");
-        writer_.println("    _sbss_end = . ;");
-        writer_.println("    . = ALIGN(4) ;");
-        writer_.println("  } >" + dataRegion);
-        writer_.println();
-
-        writer_.println("  .bss     :");
-        writer_.println("  {");
-        writer_.println("    *(.bss)");
-        writer_.println("    *(.bss.*)");
-        writer_.println("    *(.dynbss)");
-        writer_.println("    *(.gnu.linkonce.b.*)");
-        writer_.println("    *(COMMON)");
-        writer_.println("   /* Align here to ensure that the .bss section occupies space up to");
-        writer_.println("      _end.  Align after .bss to ensure correct alignment even if the");
-        writer_.println("      .bss section disappears because there are no input sections. */");
-        writer_.println("   . = ALIGN(. != 0 ? 4 : 1);");
-        writer_.println("  } >" + dataRegion);
-        writer_.println();
-
         writer_.println("  . = ALIGN(4) ;");
         writer_.println("  _end = . ;");
         writer_.println("  __end__ = . ;");
-        writer_.println("  _bss_end = . ;");
-        writer_.println("  __bss_end__ = .;");
         writer_.println();
     }
 

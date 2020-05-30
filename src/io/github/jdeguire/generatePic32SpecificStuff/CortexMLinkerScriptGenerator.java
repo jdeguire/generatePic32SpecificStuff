@@ -257,6 +257,21 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println("    _erelocate = .;");
         writer_.println("  } > ram");
         writer_.println();
+        
+        writer_.println("  .bss (NOLOAD) :");
+        writer_.println("  {");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    _bss_begin = .;");
+        writer_.println("    __bss_start__ = .;");
+        writer_.println("    _szero = .;");
+        writer_.println("    *(.bss .bss.*);");
+        writer_.println("    *(COMMON)");
+        writer_.println("    . = ALIGN(4);");
+        writer_.println("    _bss_end = .;");
+        writer_.println("    __bss_end__ = .;");
+        writer_.println("    _ezero = .;");
+        writer_.println("  } > ram");
+        writer_.println();
 
         Utils.writeMultilineCComment(writer_, 2, 
                 ("Use the \'section\' attribute to put data in this section that you want to " +
@@ -278,21 +293,6 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
         }
         writer_.println("    __persist_end__ = .;");
         writer_.println("    _epersist= .;");
-        writer_.println("  } > ram");
-        writer_.println();
-        
-        writer_.println("  .bss (NOLOAD) :");
-        writer_.println("  {");
-        writer_.println("    . = ALIGN(4);");
-        writer_.println("    __bss_start__ = .;");
-        writer_.println("    _sbss = . ;");
-        writer_.println("    _szero = .;");
-        writer_.println("    *(.bss .bss.*);");
-        writer_.println("    *(COMMON)");
-        writer_.println("    . = ALIGN(4);");
-        writer_.println("    __bss_end__ = .;");
-        writer_.println("    _ebss = . ;");
-        writer_.println("    _ezero = .;");
         writer_.println("  } > ram");
         writer_.println();
     }

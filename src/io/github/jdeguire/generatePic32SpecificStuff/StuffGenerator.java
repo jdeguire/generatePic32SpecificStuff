@@ -59,6 +59,7 @@ public class StuffGenerator {
     CortexMStartupGenerator cortexmStartupGen_;
     MipsLinkerScriptGenerator mipsLinkerGen_;
     MipsHeaderFileGenerator mipsHeaderGen_;
+    MipsStartupGenerator mipsStartupGen_;
     TargetConfigGenerator targetConfigGen_;
     XcHeaderGenerator cortexmXcGen_;
     XcHeaderGenerator mipsXcGen_;
@@ -79,6 +80,7 @@ public class StuffGenerator {
         String cortexmStartupDir = outputDirBase_ + "cortex-m/lib/proc";
         String mipsLinkerDir = outputDirBase_ + "mips32/lib/proc";
         String mipsHeaderDir = outputDirBase_ + "mips32/include/proc";
+        String mipsStartupDir = outputDirBase_ + "mips32/lib/proc";
         String targetConfigDir = outputDirBase_ + "config";
         String cortexmXcDir = outputDirBase_ + "cortex-m/include";
         String mipsXcDir = outputDirBase_ + "mips32/include";
@@ -90,6 +92,7 @@ public class StuffGenerator {
 
         mipsLinkerGen_ = new MipsLinkerScriptGenerator(mipsLinkerDir);
         mipsHeaderGen_ = new MipsHeaderFileGenerator(mipsHeaderDir);
+        mipsStartupGen_ = new MipsStartupGenerator(mipsStartupDir);
 
         targetConfigGen_ = new TargetConfigGenerator(targetConfigDir);
 
@@ -167,6 +170,7 @@ public class StuffGenerator {
             } else {
                 mipsLinkerGen_.generate(target);
                 mipsHeaderGen_.generate(target);
+                mipsStartupGen_.generate(target);
                 mipsXcGen_.add(target);
             }
 

@@ -105,6 +105,13 @@ public class LinkerMemoryRegion {
         return startAddr_;
     }
 
+    /* Use this only on MIPS devices.  This class does not know if the region belongs to a MIPS or
+     * Arm device, so it is is up to the caller to know.
+     */
+    public long getPhysicalStartAddress() {
+        return startAddr_ & 0x1FFFFFFFL;
+    }
+
     public long getLength() {
         return length_;
     }
@@ -145,6 +152,26 @@ public class LinkerMemoryRegion {
 
     public void setAsKseg3Region() {
         startAddr_ = ((startAddr_ & 0x1FFFFFFFL) | 0xE0000000L);
+    }
+
+    public boolean isPhysicalRegion() {
+        return (startAddr_ & 0xE0000000L) == 0x00000000L;
+    }
+
+    public boolean isKseg0Region() {
+        return (startAddr_ & 0xE0000000L) == 0x80000000L;
+    }
+
+    public boolean isKseg1Region() {
+        return (startAddr_ & 0xE0000000L) == 0xA0000000L;
+    }
+
+    public boolean isKseg2Region() {
+        return (startAddr_ & 0xE0000000L) == 0xC0000000L;
+    }
+
+    public boolean isKseg3Region() {
+        return (startAddr_ & 0xE0000000L) == 0xE0000000L;
     }
 
     @Override

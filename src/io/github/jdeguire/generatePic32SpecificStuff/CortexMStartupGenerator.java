@@ -26,6 +26,7 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import java.io.PrintWriter;
@@ -34,10 +35,6 @@ import java.io.PrintWriter;
  * This class will generate the C startup code for Cortex-M devices.  This code also includes the
  * interrupt vectors for the device and will set up device-specific stuff like cache and the FPU,
  * which is why we need to generate code for each device.
- * 
- * Note that MIPS devices do not need device-specific code because there only a few different 
- * variations on the startup code based on whether the device has an L1 cache, an FPU, and microMIPS
- * support, and so there is no complementary MipsStartupGenerator class.
  */
 public class CortexMStartupGenerator {
 
@@ -115,8 +112,9 @@ public class CortexMStartupGenerator {
         writer.println("extern void (*__init_array_end)(void);");
         writer.println();
 
-        writer.println("extern int main(void);");
         writer.println("extern void _init(void);");
+        writer.println("extern int main(void);");
+        writer.println("extern void exit(int status);");
         writer.println();
         writer.println("/* This is where the program starts execution. */");
         writer.println("void Reset_Handler(void);");
@@ -253,7 +251,7 @@ public class CortexMStartupGenerator {
         writer.println();
     }
 
-    /* Output a function that will enable the cache for device with the Cortex-M Cache Controller.
+    /* Output a function that will enable the cache for devices with the Cortex-M Cache Controller.
      * This appears to be a device-level cache added by Atmel to add a cache to the Cortex-M4 that 
      * normally does not have one.
      */
@@ -270,14 +268,11 @@ public class CortexMStartupGenerator {
         writer.println();
     }
 
-    /* Output a function that will enable the cache for device with the Cortex-M Cache Controller.
-     * This appears to be a device-level cache added by Atmel to add a cache to the Cortex-M4 that 
-     * normally does not have one.
+    /* Output a function that will enable the cache for devices with a built-in L1 cache.
      */
     private void outputCpuCacheEnableFunction(PrintWriter writer) {
         Utils.writeMultilineCComment(writer, 0, 
-                "Enable the Cortex-M CPU instruction and data caches. Only the Cortex-M7 has a "
-              + "CPU-level cache at this time.");
+                "Enable the Cortex-M CPU instruction and data caches.");
         writer.println("void __attribute__((weak)) _EnableCpuCache(void)");
         writer.println("{");
         writer.println("    // These invalidate the caches before enabling them.");
@@ -374,6 +369,7 @@ public class CortexMStartupGenerator {
         writer.println();
         writer.println("    /* The app is ready to go, call main. */");
         writer.println("    main();");
+        writer.println("    exit(0);");
         writer.println();
         writer.println("    /* Nothing left to do but spin here forever. */");
         writer.println("    while(1) {}");
