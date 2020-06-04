@@ -74,15 +74,15 @@ public class MipsStartupGenerator {
      * supports the Thumb ISA but not the full Arm ISA.
      */
     public void generate(TargetDevice target) throws java.io.FileNotFoundException {
-        if(target.isArm()  &&  !target.supportsArmIsa()) {
+        if(target.isMips32()) {
             String devnameForFile = target.getDeviceName().toLowerCase();
             String targetPath = basepath_ + "/" + devnameForFile + "/startup_" + devnameForFile + ".c";
 
             try(PrintWriter writer = Utils.createUnixPrintWriter(targetPath)) {
                 outputLicenseHeader(writer);
-                outputPreamble(writer);
-                outputDummyHandler(writer);
+                outputPreamble(writer, target);
                 outputUserFunctionDeclarations(writer);
+                outputDummyHandler(writer);
 
                 if(target.getInterruptList().getNumShadowRegs() >= 2) {
                     outputShadowRegGlobalPointerInitFunction(writer);
@@ -99,7 +99,7 @@ public class MipsStartupGenerator {
                 }
 
                 outputCp0InitFunction(writer, target);
-                outputVectorSpacingInitFunction(writer, target);
+                outputVectorSpacingInitFunction(writer);
 
                 if(target.getInterruptList().usesVariableOffsets()) {
                     outputVariableVectorOffsetInitFunction(writer);
@@ -107,7 +107,7 @@ public class MipsStartupGenerator {
 
                 outputLibcInitArrayFunction(writer);
                 outputStartupFunction(writer, target);
-                outputResetFunction(writer);
+                outputResetFunction(writer, target);
 
                 outputBootstrapExceptionEntryPoint(writer);
                 outputGeneralExceptionEntryPoint(writer);
@@ -122,7 +122,6 @@ public class MipsStartupGenerator {
             }
         }
     }
-
 
     /* Add a permissive license header to the startup file opened by the given writer.
      */
@@ -140,12 +139,13 @@ public class MipsStartupGenerator {
 
     /* Output initial stuff such as linker symbol declarations and header files.
      */
-    private void outputPreamble(PrintWriter writer) {
+    private void outputPreamble(PrintWriter writer, TargetDevice target) {
         writer.println("#include <stdint.h>");
         writer.println("#include <xc.h>");
         writer.println();
 
         writer.println("/* Symbols defined in the linker script for this device. */");
+        writer.println("extern uint32_t _ebase_address;");
         writer.println("extern uint32_t _etext;");
         writer.println("extern uint32_t _srelocate;");
         writer.println("extern uint32_t _erelocate;");
@@ -153,6 +153,13 @@ public class MipsStartupGenerator {
         writer.println("extern uint32_t _ezero;");
         writer.println("extern uint32_t _estack;");
         writer.println("extern uint32_t _gp;");
+        writer.println("extern uint32_t _vector_spacing;");
+
+        if(target.getInterruptList().usesVariableOffsets()) {
+            writer.println("extern uint32_t _vector_offset_init_begin;");
+            writer.println("extern uint32_t _vector_offset_init_end;");
+        }
+
         writer.println("extern void (*__preinit_array_start)(void);");
         writer.println("extern void (*__preinit_array_end)(void);");
         writer.println("extern void (*__init_array_start)(void);");
@@ -165,8 +172,22 @@ public class MipsStartupGenerator {
         writer.println();
         writer.println("/* This is the default interrupt handler. */");
         writer.println("void __attribute__((weak, nomips16, interrupt(\"eic\"), section(\".vector_default\"))) Default_Handler(void);");
-        writer.println();
         writer.println("void __attribute__((noreturn, nomips16, section(\".reset.startup\"))) _reset_startup(void);");
+        writer.println();
+    }
+
+    /* Output weak declarations of functions the user can use to run code during startup.  Weak
+     * declarations do not have to be defined and will be 0 if they are not defined by the user.
+     */
+    private void outputUserFunctionDeclarations(PrintWriter writer) {
+        Utils.writeMultilineCComment(writer, 0, 
+                "Define these to run code during startup.  The _on_reset() function is run almost "
+              + "immediately, so the cache, DSPr2 ASE, and FPU will probably not be usable unless "
+              + "they are enabled in _on_reset().  The _on_bootstrap() function is run just before "
+              + "main is called and so everything should be initialized.");
+        writer.println("extern void __attribute__((weak, long_call)) _on_reset(void);");
+        writer.println("extern void __attribute__((weak, long_call)) _on_bootstrap(void);");
+        writer.println();
         writer.println();
     }
 
@@ -184,20 +205,6 @@ public class MipsStartupGenerator {
         writer.println();
     }
 
-    /* Output weak declarations of functions the user can use to run code during startup.  Weak
-     * declarations do not have to be defined and will be 0 if they are not defined by the user.
-     */
-    private void outputUserFunctionDeclarations(PrintWriter writer) {
-        Utils.writeMultilineCComment(writer, 0, 
-                "Define these to run code during startup.  The _on_reset() function is run almost "
-              + "immediately, so the cache and FPU will probably not be usable unless they are "
-              + "enabled in _on_reset().  The _on_bootstrap() function is run just before main is "
-              + "called and so everything should be initialized.");
-        writer.println("extern void __attribute__((weak, long_call)) _on_reset(void);");
-        writer.println("extern void __attribute__((weak, long_call)) _on_bootstrap(void);");
-        writer.println();
-    }
-
     /* Output a function that will initialize the global pointer register on each shadow register
      * set.
      */
@@ -209,18 +216,18 @@ public class MipsStartupGenerator {
         writer.println("void __attribute__((weak, nomips16)) _InitShadowRegisterGp(void)");
         writer.println("{");
         writer.println("    uint32_t prev_srsctl = __builtin_mfc0(12, 2);");
-        writer.println("    uint32_t which_srs = (prev_srsctl >> 26) & 0x0F;        /* SRSCtl.HSS */");
+        writer.println("    uint32_t which_srs = (prev_srsctl >> 26) & 0x0F;       /* SRSCtl.HSS */");
         writer.println();
         writer.println("    /* Stop at SRS 0 because that is the base set from which gp is copied. */");
         writer.println("    uint32_t srsctl = prev_srsctl;");
         writer.println("    for( ; which_srs > 0; --which_srs)");
         writer.println("    {");
-        writer.println("        srsctl &= ~0x03C0;              /* Clear SRSCtl.PSS */");
-        writer.println("        srsctl |= (which_srs << 6);     /* Set SRSCtl.PSS to new SRS value */");
+        writer.println("        srsctl &= ~0x03C0;             /* Clear SRSCtl.PSS */");
+        writer.println("        srsctl |= (which_srs << 6);    /* Set SRSCtl.PSS to new SRS value */");
         writer.println();
         writer.println("        __builtin_mtc0(12, 2, srsctl);");
         writer.println("        _ehb();");
-        writer.println("        __asm__ volatile(\"wrpgpr gp, gp \n\t\" : : : \"memory\");");
+        writer.println("        __asm__ volatile(\"wrpgpr gp, gp\" : : : \"memory\");");
         writer.println("    }");
         writer.println();
         writer.println("    /* Restore original SRSCtl value */");
@@ -253,12 +260,13 @@ public class MipsStartupGenerator {
         Utils.writeMultilineCComment(writer, 0,
                 "Initialize the TLB to point to the SQI and EBI memory regions.");
 
-        writer.println("void __attribute__((weak, nomips16)) __pic32_tlb_init_ebi_sqi(void)");
+        writer.println("void __attribute__((weak, nomips16)) _InitTlbForEbiSqi(void)");
         writer.println("{");
         writer.println("    /* Check Config<MT> to see if we have a TLB and bail if not. */");
         writer.println("    if(0x80 != (__builtin_mfc0(16, 0) & 0x0380))");
         writer.println("        return;");
         writer.println();
+
         Utils.writeMultilineCComment(writer, 4,
                 "Init all of the TLB entries by writing unmapped kseg0 address to them so that they "
               + "never match.  The MIPS Architecture For Programmers Vol. III document shows a "
@@ -267,17 +275,17 @@ public class MipsStartupGenerator {
         writer.println("    uint32_t mmu_size = ((__builtin_mfc0(16, 1) >> 25) & 0x3F) + 1;");
         writer.println("    uint32_t kseg0_addr = 0x80000000");
         writer.println();
-        writer.println("    __builtin_mtc0(2, 0, 0);       /* EntryLo0 */");
-        writer.println("    __builtin_mtc0(3, 0, 0);       /* EntryLo1 */");
-        writer.println("    __builtin_mtc0(5, 0, 0);       /* PageMask */");
+        writer.println("    __builtin_mtc0(2, 0, 0);      /* EntryLo0 */");
+        writer.println("    __builtin_mtc0(3, 0, 0);      /* EntryLo1 */");
+        writer.println("    __builtin_mtc0(5, 0, 0);      /* PageMask */");
         writer.println();
         writer.println("    while(mmu_size--)");
         writer.println("    {");
-        writer.println("        __builtin_mtc0(0, 0, mmu_size);      /* Index */");
-        writer.println("        __builtin_mtc0(10, 0, kseg0_addr);   /* EntryHi */");
+        writer.println("        __builtin_mtc0(0, 0, mmu_size);          /* Index */");
+        writer.println("        __builtin_mtc0(10, 0, kseg0_addr);       /* EntryHi */");
         writer.println("        _ehb();");
-        writer.println("        __asm__ volatile(\"tlbwi \n\t\" : : : \"memory\");");
-        writer.println("        kseg0_addr += (1 << 13);             /* PageMask of 0 gives two 4kB pages */");
+        writer.println("        __asm__ volatile(\"tlbwi\" : : : \"memory\");");
+        writer.println("        kseg0_addr += (8 * 1024);                /* PageMask of 0 gives two 4kB pages */");
         writer.println("    }");
         writer.println();
         writer.println("    /* Clear PageGrain */");
@@ -286,23 +294,26 @@ public class MipsStartupGenerator {
         writer.println("    __builtin_mtc0(6, 0, " + tlbEntries.size() + ");");
         writer.println("    _ehb();");
         writer.println();
+
         Utils.writeMultilineCComment(writer, 4,
                 "Now set up the TLB entries for the SQI and EBI regions by setting the CP0 Index.");
 
         int index = 0;
         for(TlbEntry entry : tlbEntries) {
             writer.println("    /* " + entry.name + " */");
-            writer.println("    __builtin_mtc0(0, 0, " + index + ");");
-            writer.println("    __builtin_mtc0(2, 0, 0x" + Long.toHexString(entry.entryLo0).toUpperCase() + ");");
-            writer.println("    __builtin_mtc0(3, 0, 0x" + Long.toHexString(entry.entryLo1).toUpperCase() + ");");
-            writer.println("    __builtin_mtc0(5, 0, 0x" + Long.toHexString(entry.pageMask).toUpperCase() + ");");
+            writer.println("    __builtin_mtc0(0,  0, " + index + ");");
+            writer.println("    __builtin_mtc0(2,  0, 0x" + Long.toHexString(entry.entryLo0).toUpperCase() + ");");
+            writer.println("    __builtin_mtc0(3,  0, 0x" + Long.toHexString(entry.entryLo1).toUpperCase() + ");");
+            writer.println("    __builtin_mtc0(5,  0, 0x" + Long.toHexString(entry.pageMask).toUpperCase() + ");");
             writer.println("    __builtin_mtc0(10, 0, 0x" + Long.toHexString(entry.entryHi).toUpperCase() + ");");
             writer.println("    _ehb();");
-            writer.println("    __asm__ volatile(\"tlbwi \n\t\" : : : \"memory\");");
+            writer.println("    __asm__ volatile(\"tlbwi\" : : : \"memory\");");
+            writer.println();
             ++index;
         }
 
         writer.println("}");
+        writer.println();
     }
 
     /* Return a single TlbEntry that can cover the given region.  This assumes that the region size
@@ -391,7 +402,7 @@ public class MipsStartupGenerator {
     private void outputL1CacheInitFunction(PrintWriter writer) {
         Utils.writeMultilineCComment(writer, 0, "Initialize the L1 cache.");
 
-        writer.println("void __attribute__((weak, nomips16)) __pic32_init_cache(void)");
+        writer.println("void __attribute__((weak, nomips16, section(\".cache_init\"))) _InitL1Cache(void)");
         writer.println("{");
         writer.println("    uint32_t cp0_config  = __builtin_mfc0(16, 0);");
         writer.println("    uint32_t cp0_config1 = __builtin_mfc0(16, 1);");
@@ -401,8 +412,8 @@ public class MipsStartupGenerator {
         writer.println("    __builtin_mtc0(16, 0, cp0_config | 0x02);");
         writer.println("    _ehb();");
         writer.println();
-        writer.println("    __builtin_mtc0(26, 0, 0);      /* ErrCtl */");
-        writer.println("    __builtin_mtc0(28, 0, 0);      /* TagLo */");
+        writer.println("    __builtin_mtc0(26, 0, 0);     /* ErrCtl */");
+        writer.println("    __builtin_mtc0(28, 0, 0);     /* TagLo */");
         writer.println("    /* TagHi is not implemented on the PIC32. */");
         writer.println("    _ehb();");
         writer.println();
@@ -411,18 +422,19 @@ public class MipsStartupGenerator {
         writer.println("    uint32_t cache_ways;");
         writer.println("    uint32_t cache_total_size;");
         writer.println();
+
         Utils.writeMultilineCComment(writer, 4, "Invalidate instruction cache.");
-        writer.println("    cache_sets_per_way = (cp0_config1 >> 22) & 0x07;        /* Config1<IS> */");
+        writer.println("    cache_sets_per_way = (cp0_config1 >> 22) & 0x07;       /* Config1<IS> */");
         writer.println("    if(0x07 == cache_sets_per_way)");
         writer.println("        cache_sets_per_way = 32;");
         writer.println("    else");
         writer.println("        cache_sets_per_way = 64 << cache_sets_per_way;");
         writer.println();
-        writer.println("    cache_line_size = (cp0_config1 >> 19) & 0x07;           /* Config1<IL> */");
+        writer.println("    cache_line_size = (cp0_config1 >> 19) & 0x07;          /* Config1<IL> */");
         writer.println("    if(0 != cache_line_size)");
         writer.println("        cache_line_size = 2 << cache_line_size;");
         writer.println();
-        writer.println("    cache_ways = (cp0_config1 >> 16) & 0x07;                /* Config1<IA> */");
+        writer.println("    cache_ways = (cp0_config1 >> 16) & 0x07;               /* Config1<IA> */");
         writer.println("    ++cache_ways;");
         writer.println();
         writer.println("    cache_total_size = cache_sets_per_way * cache_ways * cache_line_size;");
@@ -441,14 +453,15 @@ public class MipsStartupGenerator {
         writer.println("        }");
         writer.println("    }");
         writer.println();
+
         Utils.writeMultilineCComment(writer, 4, "Invalidate data cache.");
-        writer.println("    cache_sets_per_way = (cp0_config1 >> 13) & 0x07;        /* Config1<DS> */");
+        writer.println("    cache_sets_per_way = (cp0_config1 >> 13) & 0x07;       /* Config1<DS> */");
         writer.println("    if(0x07 == cache_sets_per_way)");
         writer.println("        cache_sets_per_way = 32;");
         writer.println("    else");
         writer.println("        cache_sets_per_way = 64 << cache_sets_per_way;");
         writer.println();
-        writer.println("    cache_line_size = (cp0_config1 >> 10) & 0x07;           /* Config1<DL> */");
+        writer.println("    cache_line_size = (cp0_config1 >> 10) & 0x07;          /* Config1<DL> */");
         writer.println("    if(0 != cache_line_size)");
         writer.println("        cache_line_size = 2 << cache_line_size;");
         writer.println();
@@ -459,7 +472,7 @@ public class MipsStartupGenerator {
         writer.println();
         writer.println("    if(cache_total_size > 0)");
         writer.println("    {");
-        writer.println("        uint32_t idx_addr = 0x80000000;      /* Need unmapped address for cache instruction */");
+        writer.println("        uint32_t idx_addr = 0x80000000;          /* Need unmapped address for cache instruction */");
         writer.println("        uint32_t end_addr = idx_addr + cache_total_size;");
         writer.println();
         writer.println("        for( ; idx_addr < end_addr; idx_addr += cache_line_size)");
@@ -471,13 +484,113 @@ public class MipsStartupGenerator {
         writer.println("        }");
         writer.println("    }");
         writer.println();
+
         writer.println("    /* Require completion of pending memory transactions before enabling cache. */");
         writer.println("    __asm__ volatile(\"sync\" : : : \"memory\");");
+        writer.println("}");
         writer.println();
-        writer.println("    /* Enable cacheability for kseg0. */");
-        writer.println("    __builtin_mtc0(16, 0, cp0_config | 0x03);");
+    }
+
+    /* Output a function to initialize various CP0 registers.
+     */
+    private void outputCp0InitFunction(PrintWriter writer, TargetDevice target)
+    {
+        Utils.writeMultilineCComment(writer, 0, "Initialize CP0 registers.");
+
+        writer.println("void __attribute__((weak, nomips16)) _InitCp0Registers(void)");
+        writer.println("{");
+        writer.println("    __builtin_mtc0(9,  0, 0);                    /* Clear Count */");
+        writer.println("    __builtin_mtc0(11, 0, 0xFFFFFFFF);           /* Set Compare to max value */");
+        writer.println("    __builtin_mtc0(15, 1, _ebase_address);       /* Set Ebase to exception base address */");
+        writer.println();
+
+        Utils.writeMultilineCComment(writer, 4,
+                "Set Cause register to enable vectored interrupts (IV=1), enable Core Timer (DC=0), "
+              + "and clear out software interrupt pending flags (IPn=0).");
+        writer.println("    __builtin_mtc0(13, 0, 0x00800000);");
+        writer.println();
+
+        Utils.writeMultilineCComment(writer, 4,
+                "Set up the Status register by:\n"
+                        + "  --setting processor into kernel mode (UM=0)\n"
+                        + "  --clearing the exception (EXL=0) and error (ERL=0) bits\n"
+                        + "  --disabling interrupts (IE=0)\n"
+                        + "  --setting the CPU interrupt priority level to 0 (IPLn=0)\n"
+                        + "  --disabling endian swap in User Mode (RE=0)\n"
+                        + "  --disabling CP0 access in User Mode (CU0=0)\n"
+                        + "  --enabling FPU for devices that support it (FR=1, CU1=1)\n"
+                        + "  --enabling DSPr2 ASE for devices that support it (MX=1)\n"
+              + "The XC32 startup code also checks for CorExtend support, but no PIC32 devices "
+              + "support it, so it is not checked here.  The BEV, SR, and NMI flags are preserved.");
+        writer.println("    uint32_t status = __builtin_mfc0(12, 0) & 0x00580000;");
+        if(target.hasFpu()) {
+            writer.println("    status |= 0x24000000;     /* Enable 64-bit FPU (CU1=1, FR=1) */");   
+        }
+        if(target.supportsDspR2Ase()) {
+            writer.println("    status |= 0x01000000;     /* Enable DSPr2 ASE (MX=1) */");
+        }
+        writer.println("    __builtin_mtc0(12, 0, status);");
+
+        if(FamilyDefinitions.SubFamily.PIC32WK == target.getSubFamily()) {
+            writer.println();
+            Utils.writeMultilineCComment(writer, 4,
+                    "XC32 sets the Config3<ISAONEXEC> flag for the PIC32WK, so do it here too.");
+            writer.println("    __builtin_mtc0(16, 3, __builtin_mfc0(16, 3) | (1 << 16));");        
+        }
+
         writer.println("    _ehb();");
         writer.println("}");
+        writer.println();
+    }
+
+    /* Output a function to set up the vector spacing on the PIC32 using IntCtl.VS.  This also sets 
+     * up the INTCON.VS field on PIC32MM devices, which essentially overrides the IntCtl.VS with 
+     * smaller spacing for the low-memory microMIPS devices.
+     */
+    private void outputVectorSpacingInitFunction(PrintWriter writer) {
+        Utils.writeMultilineCComment(writer, 0, 
+                "Initialize the vector spacing registers on the device and enable multi-vector mode.");
+
+        writer.println("void __attribute__((weak, nomips16)) _InitVectorSpacing(void)");
+        writer.println("{");
+        Utils.writeMultilineCComment(writer, 4,
+                "Some PIC32 devices override the MIPS vector spacing with their own.  In particular,"
+              + " the microMIPS-only PIC32MM does this to get smaller spacing than MIPS normally "
+              + "allows.  Check for that and set the vector spacing there, too, if needed.");
+        writer.println("#ifdef _INTCON_VS_MASK");
+        writer.println("    INTCONCLR = _INTCON_VS_MASK;");
+        writer.println("    INTCONSET = (_vector_spacing << _INTCON_VS_POSITION) & _INTCON_VS_MASK;");
+        writer.println("#endif");
+
+        writer.println("    /* Enable multi-vector mode if this device supports it. */");
+        writer.println("#ifdef _INTCON_MVEC_MASK");
+        writer.println("    INTCONSET = _INTCON_MVEC_MASK;");
+        writer.println("#endif");
+        writer.println();
+
+        writer.println("    /* Set IntCtl<VS> even if overridden by PIC32. */");
+        writer.println("    __builtin_mtc0(12, 1, (_vector_spacing & 0x1F) << 5);");
+        writer.println("    _ehb();");
+        writer.println("}");
+        writer.println();
+    }
+
+    private void outputVariableVectorOffsetInitFunction(PrintWriter writer) {
+        Utils.writeMultilineCComment(writer, 0, 
+                "Initialize the OFFn registers on the device with a list of vector offsets"
+              + "provided in the linker script.");
+
+        writer.println("void __attribute__((weak)) _InitVariableVectorOffsets(void)");
+        writer.println("{");
+        writer.println("    uint32_t *offset_src = &_vector_offset_init_begin;");
+        writer.println("    uint32_t *offset_dst = &OFF001");
+        writer.println("    uint32_t *offset_end = &_vector_offset_init_end;");
+        writer.println("    int span = &OFF002 - &OFF001;");
+        writer.println();
+        writer.println("    for( ; offset_src < offset_end; offset_src += span)");
+        writer.println("        *offset_dst = *offset_src;");
+        writer.println("}");
+        writer.println();        
     }
 
     /* Output a function that will call compiler-generated initialization functions to set up
@@ -529,14 +642,20 @@ public class MipsStartupGenerator {
         writer.println("        _nmi_handler();");
         writer.println();
         writer.println("    /* Initialize stack and global pointer from linker script symbols. */");
-        writer.println("    __asm__ volatile(\"la $sp, %0 \n\t\"");
+        writer.println("    __asm__ volatile(\"la $sp, %0\"");
         writer.println("                     : /* no outputs */");
         writer.println("                     : \"i\" (_estack)");
         writer.println("                     : \"memory\");");
-        writer.println("    __asm__ volatile(\"la $gp, %0 \n\t\"");
+        writer.println("    __asm__ volatile(\"la $gp, %0\"");
         writer.println("                     : /* no outputs */");
         writer.println("                     : \"i\" (_gp)");
         writer.println("                     : \"memory\");");
+        writer.println();
+
+        writer.println("    /* Set Status<BEV> to switch to bootstrap exception vectors. */");
+        writer.println("    /* This should already be set on a reset device. */");
+        writer.println("    __builtin_mtc0(12, 0, __builtin_mfc0(12, 0) | (1 << 22));");
+        writer.println("    _ehb();");
         writer.println();
 
         if(numShadowRegs >= 2) {
@@ -551,7 +670,7 @@ public class MipsStartupGenerator {
         writer.println();
 
         if(FamilyDefinitions.SubFamily.PIC32MZ == target.getSubFamily()) {
-            writer.println("    __pic32_tlb_init_ebi_sqi();");
+            writer.println("    _InitTlbForEbiSqi();");
         } else {
             writer.println("    /* This device does not have a TLB to init. */");
         }
@@ -561,13 +680,16 @@ public class MipsStartupGenerator {
         writer.println();
 
         if(target.hasL1Cache()) {
-            writer.println("    __pic32_init_cache();");
+            writer.println("    _InitL1Cache();");
         } else {
             writer.println("    /* This device does not have an L1 cache to init. */");
         }
+        writer.println("    /* Enable cacheability for kseg0 even if device does not have L1 cache. */");
+        writer.println("    __builtin_mtc0(16, 0, cp0_config | 0x03);");
+        writer.println("    _ehb();");
         writer.println();
 
-        writer.println("/* PIC32MX:  BMX initialization for ramfunc usage not yet supported. */");
+        writer.println("    /* PIC32MX:  BMX initialization for ramfunc usage not yet supported. */");
         writer.println();
 
         writer.println("    _InitCp0Registers();");
@@ -588,7 +710,7 @@ public class MipsStartupGenerator {
         Utils.writeMultilineCComment(writer, 4,
                 "Do not trap on IEEE exception conditions (invalid op, div/0, overflow, underflow) "
               + "and enable round-to-nearest mode (RM=0).  Also, denormal operands are flushed to "
-              + "zero instead of causing an Unimplementd Operation exception (FS=1), intermediate "
+              + "zero instead of causing an Unimplemented Operation exception (FS=1), intermediate "
               + "results of MADD and MSUB-type instructions are kept in an internal format instead "
               + "of being flushed (FO=1), and results are rounded to the closer of 0 or the smallest "
               + "normal number (FN=1).  The MIPS Warrior M5150 (the core used in the PIC32MZ) Users "
@@ -596,7 +718,7 @@ public class MipsStartupGenerator {
               + "\"Highest accuracy and performance configuration\" in a table titled Recommend "
               + "FS/FO/FN Settings.  Note that XC32 uses FS=1, FO=0, FN=0.");
             writer.println("    uint32_t fcsr = 0x01600000;");
-            writer.println("    __asm__ volatile(\"ctc1 %0, $31 \n\t\"");
+            writer.println("    __asm__ volatile(\"ctc1 %0, $31\"");
             writer.println("                     : /* no outputs */");
             writer.println("                     : \"r\" (fcsr));");
         } else {
@@ -611,7 +733,7 @@ public class MipsStartupGenerator {
         writer.println("        _on_bootstrap();");
         writer.println();
         writer.println("    /* Clear Status<BEV> to switch to normal exception vectors. */");
-        writer.println("    __builtin_mtc0(12, 0, __builtin_mfc0(12, 0) & ~(1<<22));");
+        writer.println("    __builtin_mtc0(12, 0, __builtin_mfc0(12, 0) & ~(1 << 22));");
         writer.println("    _ehb();");
         writer.println();
         writer.println("    /* The app is ready to go, call main. */");
@@ -621,6 +743,7 @@ public class MipsStartupGenerator {
         writer.println("    /* Nothing left to do but spin here forever. */");
         writer.println("    while(1) {}");
         writer.println("}");
+        writer.println();
     }
 
     /* Output the _reset function, which is the very first thing that is run on processor startup.
@@ -629,41 +752,107 @@ public class MipsStartupGenerator {
      * jump to the startup function, but needs to be able to handle both microMIPS and MIPS32.
      * MIPS16 does not need handling because a MIPS CPU cannot start up in MIPS16 mode.
      */
-    private void outputResetFunction(PrintWriter writer) {
+    private void outputResetFunction(PrintWriter writer, TargetDevice target) {
         Utils.writeMultilineCComment(writer, 0, "This is where the CPU starts executing.");
 
-        writer.println("void __attribute((noreturn, naked, nomips16, section(\".reset\"))) _reset(void);");
+        writer.println("void __attribute__((noreturn, naked, nomips16, section(\".reset\"))) _reset(void)");
         writer.println("{");
-        writer.println("#if defined(__PIC32_HAS_MICROMIPS)  &&  " + 
-                               "(defined(__PIC32_HAS_MIPS32R2)  ||  defined(__PIC32_HAS_MIPS32R5))");
-        Utils.writeMultilineCComment(writer, 4,
-                "We do not know if we started in MIPS32 or microMIPS mode, so we need to handle "
-              + "either.  On MIPS32, the first two words here are interpreted by the CPU as an "
-              + "unconditional branch forward (B insn) and an SSNOP.  On microMIPS, the two words "
-              + "are interpreted as useless ADDI32 and SRL instructions.  The CPU will therefore "
-              + "go to the appropriate instruction sequence in either case.");
-        writer.println("    __asm__ volatile(\".set push \n\t\"");
-        writer.println("                     \".set noat \n\t\"");
-        writer.println("                     \".word 0x10000005 \n\t\"");
-        writer.println("                     \".word 0x00000040 \n\"");
-        writer.println("                     \"__reset_jump_micromips: \n\t\"");
-        writer.println("                     \".set micromips \n\t\"");
-        writer.println("                     \"lui $at, %%hi(%0) \n\t\"");
-        writer.println("                     \"ori $at, $at, %%lo(%0) \n\t\"");
-        writer.println("                     \"jal $at \n\t\"");
-        writer.println("                     \"ssnop \n\"");
-        writer.println("                     \"__reset_jump_mips32: \n\t\"");
-        writer.println("                     \".set mips32 \n\t\"");
-        writer.println("                     \"lui $at, %%hi(%0) \n\t\"");
-        writer.println("                     \"ori $at, $at, %%lo(%0) \n\t\"");
-        writer.println("                     \"jal $at \n\t\"");
-        writer.println("                     \"ssnop \n\t\"");
-        writer.println("                     \".set pop \n\t\"");
-        writer.println("                     : /* no outputs */");
-        writer.println("                     : \"i\" (_reset_startup));");
-        writer.println("#else");
-        writer.println("    _reset_startup();");
-        writer.println("#endif");
+
+        if(target.supportsMips32Isa()  &&  target.supportsMicroMipsIsa()) {
+            Utils.writeMultilineCComment(writer, 4,
+                    "We do not know if we started in MIPS32 or microMIPS mode, so we need to handle "
+                  + "either.  On MIPS32, the first two words here are interpreted by the CPU as an "
+                  + "unconditional branch forward (B insn) and an NOP.  On microMIPS, the two words "
+                  + "are interpreted as useless ADDI32 and SLL instructions.  The CPU will therefore "
+                  + "go to the appropriate instruction sequence in either case.");
+            writer.println("    __asm__ volatile(\".set push \\n\\t\"");
+            writer.println("                     \".set noat \\n\\t\"");
+            writer.println("                     \".word 0x10000005 \\n\\t\"");
+            writer.println("                     \".word 0x00000000 \\n\"");
+            writer.println("                     \"__reset_jump_micromips: \\n\\t\"");
+            writer.println("                     \".set micromips \\n\\t\"");
+            writer.println("                     \"lui $at, %%hi(%0) \\n\\t\"");
+            writer.println("                     \"ori $at, $at, %%lo(%0) \\n\\t\"");
+            writer.println("                     \"jal $at \\n\\t\"");
+            writer.println("                     \"nop \\n\"");
+            writer.println("                     \"__reset_jump_mips32: \\n\\t\"");
+            writer.println("                     \".set mips32 \\n\\t\"");
+            writer.println("                     \"lui $at, %%hi(%0) \\n\\t\"");
+            writer.println("                     \"ori $at, $at, %%lo(%0) \\n\\t\"");
+            writer.println("                     \"jal $at \\n\\t\"");
+            writer.println("                     \"nop \\n\\t\"");
+            writer.println("                     \".set pop\"");
+            writer.println("                     : /* no outputs */");
+            writer.println("                     : \"i\" (_reset_startup));");
+        } else {
+            writer.println("    __asm__ volatile(\"lui $at, %%hi(%0) \\n\\t\"");
+            writer.println("                     \"ori $at, $at, %%lo(%0) \\n\\t\"");
+            writer.println("                     \"jal $at \\n\\t\"");
+            writer.println("                     \"nop \\n\\t\"");
+            writer.println("                     : /* no outputs */");
+            writer.println("                     : \"i\" (_reset_startup));");
+        }
+
+        writer.println("}");
+        writer.println();
+        writer.println();
+    }
+
+
+    /* Output the entry point for the bootstrap exception vector.  This is placed by the linker 
+     * script into the address required by the MIPS CPU, which is 0xBFC00480.
+     */
+    private void outputBootstrapExceptionEntryPoint(PrintWriter writer) {
+        Utils.writeMultilineCComment(writer, 0, "The entry point to the bootstrap exception vector.");
+
+        writer.println("void __attribute__((noreturn, naked, nomips16, section(\".bev_handler\"))) _bev_exception_entry(void)");
+        writer.println("{");
+        writer.println("    __asm__(\"la  k0, _bootstrap_exception_handler \\n\\t\"");
+        writer.println("            \"jr  k0 \\n\\t\"");
+        writer.println("            \"nop\");");
         writer.println("}");
     }
+
+    /* Output the entry point for the general exception vector.  This is placed by the linker 
+     * script into the address required by the MIPS CPU, which is Ebase + 0x180.
+     */
+    private void outputGeneralExceptionEntryPoint(PrintWriter writer) {
+        Utils.writeMultilineCComment(writer, 0, "The entry point to the general exception vector.");
+
+        writer.println("void __attribute__((noreturn, naked, nomips16, section(\".gen_handler\"))) _gen_exception_entry(void)");
+        writer.println("{");
+        writer.println("    __asm__(\"la  k0, _general_exception_context \\n\\t\"");
+        writer.println("            \"jr  k0 \\n\\t\"");
+        writer.println("            \"nop\");");
+        writer.println("}");
+    }
+
+    /* Output the entry point for the general exception vector.  This is placed by the linker 
+     * script into the address required by the MIPS CPU, which is Ebase.
+     */
+    private void outputSimpleTlbRefillExceptionEntryPoint(PrintWriter writer) {
+        Utils.writeMultilineCComment(writer, 0, "The entry point to the simple TLB refill exception vector.");
+
+        writer.println("void __attribute__((noreturn, naked, nomips16, section(\".simple_tlb_refill_vector\"))) _simple_tlb_refill_exception_entry(void)");
+        writer.println("{");
+        writer.println("    __asm__(\"la  k0, _simple_tlb_refill_exception_context \\n\\t\"");
+        writer.println("            \"jr  k0 \\n\\t\"");
+        writer.println("            \"nop\");");
+        writer.println("}");
+    }
+
+    /* Output the entry point for the general exception vector.  This is placed by the linker 
+     * script into the address required by the MIPS CPU, which is Ebase + 0x100.
+     */
+    private void outputCacheErrorExceptionEntryPoint(PrintWriter writer) {
+        Utils.writeMultilineCComment(writer, 0, "The entry point to the cache error exception vector.");
+
+        writer.println("void __attribute__((noreturn, naked, nomips16, section(\".cache_err_vector\"))) _cache_err_exception_entry(void)");
+        writer.println("{");
+        writer.println("    __asm__(\"la  k0, _cache_err_exception_context \\n\\t\"");
+        writer.println("            \"jr  k0 \\n\\t\"");
+        writer.println("            \"nop\");");
+        writer.println("}");
+    }
+
 }
