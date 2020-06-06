@@ -44,13 +44,6 @@ public class MipsCommon {
     public static final long MIPS_RESET_PHYS_ADDR  = 0x1FC00000L;
     
 
-    /* Return a name that would be used in a linker script or "section" attribute for the section
-     * of memory the DCR would occupy.
-     */
-    public static String getDcrMemorySectionName(DCR dcr) {
-        return "config_" + dcr.getName();
-    }
-
     /* Walk through the list of all of the target's memory regions and add the ones that are most
      * useful for linker scripts and header files, possibly modifying them along the way.  This will
      * also add regions for the device config registers.
@@ -142,7 +135,7 @@ public class MipsCommon {
         // registers in the correct spots when the user specifies their values in code.
         for(DCR dcr : dcrList) {
             long dcrAddr = target.getRegisterAddress(dcr);
-            LinkerMemoryRegion dcrRegion = new LinkerMemoryRegion(getDcrMemorySectionName(dcr),
+            LinkerMemoryRegion dcrRegion = new LinkerMemoryRegion(target.getDcrMemorySectionName(dcr),
                                                                   0,
                                                                   dcrAddr,
                                                                   dcrAddr + 4);

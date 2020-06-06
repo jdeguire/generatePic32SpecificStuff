@@ -33,7 +33,6 @@ import com.microchip.crownking.Pair;
 import com.microchip.crownking.edc.Bitfield;
 import com.microchip.crownking.edc.DCR;
 import com.microchip.crownking.edc.Mode;
-import com.microchip.crownking.edc.Option;
 import com.microchip.crownking.edc.Register;
 import com.microchip.crownking.edc.SFR;
 import java.io.PrintWriter;
@@ -85,7 +84,7 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
         outputInterruptMacros(target);
         outputPeripheralMacros(target);
         outputMemoryRegionMacros(target);
-        outputConfigRegisterMacros(dcrList);
+        outputConfigRegisterMacros(writer_, target, ConfigRegMaskType.DEFAULT_VAL);
         outputTargetFeatureMacros(target);
 
         outputIncludeGuardEnd(target);
@@ -136,7 +135,7 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
      */
     private void outputSfrDefinitions(TargetDevice target, List<SFR> sfrList) {
         for(SFR sfr : sfrList) {
-            outputRegisterDefinition(target, sfr);
+            outputRegisterDefinition(target, sfr, target.getRegisterAddress(sfr));
         }
     }
 
@@ -144,7 +143,7 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
      */
     private void outputDcrDefinitions(TargetDevice target, List<DCR> dcrList) {
         for(DCR dcr : dcrList) {
-            outputRegisterDefinition(target, dcr);
+            outputRegisterDefinition(target, dcr, target.getRegisterAddress(dcr));
         }
     }
 
@@ -153,7 +152,7 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
      */
     private void outputSfrAssemblerMacros(TargetDevice target, List<SFR> sfrList) {
         for(SFR sfr : sfrList) {
-            outputRegisterAssemblerMacro(target, sfr);
+            outputRegisterAssemblerMacro(target, sfr, target.getRegisterAddress(sfr));
         }
     }
 
@@ -162,7 +161,7 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
      */
     private void outputDcrAssemblerMacros(TargetDevice target, List<DCR> dcrList) {
         for(DCR dcr : dcrList) {
-            outputRegisterAssemblerMacro(target, dcr);
+            outputRegisterAssemblerMacro(target, dcr, target.getRegisterAddress(dcr));
         }
     }
 
@@ -260,66 +259,6 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
         writer_.println();
     }
 
-    /* Output macros that can be used to configure the PIC32's configuration registers, which are
-     * just special locations in flash memory that the device reads to determine things like clock
-     * settings and Ethernet pins.  XC32 has special config pragmas to do this and Clang obviously
-     * doesn't, so we have to come up with some other way.
-    */
-    private void outputConfigRegisterMacros(List<DCR> dcrList) {
-        Utils.writeMultilineCComment(writer_, 0, 
-                "Use the following macros to set the configuration registers on the device.\n"
-                        + "To do this, AND together the desired options to fill out the fields of "
-                        + "that particular register, like so:\n\n"
-                        + "  __setDEVCFG1(__DEVCFG1_FNOSC_PRIPLL & __DEVCFG1_FPBDIV_DIV_1);\n\n"
-                        + "Do this for the config registers you want to configure by using the "
-                        + "macros somewhere in a C or C++ source file.");
-        writer_.println();
-
-        for(DCR dcr : dcrList) {
-            writer_.println("/*******************");
-            writer_.println(" * " + dcr.getName());
-            writer_.println(" */");
-
-            String dcrName = dcr.getName();
-            String dcrDefault = String.format("0x%08X", dcr.getDefault());
-            String dcrMemSection = "." + MipsCommon.getDcrMemorySectionName(dcr);
-            String dcrAttribs = "__attribute__((unused, section(\"" + dcrMemSection + "\")))";
-            String dcrSetMacroName = "__set" + dcrName + "(f)";
-            String dcrSetMacroValue = "const volatile uint32_t " + dcrAttribs + " __" + dcrName + " = (" + dcrDefault + " & (f))";
-            String dcrDefaultMacroName = "__" + dcrName + "_default";
-            String dcrDefaultMacroValue = "(" + dcrDefault + ")";
-            String dcrDefaultMacroDesc = "Default value for " + dcrName;
-
-            writeStringMacro(writer_, dcrSetMacroName, dcrSetMacroValue, null);
-            writeStringMacro(writer_, dcrDefaultMacroName, dcrDefaultMacroValue, dcrDefaultMacroDesc);
-            writer_.println();
-
-            List<Bitfield> bitfieldList = dcr.getBitfields();
-            for(Bitfield bitfield : bitfieldList) {
-                String bfName = bitfield.getName();
-                String bfDesc = bitfield.getDesc();
-                writer_.println("// " + dcrName + "<" + bfName + ">:  " + bfDesc);
-
-                long bfPosition = bitfield.getPlace();
-                long bfMask = bitfield.getMask() << bfPosition;
-
-                List<Option> optionList = bitfield.getOptions();
-                for(Option option : optionList) {
-                    String optName = option.getName();
-                    String optDesc = option.getDesc();
-                    long optMask = Register.parseWhen2(option.get("when")).second << bfPosition;
-
-                    writeStringMacro(writer_, 
-                                     "__" + dcrName + "_" + bfName + "_" + optName,
-                                     String.format("(0x%08X)", (0xFFFFFFFFL & ~bfMask | optMask)),
-                                     optDesc);
-                }
-
-                writer_.println();
-            }
-        }
-    }
-
     /* Output macros that code can use to query device feature, such as instruction set support or
      * the number of shadow registers.  This function needs to know the number of shadow register 
      * sets the device has, which can be retrieved from an InterruptList.
@@ -346,9 +285,8 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
      * outputSfrDefinitions() and outputDcrDefinitions() since SFRs and DCRs are really just types
      * of Registers.
      */
-    private void outputRegisterDefinition(TargetDevice target, Register register) {
+    private void outputRegisterDefinition(TargetDevice target, Register register, long regAddr) {
         String regName = register.getName();
-        long regAddr = target.getRegisterAddress(register);
 
         writeRegisterAddressMacro(writer_, regName, regAddr);
 
@@ -451,8 +389,8 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
      * of the two methods outputSfrAssemblerMacros() and outputDcrAssemblerMacros() since SFRs and 
      * DCRs are really just types of Registers.
      */
-    private void outputRegisterAssemblerMacro(TargetDevice target, Register register) {
-        long addr = makeKseg1Addr(target.getRegisterAddress(register));
+    private void outputRegisterAssemblerMacro(TargetDevice target, Register register, long regAddr) {
+        long addr = makeKseg1Addr(regAddr);
         String regName = register.getName();
 
         writeStringMacro(writer_, regName, String.format("(0x%08X)", addr), null);

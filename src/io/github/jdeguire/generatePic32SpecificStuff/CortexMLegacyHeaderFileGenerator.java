@@ -79,6 +79,7 @@ public class CortexMLegacyHeaderFileGenerator extends HeaderFileGenerator {
         outputMemoryMapMacros(atdfDoc.getDevice());
         outputDeviceSignatureMacros(device);
         outputElectricalParameterMacros(device);
+        outputConfigRegisterMacros(writer_, target, ConfigRegMaskType.IMPL_VAL);
         outputExternCEnd();
         outputIncludeGuardEnd(target);
 

@@ -29,7 +29,12 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.edc.Bitfield;
+import com.microchip.crownking.edc.DCR;
+import com.microchip.crownking.edc.Option;
+import com.microchip.crownking.edc.Register;
 import java.io.PrintWriter;
+import java.util.List;
 import org.xml.sax.SAXException;
 
 /**
@@ -37,6 +42,12 @@ import org.xml.sax.SAXException;
  * part-specific macros, and interrupt vector names.
  */
 public abstract class HeaderFileGenerator {
+
+    protected enum ConfigRegMaskType {
+        DEFAULT_VAL,
+        IMPL_VAL
+    };
+
     protected String basepath_;
     protected PrintWriter writer_;
 
@@ -172,5 +183,114 @@ public abstract class HeaderFileGenerator {
      */
     protected void writeStringMacro(PrintWriter writer, String name, String value, String desc) {
         writer.println(makeStringMacro(name, value, desc));
+    }
+
+
+    /* Output macros that can be used to configure the device's configuration registers, which are
+     * just special locations in flash memory that the device reads to determine things like NVM
+     * or brown-out settings.  XC32 has special config pragmas to do this and Clang obviously
+     * doesn't, so we have to come up with some other way.
+     */
+    protected void outputConfigRegisterMacros(PrintWriter writer, TargetDevice target, ConfigRegMaskType maskType) {
+        List<DCR> dcrList = target.getDCRs();
+
+        // Not all devices have DCRs--Arm devices in particular--so check for that and bail if the
+        // given list is empty.
+        if(dcrList.isEmpty()) {
+            writer.println("/* <No device configuration registers for this device.> */");
+            writer.println();
+            return;
+        }
+
+        Utils.writeMultilineCComment(writer, 0, 
+                "Use the following macros to set the configuration registers on the device.\n"
+                        + "To do this, AND together the desired options to fill out the fields of "
+                        + "that particular register, like so:\n\n"
+                        + "  __setREGNAME(__REGNAME_FIELD1_SOMEVAL & __REGNAME_FIELD2_ANOTHERVAL);\n\n"
+                        + "Do this for each config register you want to configure by using the "
+                        + "macros somewhere in a C or C++ source file.");
+        writer.println();
+
+        for(DCR dcr : dcrList) {
+            writer.println("/*******************");
+            writer.println(" * " + dcr.getName());
+            writer.println(" */");
+
+            String dcrName = dcr.getName();
+            String dcrDefault = String.format("0x%08X", dcr.getDefault());
+            String dcrImpl = String.format("0x%08X", dcr.getImpl());
+            String dcrMemSection = "." + target.getDcrMemorySectionName(dcr);
+            String dcrAttribs = "__attribute__((unused, section(\"" + dcrMemSection + "\")))";
+            String dcrDeclaration = "const volatile uint32_t " + dcrAttribs + " __f" + dcrName;
+            String dcrValue = "(" + getDCRMaskStringFromType(dcr, maskType) + " & (f))";
+
+            writeNoAssemblyStart(writer);
+            writeStringMacro(writer, 
+                             "__set" + dcrName + "(f)",
+                             dcrDeclaration + " = " + dcrValue,
+                             null);
+            writeStringMacro(writer,
+                             "__" + dcrName + "_section",
+                             "\"" + dcrMemSection + "\"",
+                             "Memory section name for " + dcrName);
+            writer.println("#else /* Assembly */");
+            writeStringMacro(writer,
+                             "__" + dcrName + "_section",
+                             dcrMemSection,
+                             "Memory section name for " + dcrName);
+            writeNoAssemblyEnd(writer);
+            writeStringMacro(writer,
+                             "__" + dcrName + "_default",
+                             "(" + dcrDefault + ")",
+                             "Default value for " + dcrName);
+            writeStringMacro(writer,
+                             "__" + dcrName + "_impl",
+                             "(" + dcrImpl + ")",
+                             "Implemented bits for " + dcrName);
+            writer.println();
+
+            List<Bitfield> bitfieldList = dcr.getBitfields();
+            for(Bitfield bitfield : bitfieldList) {
+                String bfName = bitfield.getName();
+                String bfDesc = bitfield.getDesc();
+                writer.println("// " + dcrName + "<" + bfName + ">:  " + bfDesc);
+
+                long bfPosition = bitfield.getPlace();
+                long bfMask = bitfield.getMask() << bfPosition;
+                long bfInvMask = 0xFFFFFFFFL & ~bfMask;
+
+                writeStringMacro(writer,
+                                 "__" + dcrName + "_" + bfName + "_Val(v)",
+                                 String.format("(0x%08X | (((v) << %d) & 0x%08X))", bfInvMask, bfPosition, bfMask),
+                                 null);
+
+                List<Option> optionList = bitfield.getOptions();
+                for(Option option : optionList) {
+                    String optName = option.getName();
+                    String optDesc = option.getDesc();
+                    long optMask = Register.parseWhen2(option.get("when")).second << bfPosition;
+
+                    writeStringMacro(writer, 
+                                     "__" + dcrName + "_" + bfName + "_" + optName,
+                                     String.format("(0x%08X)", (bfInvMask | optMask)),
+                                     optDesc);
+                }
+
+                writer.println();
+            }
+        }
+    }
+
+    /* Return a string that represents a mask value for the given device config register.  The type
+     * given determines the source of the mask value.  If the device in question defaults its config
+     * registers to all ones (MIPS devices), then you probably want the DEFAUT_VAL type.  If the
+     * device instead defaults to zeroes (Arm devices), then you probably want the IMPL_VAL type.
+     */
+    private String getDCRMaskStringFromType(DCR dcr, ConfigRegMaskType type) {
+        switch(type) {
+            case DEFAULT_VAL:    return String.format("0x%08X", dcr.getDefault());
+            case IMPL_VAL:       return String.format("0x%08X", dcr.getImpl());
+            default:             return "0xFFFFFFFF";
+        }        
     }
 }

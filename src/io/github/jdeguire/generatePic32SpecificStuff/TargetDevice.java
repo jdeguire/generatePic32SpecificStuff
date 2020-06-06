@@ -30,7 +30,6 @@
 package io.github.jdeguire.generatePic32SpecificStuff;
 
 import com.microchip.crownking.edc.DCR;
-import com.microchip.crownking.edc.Register;
 import com.microchip.crownking.edc.SFR;
 import com.microchip.crownking.mplabinfo.DeviceSupport.Device;
 import com.microchip.crownking.mplabinfo.FamilyDefinitions.Family;
@@ -39,6 +38,7 @@ import com.microchip.mplab.crownkingx.xMemoryPartition;
 import com.microchip.mplab.crownkingx.xPICFactory;
 import com.microchip.mplab.crownkingx.xPIC;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -72,6 +72,8 @@ public class TargetDevice {
     private ArrayList<LinkerMemoryRegion> lmrList_ = null;
     private ArrayList<SFR> sfrList_ = null;
     private ArrayList<DCR> dcrList_ = null;
+    private HashMap<String, Long> sfrOffsetMap_ = null;
+    private HashMap<String, Long> dcrOffsetMap_ = null;
     private InterruptList interruptList_ = null;
     private AtdfDoc atdfDoc_ = null;
 
@@ -501,14 +503,24 @@ public class TargetDevice {
             sfrList_ = new ArrayList<>(64);
             List<Node> regions = getPic().getMainPartition().getSFRRegions();
 
+            if(null == sfrOffsetMap_) {
+                sfrOffsetMap_ = new HashMap<>();
+            }
+
             for(Node sfrSection : regions) {
                 NodeList childNodes = sfrSection.getChildNodes();
+                long offset = getMagicOffsetForRegion(sfrSection);
 
                 for(int i = 0; i < childNodes.getLength(); ++i) {
                     Node currentNode = childNodes.item(i);
 
                     if(currentNode.getNodeName().equals("edc:SFRDef")) {
-                        sfrList_.add(new SFR(currentNode));
+                        SFR sfr = new SFR(currentNode);
+                        sfrList_.add(sfr);
+
+                        if(0 != offset) {
+                            sfrOffsetMap_.put(sfr.getName(), offset);
+                        }
                     }
                 }
             }
@@ -526,20 +538,44 @@ public class TargetDevice {
             dcrList_ = new ArrayList<>(16);
             List<Node> regions = getPic().getMainPartition().getDCRRegions();
 
+            if(null == dcrOffsetMap_) {
+                dcrOffsetMap_ = new HashMap<>();
+            }
+
             for(Node dcrSection : regions) {
                 NodeList childNodes = dcrSection.getChildNodes();
+                long offset = getMagicOffsetForRegion(dcrSection);
 
                 for(int i = 0; i < childNodes.getLength(); ++i) {
                     Node currentNode = childNodes.item(i);
 
                     if(currentNode.getNodeName().equals("edc:DCRDef")) {
-                        dcrList_.add(new DCR(currentNode));
+                        DCR dcr = new DCR(currentNode);
+                        dcrList_.add(dcr);
+
+                        if(0 != offset) {
+                            dcrOffsetMap_.put(dcr.getName(), offset);
+                        }
                     }
                 }
             }
         }
 
         return dcrList_;
+    }
+
+    /* Return a name that would be used in a linker script or "section" attribute for the section
+     * of memory the DCR would occupy.
+     */
+    public String getDcrMemorySectionName(DCR dcr) {
+        long addr = getRegisterAddress(dcr);
+
+        if(isMips32()) {
+            // Make into a kseg1 address.
+            addr = (addr & 0x1FFFFFFFL) | 0xA0000000L;
+        }
+
+        return "config_" + String.format("%08X", addr);
     }
 
     /* Return a list of interrupts for this device.
@@ -552,14 +588,30 @@ public class TargetDevice {
         return interruptList_;
     }
 
-    /* Get the address at which the given register is located.  Registers include SFRs and DCRs, so
-     * objects retrieved with getSFRs() and getDCRs() can be used with this method.  This will return
+    /* Get the address at which the given special function register is located. This will return
      * whatever is in MPLAB X's database, which is the physical address on MIPS devices.
      */
-    public long getRegisterAddress(Register reg) {
-        long addr = reg.getAsLongElse("_addr", Long.valueOf(0));
+    public long getRegisterAddress(SFR reg) {
+        if(null == sfrOffsetMap_) {
+            getSFRs();
+        }
+
+        long addr = reg.getAsLongElse("_addr", Long.valueOf(0)) + sfrOffsetMap_.getOrDefault(reg.getName(), 0L);
         return addr & 0xFFFFFFFFL;
     }
+
+    /* Get the address at which the given device config register is located. This will return
+     * whatever is in MPLAB X's database, which is the physical address on MIPS devices.
+     */
+    public long getRegisterAddress(DCR reg) {
+        if(null == dcrOffsetMap_) {
+            getDCRs();
+        }
+
+        long addr = reg.getAsLongElse("_addr", Long.valueOf(0)) + dcrOffsetMap_.getOrDefault(reg.getName(), 0L);
+        return addr & 0xFFFFFFFFL;
+    }
+
 
     /* Return the ATDF document relating to this target device or null if one could not be found.
      * ATDF documents came from Atmel, so not all MIPS-based devices have them (as of this writing
@@ -597,5 +649,24 @@ public class TargetDevice {
         }
 
         return devname;        
+    }
+
+    /* It turns out that some regions (DCR regions in particular) can have what the .PIC files call
+     * a "magic offset", which appears to be used to place unmapped registers into memory at some
+     * fake memory region that MPLAB X knows how to deal with.  This method will check for said
+     * offset by searching upward in the Node tree for the proper XML attribute.  This returns 0 if
+     * no magic offset was found.
+     */
+    private long getMagicOffsetForRegion(Node region) {
+        do {
+            // We need the "edc:" prefix here because this is not part of the MPLAB X API.
+            long offset = Utils.getNodeAttributeAsLong(region, "edc:magicoffset", 0L);
+            if(0 != offset) {
+                return offset;
+            }
+            region = region.getParentNode();
+        } while(null != region);
+
+        return 0L;
     }
 }

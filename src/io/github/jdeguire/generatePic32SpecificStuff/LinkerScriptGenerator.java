@@ -29,10 +29,12 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.edc.DCR;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 
 /**
  * This is a base class for building default linker scripts for the different target devices.
@@ -137,6 +139,28 @@ public abstract class LinkerScriptGenerator {
 
         writer_.println("}");
         writer_.println();
+    }
+
+    /* Add a SECTIONS {...} command containing just sections for the device config registers.  This
+     * will output nothing if 'dcrList' is empty.
+     */
+    protected void outputConfigRegSectionsCommand(TargetDevice target, List<DCR> dcrList) {
+        if(!dcrList.isEmpty()) {
+            writer_.println("SECTIONS");
+            writer_.println("{");
+
+            for(DCR dcr : dcrList) {
+                String sectionName = target.getDcrMemorySectionName(dcr);
+
+                writer_.println("  ." + sectionName + " : {");
+                writer_.println("    KEEP(*(." + sectionName + "))");
+                writer_.println("  } > " + sectionName);
+                writer_.println();
+            }
+
+            writer_.println("}");
+            writer_.println();
+        }
     }
 
     /* Add the license header to the linker file opened by the given writer.

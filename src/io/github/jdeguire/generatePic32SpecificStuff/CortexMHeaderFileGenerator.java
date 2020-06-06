@@ -80,6 +80,7 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
         outputDeviceSignatureMacros(device);
         outputElectricalParameterMacros(device);
         outputEventMacros(device);
+        outputConfigRegisterMacros(writer_, target, ConfigRegMaskType.IMPL_VAL);
         outputExternCEnd();
         outputIncludeGuardEnd(target);
 
@@ -1249,12 +1250,11 @@ public class CortexMHeaderFileGenerator extends HeaderFileGenerator {
                                  "");
             }
         } else {
-            writer_.println("/* <No event uses provided for this device.> */");
+            writer_.println("/* <No event users provided for this device.> */");
         }
 
         writer_.println();
     }
-
 
     /* Return the C99 type to be used with the SFR based on its size.
      */

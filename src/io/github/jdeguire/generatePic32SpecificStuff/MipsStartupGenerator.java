@@ -250,10 +250,12 @@ public class MipsStartupGenerator {
                LinkerMemoryRegion.Type.EBI == lmr.getType()) {
                 // We need to be able to access the region from both kseg2 and kseg3, so get
                 // entries for both.
+                long physAddr = lmr.getStartAddress();
+
                 lmr.setAsKseg2Region();
-                tlbEntries.add(getTlbEntryForMemoryRegion(lmr));
+                tlbEntries.add(getTlbEntryForMemoryRegion(lmr, physAddr));
                 lmr.setAsKseg3Region();
-                tlbEntries.add(getTlbEntryForMemoryRegion(lmr));
+                tlbEntries.add(getTlbEntryForMemoryRegion(lmr, physAddr));
             }
         }
 
@@ -302,10 +304,10 @@ public class MipsStartupGenerator {
         for(TlbEntry entry : tlbEntries) {
             writer.println("    /* " + entry.name + " */");
             writer.println("    __builtin_mtc0(0,  0, " + index + ");");
-            writer.println("    __builtin_mtc0(2,  0, 0x" + Long.toHexString(entry.entryLo0).toUpperCase() + ");");
-            writer.println("    __builtin_mtc0(3,  0, 0x" + Long.toHexString(entry.entryLo1).toUpperCase() + ");");
-            writer.println("    __builtin_mtc0(5,  0, 0x" + Long.toHexString(entry.pageMask).toUpperCase() + ");");
-            writer.println("    __builtin_mtc0(10, 0, 0x" + Long.toHexString(entry.entryHi).toUpperCase() + ");");
+            writer.println("    __builtin_mtc0(2,  0, " + String.format("0x%08X", entry.entryLo0) + ");");
+            writer.println("    __builtin_mtc0(3,  0, " + String.format("0x%08X", entry.entryLo1) + ");");
+            writer.println("    __builtin_mtc0(5,  0, " + String.format("0x%08X", entry.pageMask) + ");");
+            writer.println("    __builtin_mtc0(10, 0, " + String.format("0x%08X", entry.entryHi) + ");");
             writer.println("    _ehb();");
             writer.println("    __asm__ volatile(\"tlbwi\" : : : \"memory\");");
             writer.println();
@@ -319,7 +321,7 @@ public class MipsStartupGenerator {
     /* Return a single TlbEntry that can cover the given region.  This assumes that the region size
      * is a power of two because that is what the MIPS page sizes allow.
      */
-    private TlbEntry getTlbEntryForMemoryRegion(LinkerMemoryRegion lmr) {
+    private TlbEntry getTlbEntryForMemoryRegion(LinkerMemoryRegion lmr, long physAddress) {
         TlbEntry entry = new TlbEntry();
 
         long lmrLength = lmr.getLength();
@@ -328,19 +330,22 @@ public class MipsStartupGenerator {
 
         // Detemine the page mask from the size of the region.
         long msb = 63 - Long.numberOfLeadingZeros(lmrLength);
-        if(0x00 == (msb & 0x01)) {
-            // If even, we need to use both pages in the entry with each page covering half.
+        if(0x01 == (msb & 0x01)) {
+            // If odd, we need to use both pages in the entry with each page covering half.
             // Otherwise, just one of the pages will cover the region.
             needBothPages = true;
             --msb;
         }
 
-        long mask = (1 << msb) - 1;
+        long mask = (1 << (msb+1)) - 1;
 
-        long entryLo0Addr = lmr.getPhysicalStartAddress() & ~mask;
+        // Mask address with page mask and then shift this to match the PFN field in EntryLo.
+        long entryLo0Addr = (physAddress & ~mask) >> 6;
         long entryLo0Flags = 0x07;          // (D)irty, (V)alid, and (G)lobal bits set
         long entryLo1Addr;
         long entryLo1Flags;
+
+        lmrLength >>= 6;     // shift to match shifted address for entryLoN<PFN>
 
         if(needBothPages) {
             // Split region in half to cover both pages and use same flags for both pages.
@@ -722,7 +727,7 @@ public class MipsStartupGenerator {
             writer.println("                     : /* no outputs */");
             writer.println("                     : \"r\" (fcsr));");
         } else {
-            writer.println("    /* This device does not have an FPU to initialze. */");
+            writer.println("    /* This device does not have an FPU to initialize. */");
         }
         writer.println();
 
@@ -785,10 +790,14 @@ public class MipsStartupGenerator {
             writer.println("                     : /* no outputs */");
             writer.println("                     : \"i\" (_reset_startup));");
         } else {
-            writer.println("    __asm__ volatile(\"lui $at, %%hi(%0) \\n\\t\"");
+            writer.println("    __asm__ volatile(\".set push \\n\\t\"");
+            writer.println("                     \".set noat \\n\\t\"");
+            writer.println("                     \".set mips32 \\n\\t\"");
+            writer.println("                     \"lui $at, %%hi(%0) \\n\\t\"");
             writer.println("                     \"ori $at, $at, %%lo(%0) \\n\\t\"");
             writer.println("                     \"jal $at \\n\\t\"");
             writer.println("                     \"nop \\n\\t\"");
+            writer.println("                     \".set pop\"");
             writer.println("                     : /* no outputs */");
             writer.println("                     : \"i\" (_reset_startup));");
         }

@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
@@ -268,11 +269,15 @@ public class Utils {
      * not have an attribute of the given name.
      */
     public static String getNodeAttribute(Node node, String attrname, String fallback) {
-        Node attrNode = node.getAttributes().getNamedItem(attrname);
+        NamedNodeMap attrs = node.getAttributes();
         String attrValue = fallback;
 
-        if(null != attrNode)
-            attrValue = attrNode.getNodeValue();
+        if(null != attrs) {
+            Node attrNode = node.getAttributes().getNamedItem(attrname);
+
+            if(null != attrNode)
+                attrValue = attrNode.getNodeValue();
+        }
 
         return attrValue;
     }

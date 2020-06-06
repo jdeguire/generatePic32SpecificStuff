@@ -54,7 +54,7 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         outputLicenseHeader();
         outputPreamble(intList.getDefaultBaseAddress());
         outputMemoryRegionCommand();
-        outputConfigRegSectionsCommand(dcrList);
+        outputConfigRegSectionsCommand(target, dcrList);
 
         writer_.println("SECTIONS");
         writer_.println("{");
@@ -126,25 +126,6 @@ public class MipsLinkerScriptGenerator extends LinkerScriptGenerator {
         writer_.println();
     }
     
-    /* Add a SECTIONS {...} command containing just sections for the device config registers.
-     */
-    private void outputConfigRegSectionsCommand(List<DCR> dcrList) {
-        writer_.println("SECTIONS");
-        writer_.println("{");
-
-        for(DCR dcr : dcrList) {
-            String sectionName = MipsCommon.getDcrMemorySectionName(dcr);
-
-            writer_.println("  ." + sectionName + " : {");
-            writer_.println("    KEEP(*(." + sectionName + "))");
-            writer_.println("  } > " + sectionName);
-            writer_.println();
-        }
-
-        writer_.println("}");
-        writer_.println();
-    }
-
     /* Output small sections that are found at the start of the main SECTIONS command.  These are 
      * dictated by the MIPS hardware and are used to handle the placement of the reset vector as 
      * well as some common exception vectors.

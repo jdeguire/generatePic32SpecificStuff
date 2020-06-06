@@ -29,6 +29,7 @@
 
 package io.github.jdeguire.generatePic32SpecificStuff;
 
+import com.microchip.crownking.edc.DCR;
 import java.util.List;
 
 /**
@@ -42,14 +43,16 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
 
     @Override
     public void generate(TargetDevice target) throws java.io.FileNotFoundException {
-        createNewLinkerFile(target);
+        List<DCR> dcrList = target.getDCRs();
 
+        createNewLinkerFile(target);
         clearMemoryRegions();
-        populateMemoryRegions(target);
+        populateMemoryRegions(target, dcrList);
 
         outputLicenseHeader();
         outputPreamble();
         outputMemoryRegionCommand();
+        outputConfigRegSectionsCommand(target, dcrList);
 
         writer_.println("__rom_end = ORIGIN(rom) + LENGTH(rom);");
         writer_.println("__ram_end = ORIGIN(ram) + LENGTH(ram);");
@@ -79,7 +82,7 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
     /* Walk through the list of all target regions and add the ones that the linker script needs,
      * renaming them along the way to match XC32 (or Atmel GCC).
      */
-    private void populateMemoryRegions(TargetDevice target) {
+    private void populateMemoryRegions(TargetDevice target, List<DCR> dcrList) {
         List<LinkerMemoryRegion> targetRegions = target.getMemoryRegions();
 
         for(LinkerMemoryRegion region : targetRegions) {
@@ -115,6 +118,14 @@ public class CortexMLinkerScriptGenerator extends LinkerScriptGenerator {
                 default:
                     break;
             }
+        }
+
+        for(DCR dcr : dcrList) {
+            long dcrAddr = target.getRegisterAddress(dcr);
+            addMemoryRegion(new LinkerMemoryRegion(target.getDcrMemorySectionName(dcr),
+                                                                  0,
+                                                                  dcrAddr,
+                                                                  dcrAddr + 4));
         }
     }
 
