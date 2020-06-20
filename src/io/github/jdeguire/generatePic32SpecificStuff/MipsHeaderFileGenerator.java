@@ -92,38 +92,6 @@ public class MipsHeaderFileGenerator extends HeaderFileGenerator {
     }
 
 
-    /* Output the opening "#ifndef...#define" sequence of an include guard for this header file.
-     */
-    private void outputIncludeGuardStart(TargetDevice target) {
-        writer_.println("#ifndef __" + target.getDeviceNameForMacro() + "_H");
-        writer_.println("#define __" + target.getDeviceNameForMacro() + "_H");
-        writer_.println();
-    }
-
-    /* Output the closing "#endif" of an include guard for this header file.
-     */
-    private void outputIncludeGuardEnd(TargetDevice target) {
-        writer_.println("#endif  /* __" + target.getDeviceNameForMacro() + "_H */");
-    }
-
-    /* Output the opening sequence of macros for C linkage.
-     */
-    private void outputExternCStart() {
-        writer_.println("#ifdef __cplusplus");
-        writer_.println("extern \"C\" {");
-        writer_.println("#endif");
-        writer_.println();
-    }
-
-    /* Output the closing sequence of macros for C linkage.
-     */
-    private void outputExternCEnd() {
-        writer_.println("#ifdef __cplusplus");
-        writer_.println("} /* extern \"C\" */");
-        writer_.println("#endif");
-        writer_.println();
-    }
-
     /* Output preprocessor directives to include any needed header files.
      */
     private void outputIncludedHeaders() {

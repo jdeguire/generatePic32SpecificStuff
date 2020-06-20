@@ -217,7 +217,10 @@ public class TargetConfigGenerator {
                 }
             }
         }
-        
+
+        writer.println("-D__DEVICE_NAME=\"" + target.getDeviceName() + "\"");
+        writer.println("-D__DEVICE_NAME__=\"" + target.getDeviceName() + "\"");
+
         writer.println();
     }
 

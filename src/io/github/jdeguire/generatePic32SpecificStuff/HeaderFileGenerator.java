@@ -158,6 +158,39 @@ public abstract class HeaderFileGenerator {
         writer.println("#endif /* ifdef __ASSEMBLER__ */");
     }
 
+    /* Output the opening "#ifndef...#define" sequence of an include guard for this header file.
+     */
+    protected void outputIncludeGuardStart(TargetDevice target) {
+        writer_.println("#ifndef _INCLUDE_" + target.getDeviceNameForMacro() + "_H_");
+        writer_.println("#define _INCLUDE_" + target.getDeviceNameForMacro() + "_H_");
+        writer_.println();
+    }
+
+    /* Output the closing "#endif" of an include guard for this header file.
+     */
+    protected void outputIncludeGuardEnd(TargetDevice target) {
+        writer_.println("#endif  /* _INCLUDE_" + target.getDeviceNameForMacro() + "_H_ */");
+    }
+
+    /* Output the opening sequence of macros for C linkage.
+     */
+    protected void outputExternCStart() {
+        writer_.println("#ifdef __cplusplus");
+        writer_.println("extern \"C\" {");
+        writer_.println("#endif");
+        writer_.println();
+    }
+
+    /* Output the closing sequence of macros for C linkage.
+     */
+    protected void outputExternCEnd() {
+        writer_.println("#ifdef __cplusplus");
+        writer_.println("} /* extern \"C\" */");
+        writer_.println("#endif");
+        writer_.println();
+    }
+
+
     /* Make a C macro of the form "#define <name>              <value>  / * <desc> * /"
      *
      * Note that value is padded out to 36 spaces minimum and that the spaces between the '/' and

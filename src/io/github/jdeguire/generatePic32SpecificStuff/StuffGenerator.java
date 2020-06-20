@@ -55,7 +55,7 @@ public class StuffGenerator {
     private final String outputDirBase_;
     CortexMLinkerScriptGenerator cortexmLinkerGen_;
     CortexMLegacyHeaderFileGenerator cortexmLegacyHeaderGen_;
-    CortexMHeaderFileGenerator cortexmHeaderGen_;
+    CortexMMicrochipHeaderFileGenerator cortexmMchpHeaderGen_;
     CortexMStartupGenerator cortexmStartupGen_;
     MipsLinkerScriptGenerator mipsLinkerGen_;
     MipsHeaderFileGenerator mipsHeaderGen_;
@@ -87,7 +87,7 @@ public class StuffGenerator {
 
         cortexmLinkerGen_ = new CortexMLinkerScriptGenerator(cortexmLinkerDir);
         cortexmLegacyHeaderGen_ = new CortexMLegacyHeaderFileGenerator(cortexmLegacyHeaderDir);
-        cortexmHeaderGen_ = new CortexMHeaderFileGenerator(cortexmHeaderDir);
+        cortexmMchpHeaderGen_ = new CortexMMicrochipHeaderFileGenerator(cortexmHeaderDir);
         cortexmStartupGen_ = new CortexMStartupGenerator(cortexmStartupDir);
 
         mipsLinkerGen_ = new MipsLinkerScriptGenerator(mipsLinkerDir);
@@ -163,7 +163,7 @@ public class StuffGenerator {
                 if(!target.supportsArmIsa()) {
                     cortexmLinkerGen_.generate(target);
                     cortexmLegacyHeaderGen_.generate(target);
-                    cortexmHeaderGen_.generate(target); 
+                    cortexmMchpHeaderGen_.generate(target); 
                     cortexmStartupGen_.generate(target);
                     cortexmXcGen_.add(target);
                 }

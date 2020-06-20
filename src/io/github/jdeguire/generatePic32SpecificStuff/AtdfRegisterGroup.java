@@ -43,11 +43,13 @@ import org.w3c.dom.NodeList;
  * whole peripheral, but also has subgroups to control the DMA channels individually.
  */
 public class AtdfRegisterGroup {
+
     private final Node moduleNode_;
     private final Node groupNode_;
     private final LinkedHashMap<String, ArrayList<AtdfRegister>> members_ = new LinkedHashMap<>(8);
     private final LinkedHashMap<String, String> nonduplicateModes_ = new LinkedHashMap<>(8);
     
+
     /* Create a new AtdfRegisterGroup based on the given nodes from an ATDF document.  The 
      * 'moduleNode' is a Node that refers to the "module" XML node that contains the desired group
      * indicated by 'groupNode'.  This is handled in the AtdfPeripheral class, so use methods in
@@ -57,6 +59,7 @@ public class AtdfRegisterGroup {
         moduleNode_ = moduleNode;
         groupNode_ = groupNode;
     }
+
 
     /* Get the group name as it appears in the ATDF document.
      */
@@ -76,12 +79,12 @@ public class AtdfRegisterGroup {
         return Utils.getNodeAttribute(groupNode_, "caption", "");
     }
 
-    /* Some devices, such as the SAME70, name registers in a peripheral with a commong prefix such
+    /* Some devices, such as the SAME70, name registers in a peripheral with a common prefix such
      * as "MCAN_REG1" and "MCAN_REG2".  This prefix is usually the name of the peripheral, but not
      * always.  This will look for such a prefix and return it or an empty string if no such prefix
      * appears to be used (such as on the SAME54).  The register names must have an underscore that
      * separates a potential prefix from its name in order to count.
-    */
+     */
     public String getMemberNamePrefix() {
         String prefix = "";
 
