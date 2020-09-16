@@ -57,10 +57,11 @@ public class StuffGenerator {
     CortexMLegacyHeaderFileGenerator cortexmLegacyHeaderGen_;
     CortexMMicrochipHeaderFileGenerator cortexmMchpHeaderGen_;
     CortexMStartupGenerator cortexmStartupGen_;
+    TargetConfigGenerator cortexmTargetConfigGen_;
     MipsLinkerScriptGenerator mipsLinkerGen_;
     MipsHeaderFileGenerator mipsHeaderGen_;
     MipsStartupGenerator mipsStartupGen_;
-    TargetConfigGenerator targetConfigGen_;
+    TargetConfigGenerator mipsTargetConfigGen_;
     XcHeaderGenerator cortexmXcGen_;
     XcHeaderGenerator mipsXcGen_;
 
@@ -78,10 +79,11 @@ public class StuffGenerator {
         String cortexmLegacyHeaderDir = outputDirBase_ + "cortex-m/include/proc_legacy";
         String cortexmHeaderDir = outputDirBase_ + "cortex-m/include/proc";
         String cortexmStartupDir = outputDirBase_ + "cortex-m/lib/proc";
+        String cortexmTargetConfigDir = outputDirBase_ + "cortex-m/config";
         String mipsLinkerDir = outputDirBase_ + "mips32/lib/proc";
         String mipsHeaderDir = outputDirBase_ + "mips32/include/proc";
         String mipsStartupDir = outputDirBase_ + "mips32/lib/proc";
-        String targetConfigDir = outputDirBase_ + "config";
+        String mipsTargetConfigDir = outputDirBase_ + "mips32/config";
         String cortexmXcDir = outputDirBase_ + "cortex-m/include";
         String mipsXcDir = outputDirBase_ + "mips32/include";
 
@@ -89,12 +91,12 @@ public class StuffGenerator {
         cortexmLegacyHeaderGen_ = new CortexMLegacyHeaderFileGenerator(cortexmLegacyHeaderDir);
         cortexmMchpHeaderGen_ = new CortexMMicrochipHeaderFileGenerator(cortexmHeaderDir);
         cortexmStartupGen_ = new CortexMStartupGenerator(cortexmStartupDir);
+        cortexmTargetConfigGen_ = new TargetConfigGenerator(cortexmTargetConfigDir);
 
         mipsLinkerGen_ = new MipsLinkerScriptGenerator(mipsLinkerDir);
         mipsHeaderGen_ = new MipsHeaderFileGenerator(mipsHeaderDir);
         mipsStartupGen_ = new MipsStartupGenerator(mipsStartupDir);
-
-        targetConfigGen_ = new TargetConfigGenerator(targetConfigDir);
+        mipsTargetConfigGen_ = new TargetConfigGenerator(mipsTargetConfigDir);
 
         cortexmXcGen_ = new XcHeaderGenerator(cortexmXcDir, cortexmHeaderDir, cortexmLegacyHeaderDir);
         mipsXcGen_ = new XcHeaderGenerator(mipsXcDir, mipsHeaderDir, "");
@@ -166,15 +168,15 @@ public class StuffGenerator {
                     cortexmMchpHeaderGen_.generate(target); 
                     cortexmStartupGen_.generate(target);
                     cortexmXcGen_.add(target);
+                    cortexmTargetConfigGen_.generate(target);
                 }
             } else {
                 mipsLinkerGen_.generate(target);
                 mipsHeaderGen_.generate(target);
                 mipsStartupGen_.generate(target);
                 mipsXcGen_.add(target);
+                mipsTargetConfigGen_.generate(target);
             }
-
-            targetConfigGen_.generate(target);
         } else {
             // We'll add everything to the XC files because that will let us verify that those are
             // being generated correctly.

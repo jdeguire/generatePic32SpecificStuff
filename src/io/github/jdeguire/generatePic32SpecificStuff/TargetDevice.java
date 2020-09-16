@@ -264,7 +264,7 @@ public class TargetDevice {
      */
     public String getTargetTripleName() {
 		if(isMips32())
-			return "mipsel-unknown-elf";
+			return "mipsel-linux-gnu";
 		else
 			return "arm-none-eabi";
     }

@@ -75,6 +75,7 @@ public class TargetConfigGenerator {
 
 // TODO: Do we need -nostdinc or -nostdlib/-nodefaultlibs/-nolibc?
 // TOOD: What about CMSIS directories?
+// TODO: Maybe we can use one library path, but rename the libraries based on how they were built?
         }
     }
 
@@ -112,7 +113,6 @@ public class TargetConfigGenerator {
             if(target.isMips32()) {
                 writer.println("# Device has a 64-bit FPU.");
                 writer.println("-mhard-float");
-                writer.println("-mfloat-abi=hard");
                 writer.println("-mfp64");
             } else if(target.isArm()) {
                 writer.println("# Device has an FPU.");
@@ -122,7 +122,10 @@ public class TargetConfigGenerator {
         } else {
             writer.println("# Device uses software floating-point.");
             writer.println("-msoft-float");
-            writer.println("-mfloat-abi=soft");
+
+            if(target.isArm()) {
+                writer.println("-mfloat-abi=soft");
+            }
         }
 
         writer.println();
@@ -148,11 +151,8 @@ public class TargetConfigGenerator {
         writer.println("# When using this config file, the --sysroot option must be provided to");
         writer.println("# point to the base directory of where this toolchain is located.");
         writer.println("# The MPLAB X plugin will do this for you.");
-        writer.println("-isystem \"=/target/" + archDir + "/include\"");
+        writer.println("-isystem=\"/target/" + archDir + "/include\"");
         writer.println();
-
-// TODO:  Does Clang use directories relative to this config file?  If so, we might be able to set
-//        sysroot based on where this file is located.
     }
 
     /* Output an option to tell the linker where to find device-specific object files or linker
@@ -162,11 +162,8 @@ public class TargetConfigGenerator {
         String archDir = getArchDirName(target);
         String devname = target.getDeviceName().toLowerCase();
 
-        writer.println("-L\"=/target/" + archDir + "/lib/proc/" + devname + "\"");
+        writer.println("-L=\"/target/" + archDir + "/lib/proc/" + devname + "\"");
         writer.println();
-
-// TODO:  Does Clang use directories relative to this config file?  If so, we might be able to set
-//        sysroot based on where this file is located.
     }
 
     /* Output macros that are useful to a particular target.
