@@ -63,7 +63,8 @@ public class TargetDevice {
 		ARMV7EM,
 		ARMV8A,
 		ARMV8M_BASE,
-		ARMV8M_MAIN
+		ARMV8M_MAIN,
+        ARMV8_1M_MAIN
 	};
 
     final private xPIC pic_;
@@ -242,7 +243,12 @@ public class TargetDevice {
 						arch = TargetArch.ARMV8M_MAIN;
 						found = true;
 						break;
-					default:
+                    case "armv8.1m":                             // Cortex M55
+                    case "armv8.1m.main":
+                        arch = TargetArch.ARMV8_1M_MAIN;
+                        found = true;
+                        break;
+                    default:
 						found = false;
 						break;
 				}
@@ -264,9 +270,9 @@ public class TargetDevice {
      */
     public String getTargetTripleName() {
 		if(isMips32())
-			return "mipsel-linux-gnu";
+			return "mipsel-linux-gnu-musl";
 		else
-			return "arm-none-eabi";
+			return "arm-none-eabi-musl";
     }
 
     /* Get the CPU name to be used with Clang's "-mtune=" option, such as "cortex-m7" or "mips32r2".
@@ -429,6 +435,12 @@ public class TargetDevice {
                     break;
                 case ARMV8A:
                     fpuName = "fp-armv8";
+                    break;
+                case ARMV8M_MAIN:
+                    fpuName = "vfp5-sp-d16";
+                    break;
+                case ARMV8_1M_MAIN:
+                    fpuName = "fp-armv8-fullfp16-d16";
                     break;
                 default:
                     fpuName = "vfp4-sp-d16";
