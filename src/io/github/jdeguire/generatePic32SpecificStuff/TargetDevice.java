@@ -54,22 +54,22 @@ import org.xml.sax.SAXException;
  */
 public class TargetDevice {
 
-	public enum TargetArch {
-		MIPS32R2,
-		MIPS32R5,
-		ARMV6M,
-		ARMV7A,
-		ARMV7M,
-		ARMV7EM,
-		ARMV8A,
-		ARMV8M_BASE,
-		ARMV8M_MAIN,
+    public enum TargetArch {
+        MIPS32R2,
+        MIPS32R5,
+        ARMV6M,
+        ARMV7A,
+        ARMV7M,
+        ARMV7EM,
+        ARMV8A,
+        ARMV8M_BASE,
+        ARMV8M_MAIN,
         ARMV8_1M_MAIN
-	};
+    };
 
     final private xPIC pic_;
     final private String name_;
-	private ArrayList<String> instructionSets_;
+    private ArrayList<String> instructionSets_;
     private ArrayList<LinkerMemoryRegion> lmrList_ = null;
     private ArrayList<SFR> sfrList_ = null;
     private ArrayList<DCR> dcrList_ = null;
@@ -83,10 +83,10 @@ public class TargetDevice {
      * device.
      */
     public TargetDevice(Device device) throws com.microchip.crownking.Anomaly, 
-		org.xml.sax.SAXException,
-		java.io.IOException, 
-		javax.xml.parsers.ParserConfigurationException, 
-		IllegalArgumentException {
+        org.xml.sax.SAXException,
+        java.io.IOException, 
+        javax.xml.parsers.ParserConfigurationException, 
+        IllegalArgumentException {
 
         String devname = device.getName();
 
@@ -94,13 +94,13 @@ public class TargetDevice {
         name_ = normalizeDeviceName(devname);
 
         if(Family.PIC32 == pic_.getFamily()  ||  Family.ARM32BIT == pic_.getFamily()) {
-   			instructionSets_ = new ArrayList<>(pic_.getInstructionSet().getSubsetIDs());
+               instructionSets_ = new ArrayList<>(pic_.getInstructionSet().getSubsetIDs());
 
-			String setId = pic_.getInstructionSet().getID();
-			if(setId != null  &&  !setId.isEmpty())
-				instructionSets_.add(setId);
+            String setId = pic_.getInstructionSet().getID();
+            if(setId != null  &&  !setId.isEmpty())
+                instructionSets_.add(setId);
         }
-		else {
+        else {
             String what = "Device " + devname + " is not a recognized MIPS32 or Arm device.";
             throw new IllegalArgumentException(what);
         }
@@ -166,15 +166,15 @@ public class TargetDevice {
 
     /* Get the device family of the target, which is used to determine its features.
      */
-	public Family getFamily() {
-		return pic_.getFamily();
-	}
+    public Family getFamily() {
+        return pic_.getFamily();
+    }
 
-	/* Get the subfamily of the target, which is a bit more fine-grained than the family.
-	 */
-	public SubFamily getSubFamily() {
-		return pic_.getSubFamily();
-	}
+    /* Get the subfamily of the target, which is a bit more fine-grained than the family.
+     */
+    public SubFamily getSubFamily() {
+        return pic_.getSubFamily();
+    }
 
     /* Return the name of the ATDF device family for this device, such as "SAME" or "PIC32CX", that 
      * applies to Arm devices.  This will return an empty string if a family is not provided.  MIPS
@@ -192,87 +192,87 @@ public class TargetDevice {
     }
 
     /* Get the CPU architecture for the device.
-	 */
-	public TargetArch getArch() {
-		TargetArch arch;
+     */
+    public TargetArch getArch() {
+        TargetArch arch;
 
-		if(isMips32()) {
-			// The device database does not seem to distinguish between the two, but looking at the
-			// datasheets indicates that devices with an FPU are MIPS32r5.
-			if(hasFpu())
-				arch = TargetArch.MIPS32R5;
-			else
-				arch = TargetArch.MIPS32R2;
-		}
-		else   // ARM32
-		{
-			arch = TargetArch.ARMV6M;   // lowest common denominator
+        if(isMips32()) {
+            // The device database does not seem to distinguish between the two, but looking at the
+            // datasheets indicates that devices with an FPU are MIPS32r5.
+            if(hasFpu())
+                arch = TargetArch.MIPS32R5;
+            else
+                arch = TargetArch.MIPS32R2;
+        }
+        else   // ARM32
+        {
+            arch = TargetArch.ARMV6M;   // lowest common denominator
 
-			boolean found = false;
-			for(int i = 0; !found  &&  i < instructionSets_.size(); ++i) {
-				switch(instructionSets_.get(i).toLowerCase()) {
-					case "armv6m":                               // Cortex M0, M0+, M1
-						arch = TargetArch.ARMV6M;
-						found = true;
-						break;
-					case "armv7a":                               // Cortex A5-A9, A1x
-						arch = TargetArch.ARMV7A;
-						found = true;
-						break;
-					case "armv7m":                               // Cortex M3
-					case "armv7em":                              // Cortex M4, M7
+            boolean found = false;
+            for(int i = 0; !found  &&  i < instructionSets_.size(); ++i) {
+                switch(instructionSets_.get(i).toLowerCase()) {
+                    case "armv6m":                               // Cortex M0, M0+, M1
+                        arch = TargetArch.ARMV6M;
+                        found = true;
+                        break;
+                    case "armv7a":                               // Cortex A5-A9, A1x
+                        arch = TargetArch.ARMV7A;
+                        found = true;
+                        break;
+                    case "armv7m":                               // Cortex M3
+                    case "armv7em":                              // Cortex M4, M7
                         // NOTE:  Microchip's EDC files do not actually distinguish between ARMv7-M
                         //        and ARMV7E-M, so we'll do it here.
                         if(getCpuName().equals("cortex-m3"))
-    						arch = TargetArch.ARMV7M;
+                            arch = TargetArch.ARMV7M;
                         else
                             arch = TargetArch.ARMV7EM;
 
                         found = true;
-						break;
-					case "armv8a":                               // Cortex A3x, A5x, A7x
-						arch = TargetArch.ARMV8A;
-						found = true;
-						break;
+                        break;
+                    case "armv8a":                               // Cortex A3x, A5x, A7x
+                        arch = TargetArch.ARMV8A;
+                        found = true;
+                        break;
                     case "armv8m":
                     case "armv8m.base":                          // Cortex M23
-						arch = TargetArch.ARMV8M_BASE;
-						found = true;
-						break;
-					case "armv8m.main":                          // Cortex M33, M35P
-						arch = TargetArch.ARMV8M_MAIN;
-						found = true;
-						break;
+                        arch = TargetArch.ARMV8M_BASE;
+                        found = true;
+                        break;
+                    case "armv8m.main":                          // Cortex M33, M35P
+                        arch = TargetArch.ARMV8M_MAIN;
+                        found = true;
+                        break;
                     case "armv8.1m":                             // Cortex M55
                     case "armv8.1m.main":
                         arch = TargetArch.ARMV8_1M_MAIN;
                         found = true;
                         break;
                     default:
-						found = false;
-						break;
-				}
-			}
-		}
+                        found = false;
+                        break;
+                }
+            }
+        }
 
-		return arch;
-	}
+        return arch;
+    }
 
-	/* Get the name of the architecture as a string suitable for passing to Clang's "-march="
-	 * option.  This will probably also work for GCC, though it has not been tried.
-	 */
-	public String getArchNameForCompiler() {
-		return getArch().name().toLowerCase().replace('_', '.');
-	}
+    /* Get the name of the architecture as a string suitable for passing to Clang's "-march="
+     * option.  This will probably also work for GCC, though it has not been tried.
+     */
+    public String getArchNameForCompiler() {
+        return getArch().name().toLowerCase().replace('_', '.');
+    }
 
     /* Get the target triple name used by the toolchain to determine the overall architecture
      * in use.  This is used with the "-target" compiler option.
      */
     public String getTargetTripleName() {
-		if(isMips32())
-			return "mipsel-linux-gnu-musl";
-		else
-			return "arm-none-eabi-musl";
+        if(isMips32())
+            return "mipsel-linux-gnu-musl";
+        else
+            return "arm-none-eabi-musl";
     }
 
     /* Get the CPU name to be used with Clang's "-mtune=" option, such as "cortex-m7" or "mips32r2".
@@ -329,8 +329,8 @@ public class TargetDevice {
     /* Return True if the target has a 64-bit FPU.
      */
     public boolean hasFpu64() {
-        // So far, only the Cortex-M4 devices have a single-precision FPU.
-        return hasFpu()  &&  !getCpuName().equals("cortex-m4");
+        // So far, only the Cortex-M4 and ARMv8M Mainline devices have a single-precision FPU.
+        return hasFpu()  &&  !getCpuName().equals("cortex-m4")  &&  TargetArch.ARMV8M_BASE != getArch();
     }
 
     /* Return True if the device has an L1 cache.  This is actually just a guess for now based on
@@ -371,18 +371,18 @@ public class TargetDevice {
     /* Return True if the target supports the MIPS DSPr2 application specific extension.
      */
     public boolean supportsDspR2Ase() {
-		boolean hasDsp = false;
+        boolean hasDsp = false;
 
-		if(isMips32()) {
-			for(String id : instructionSets_) {
-				if(id.equalsIgnoreCase("dspr2")) {
-					hasDsp = true;
-					break;
-				}
-			}
-		}
+        if(isMips32()) {
+            for(String id : instructionSets_) {
+                if(id.equalsIgnoreCase("dspr2")) {
+                    hasDsp = true;
+                    break;
+                }
+            }
+        }
 
-		return hasDsp;
+        return hasDsp;
     }
 
     /* Return True if the target supports the MIPS MCU application specific extension.
@@ -396,7 +396,7 @@ public class TargetDevice {
     /* Return True if the target supports the ARM instruction set.
      */
     public boolean supportsArmIsa() {
-		TargetArch arch = getArch();
+        TargetArch arch = getArch();
 
         return (TargetArch.ARMV7A == arch  ||  TargetArch.ARMV8A == arch);
     }
@@ -414,10 +414,10 @@ public class TargetDevice {
      * MIPS devices have only one FPU, so this will return an empty string for MIPS.
      */
     public String getArmFpuName() {
-		String fpuName = "";
+        String fpuName = "";
 
-		if(isArm()  &&  hasFpu()) {
-			switch (getArch()) {
+        if(isArm()  &&  hasFpu()) {
+            switch (getArch()) {
                 case ARMV7M:
                 case ARMV7EM:
                     if(getCpuName().equals("cortex-m7"))
@@ -446,7 +446,7 @@ public class TargetDevice {
                     fpuName = "vfp4-sp-d16";
                     break;
             }
-		}
+        }
 
         return fpuName;
     }
