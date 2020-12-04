@@ -95,12 +95,29 @@ public class TargetConfigGenerator {
     private void outputTargetArchOptions(PrintWriter writer, TargetDevice target) {
         writer.println("# Base target arch options.");
         writer.println("-target " + target.getTargetTripleName());
-        writer.println("-march=" + target.getArchNameForCompiler());
         
         if(target.isArm()) {
+            String march = target.getArchNameForCompiler();
+
+            if(target.supportsHeliumExtension()) {
+                march += "+mve";
+
+                if(target.hasFpu()) {
+                    march += ".fp";
+
+                    if(target.hasFpu64())
+                        march += "+fp.dp";
+                }
+            }
+
+            writer.println("-march=" + march);
             writer.println("-mtune=" + target.getCpuName());
-        } else if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa()) {
-            writer.println("-mmicromips");
+        } else {
+            writer.println("-march=" + target.getArchNameForCompiler());
+
+            if(target.supportsMicroMipsIsa()  &&  !target.supportsMips32Isa()) {
+                writer.println("-mmicromips");
+            }
         }
 
         writer.println();
@@ -227,9 +244,7 @@ public class TargetConfigGenerator {
     private String getArchDirName(TargetDevice target) {
         if(target.isMips32())
             return "mips32";
-        else {
-            // This should get us "cortex-m" or "cortex-a" or whatever else.
-            return target.getCpuName().toLowerCase().substring(0, 8);
-        }
+        else 
+            return "arm";
     }
 }

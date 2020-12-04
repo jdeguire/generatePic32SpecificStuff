@@ -62,7 +62,7 @@ public class StuffGenerator {
     MipsHeaderFileGenerator mipsHeaderGen_;
     MipsStartupGenerator mipsStartupGen_;
     TargetConfigGenerator mipsTargetConfigGen_;
-    XcHeaderGenerator cortexmXcGen_;
+    XcHeaderGenerator armXcGen_;
     XcHeaderGenerator mipsXcGen_;
 
     /**
@@ -75,30 +75,30 @@ public class StuffGenerator {
     public StuffGenerator(String outputDir) {
         outputDirBase_ = outputDir + "/target/";
 
-        String cortexmLinkerDir = outputDirBase_ + "cortex-m/lib/proc";
-        String cortexmLegacyHeaderDir = outputDirBase_ + "cortex-m/include/proc_legacy";
-        String cortexmHeaderDir = outputDirBase_ + "cortex-m/include/proc";
-        String cortexmStartupDir = outputDirBase_ + "cortex-m/lib/proc";
-        String cortexmTargetConfigDir = outputDirBase_ + "cortex-m/config";
+        String armLinkerDir = outputDirBase_ + "arm/lib/proc";
+        String armLegacyHeaderDir = outputDirBase_ + "arm/include/proc_legacy";
+        String armHeaderDir = outputDirBase_ + "arm/include/proc";
+        String armStartupDir = outputDirBase_ + "arm/lib/proc";
+        String armTargetConfigDir = outputDirBase_ + "arm/config";
         String mipsLinkerDir = outputDirBase_ + "mips32/lib/proc";
         String mipsHeaderDir = outputDirBase_ + "mips32/include/proc";
         String mipsStartupDir = outputDirBase_ + "mips32/lib/proc";
         String mipsTargetConfigDir = outputDirBase_ + "mips32/config";
-        String cortexmXcDir = outputDirBase_ + "cortex-m/include";
+        String armXcDir = outputDirBase_ + "arm/include";
         String mipsXcDir = outputDirBase_ + "mips32/include";
 
-        cortexmLinkerGen_ = new CortexMLinkerScriptGenerator(cortexmLinkerDir);
-        cortexmLegacyHeaderGen_ = new CortexMLegacyHeaderFileGenerator(cortexmLegacyHeaderDir);
-        cortexmMchpHeaderGen_ = new CortexMMicrochipHeaderFileGenerator(cortexmHeaderDir);
-        cortexmStartupGen_ = new CortexMStartupGenerator(cortexmStartupDir);
-        cortexmTargetConfigGen_ = new TargetConfigGenerator(cortexmTargetConfigDir);
+        cortexmLinkerGen_ = new CortexMLinkerScriptGenerator(armLinkerDir);
+        cortexmLegacyHeaderGen_ = new CortexMLegacyHeaderFileGenerator(armLegacyHeaderDir);
+        cortexmMchpHeaderGen_ = new CortexMMicrochipHeaderFileGenerator(armHeaderDir);
+        cortexmStartupGen_ = new CortexMStartupGenerator(armStartupDir);
+        cortexmTargetConfigGen_ = new TargetConfigGenerator(armTargetConfigDir);
 
         mipsLinkerGen_ = new MipsLinkerScriptGenerator(mipsLinkerDir);
         mipsHeaderGen_ = new MipsHeaderFileGenerator(mipsHeaderDir);
         mipsStartupGen_ = new MipsStartupGenerator(mipsStartupDir);
         mipsTargetConfigGen_ = new TargetConfigGenerator(mipsTargetConfigDir);
 
-        cortexmXcGen_ = new XcHeaderGenerator(cortexmXcDir, cortexmHeaderDir, cortexmLegacyHeaderDir);
+        armXcGen_ = new XcHeaderGenerator(armXcDir, armHeaderDir, armLegacyHeaderDir);
         mipsXcGen_ = new XcHeaderGenerator(mipsXcDir, mipsHeaderDir, "");
     }
 
@@ -129,7 +129,7 @@ public class StuffGenerator {
      * do any needed operations before actually generating code.
      */
     public void startGenerate() {
-        cortexmXcGen_.reset();
+        armXcGen_.reset();
         mipsXcGen_.reset();
     }
 
@@ -167,15 +167,15 @@ public class StuffGenerator {
                     cortexmLegacyHeaderGen_.generate(target);
                     cortexmMchpHeaderGen_.generate(target); 
                     cortexmStartupGen_.generate(target);
-                    cortexmXcGen_.add(target);
                     cortexmTargetConfigGen_.generate(target);
+                    armXcGen_.add(target);
                 }
             } else {
                 mipsLinkerGen_.generate(target);
                 mipsHeaderGen_.generate(target);
                 mipsStartupGen_.generate(target);
-                mipsXcGen_.add(target);
                 mipsTargetConfigGen_.generate(target);
+                mipsXcGen_.add(target);
             }
         } else {
             // We'll add everything to the XC files because that will let us verify that those are
@@ -199,7 +199,7 @@ public class StuffGenerator {
      * do any needed cleanup or finishing tasks after the code has been generated.
      */
     public void finishGenerate() throws FileNotFoundException {
-        cortexmXcGen_.generate();
+        armXcGen_.generate();
         mipsXcGen_.generate();
     }
 }

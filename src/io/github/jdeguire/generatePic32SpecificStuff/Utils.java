@@ -456,7 +456,8 @@ public class Utils {
                 "\n" +
                 "* Redistributions in binary form must reproduce the above copyright notice,\n" +
                 "  this list of conditions and the following disclaimer in the documentation\n" +
-                "  and/or other materials provided with the distribution.\n" +
+                "  and/or other materials provided with the distribution. Publication is not\n" +
+                "  required when this file is used in an embedded application.\n" +
                 "\n" +
                 "* Neither the name of the copyright holder nor the names of its\n" +
                 "  contributors may be used to endorse or promote products derived from\n" +
@@ -479,7 +480,7 @@ public class Utils {
      * these files are based on the ones Microchip provides with XC32.
      */
     public static String microchipBsdLicenseString() {
-        return ("Copyright (c) 2018, Microchip Technology Inc. and its subsidiaries (\"Microchip\")\n" +
+        return ("Copyright (c) 2020, Microchip Technology Inc. and its subsidiaries (\"Microchip\")\n" +
                 "All rights reserved.\n" +
                 "\n" +
                 "This software is developed by Microchip Technology Inc. and its " +
@@ -493,7 +494,8 @@ public class Utils {
                 "2.      Redistributions in binary form must reproduce the above\n" +
                 "        copyright notice, this list of conditions and the following\n" +
                 "        disclaimer in the documentation and/or other materials provided\n" +
-                "        with the distribution.\n" +
+                "        with the distribution. Publication is not required when this file\n" + 
+                "        is used in an embedded application.\n" +
                 "3.      Microchip's name may not be used to endorse or promote products\n" +
                 "        derived from this software without specific prior written\n" +
                 "        permission.\n" +
