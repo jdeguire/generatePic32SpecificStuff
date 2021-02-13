@@ -143,6 +143,7 @@ public class XcHeaderGenerator {
         for(DeviceInfo devinfo : infoList) {
             if(firstDevice) {
                 writer.println("#  if defined(__" + devinfo.macroname.toUpperCase() + "__)");
+                firstDevice = false;
             } else {
                 writer.println("#  elif defined(__" + devinfo.macroname.toUpperCase() + "__)");
             }

@@ -170,7 +170,7 @@ public abstract class CortexMBaseHeaderFileGenerator extends HeaderFileGenerator
         }
 
         writer_.println();
-        writer_.println("  PERIPH_MAX_IRQn                = " + interruptList.getLastVectorNumber());
+        writer_.println("  PERIPH_MAX_IRQn                = " + interruptList.getLastVectorNumber() + ",");
         writer_.println("  PERIPH_COUNT_IRQn              = " + (interruptList.getLastVectorNumber() + 1));
         writer_.println("} IRQn_Type;");
         writer_.println();

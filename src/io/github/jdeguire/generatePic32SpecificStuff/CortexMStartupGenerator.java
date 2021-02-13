@@ -334,6 +334,8 @@ public class CortexMStartupGenerator {
         writer.println("void __attribute__((weak)) Reset_Handler(void)");
         writer.println("{");
         writer.println("    /* The stack is initialized by the CPU at startup, so we do not have to. */");
+// TODO: Initialize stack anyway in case vector table is not at 0x00000000, such as when this is an app loaded by a bootloader.
+//       This probably does not need to be done for devices without a VTOR register since the VT has to be at 0x00000000 anyway.
         writer.println();
         writer.println("    if(_on_reset)");
         writer.println("        _on_reset();");
